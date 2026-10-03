@@ -2,6 +2,7 @@
   "name": "flo2-cad",
   "version": "0.2.0",
   "description": "Design casting-ready jewelry with an agent: a ring in a named size with a prong or bezel head, round or emerald-cut stones sized from their grading report, checked against cited casting limits before any STL or 3MF is released.",
+  "license": "Apache-2.0",
   "author": {
     "name": "Anthony Sligar"
   },

@@ -84,7 +84,7 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 - Nothing goes to stdout except MCP messages. Diagnostics go to stderr.
 - `.mcp.json` at the root is the Claude Code plugin's config, and uses `${CLAUDE_PLUGIN_ROOT}`. If Claude Code offers
   it as a project server while you work in this repo, decline it.
-- Don't add a LICENSE file: the licence is Anthony's call. No secrets.
+- The licence is Apache-2.0 (Anthony, 2026-10-03, matching reflow2); LICENSE holds the text. No secrets.
 - Record what you build on the design:
   - Artifacts with their checksums, REALIZES the capability each one builds.
   - Verifications with their real results.
