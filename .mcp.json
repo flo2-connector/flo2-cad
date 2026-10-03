@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "flo2-cad": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/main.js"]
+    }
+  }
+}

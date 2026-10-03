@@ -1,0 +1,37 @@
+{
+  "name": "flo2-cad",
+  "version": "0.2.0",
+  "description": "Agent CAD engine: an MCP server a chat agent drives to design casting-ready jewelry.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "flo2-cad": "dist/main.js"
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "skills",
+    "plugin.json",
+    "mcp.json",
+    ".claude-plugin",
+    ".mcp.json"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
+    "test": "npm run build && node --test --test-concurrency=1 \"build/test/**/*.test.js\"",
+    "verify-kernel": "node scripts/verify-kernel.mjs",
+    "measure": "node scripts/measure.mjs",
+    "start": "node dist/main.js"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.0",
+    "@modelcontextprotocol/server": "2.3.0",
+    "@types/node": "24.19.1",
+    "ajv": "8.20.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}
