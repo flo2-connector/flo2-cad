@@ -1,0 +1,3 @@
+# Byte-exact files: the unmodified kernel (verified by sha256) and the committed bundle.
+vendor/** -text
+dist/** -text

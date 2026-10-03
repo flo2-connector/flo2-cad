@@ -1,0 +1,30 @@
+{
+  "measured_at": "2026-10-03T21:03:38.321Z",
+  "where": "local-taskset",
+  "node": "v24.21.0",
+  "cpus_visible": 4,
+  "affinity": "pid 577727's current affinity mask: 1",
+  "preview_4_views_512px_s": {
+    "cold_with_kernel_load": 2.089,
+    "warm": 1.272,
+    "limit": 5
+  },
+  "export_with_checks_s": {
+    "typical_solitaire_6_prongs": 8.663,
+    "emerald_bezel_platinum": 9.497
+  },
+  "peak_memory_MiB": {
+    "value": 188.8,
+    "limit": 1024
+  },
+  "install_MB": {
+    "engine_without_runtime": 1.78,
+    "files": 18,
+    "node_binary": 126.6,
+    "with_runtime": 128.38,
+    "limits": {
+      "without": 25,
+      "with": 150
+    }
+  }
+}

@@ -6,7 +6,7 @@
 // which. The descriptions are written for a CHAT agent working for someone who
 // makes jewelry, not for an engineer.
 
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { JSONObject, Tool } from '@modelcontextprotocol/server';
 import { PARAMS, TEMPLATES, TREE_FORMAT, type ParamSpec } from './piece/tree.js';
 
 export const TOOL_NAMES = ['start_piece', 'change_piece', 'preview_piece', 'check_piece', 'export_for_casting', 'describe_piece'] as const;
@@ -25,7 +25,7 @@ export const TOOL_ACCESS: Readonly<Record<ToolName, 'read' | 'write'>> = {
 export const PREVIEW_VIEWS = ['three_quarter', 'front', 'side', 'top', 'setting_closeup'] as const;
 export const DEFAULT_VIEWS = ['three_quarter', 'side', 'setting_closeup'] as const;
 
-type JsonSchema = Record<string, unknown>;
+type JsonSchema = JSONObject;
 
 function paramSchema(p: ParamSpec): JsonSchema {
   const extra = [p.default !== undefined ? `Default ${JSON.stringify(p.default)}.` : '', p.limit ? `Casting limit ${p.limit}.` : '']
@@ -61,7 +61,11 @@ function paramSchema(p: ParamSpec): JsonSchema {
         ? { type: 'integer', enum: [...p.values!], description }
         : { type: 'string', enum: [...p.values!], description };
     case 'shrinkage':
-      return { type: 'string', description, examples: ['off', '1.5 %'] };
+      return { type: 'string', description, examples: ['off', 'on', '1.5 %'] };
+    case 'carat':
+      return { type: 'string', description, examples: ['2.00 ct'] };
+    case 'lip':
+      return { type: 'string', description: `${description} Write a height with its unit, e.g. "0.7 mm", or "auto".`, examples: ['auto', '0.7 mm'] };
   }
 }
 
@@ -98,7 +102,9 @@ export const TOOLS: Tool[] = [
     title: 'Start a piece',
     description: [
       'Start a new piece of jewelry from a ready-made design, sized to the wearer.',
-      '"solitaire_ring" is a band with one round stone held in a 4- or 6-prong head; "plain_band" is the band alone.',
+      '"solitaire_ring" is a band with one round stone in a 4- or 6-prong head; "plain_band" is the band alone; "emerald_bezel_solitaire" is Emily\'s design: an emerald-cut stone in a full platinum 950 bezel, set east-west, on a plain round band.',
+      'The head (prong_head or bezel), the stone (round or emerald cut), the metal (silver, 14k or 18k gold, platinum 950) and every size are settings, so any template can become any of these.',
+      'Size the stone from its MEASURED dimensions on its grading report (length, width and depth in mm, or diameter and depth for a round), never from a carat chart. Until you give them, the stone\'s size is a placeholder and the replies and picture say so.',
       'Only the template and the ring size are needed; everything you leave out gets a safe default that sits comfortably above the casting limits.',
       'Every measurement is in millimetres and must be written with its unit ("1.6 mm"). A ring size must name its system: US, UK or EU.',
       'Returns a picture of the piece, a plain-language summary, and the piece\'s tree: its saved recipe, kept as <name>.tree.json.',
@@ -109,7 +115,11 @@ export const TOOLS: Tool[] = [
       required: ['template', 'ring_size'],
       additionalProperties: false,
       properties: {
-        template: { type: 'string', enum: [...TEMPLATES], description: 'The starting design: "solitaire_ring" (a band and one round stone in prongs) or "plain_band".' },
+        template: {
+          type: 'string',
+          enum: [...TEMPLATES],
+          description: 'The starting design: "solitaire_ring" (a band and one round stone in prongs), "plain_band", or "emerald_bezel_solitaire" (Emily\'s design: an emerald cut in a full platinum bezel, east-west, on a round band).',
+        },
         ...PIECE_PROPERTIES,
         preview: PREVIEW_FLAG,
       },
@@ -120,7 +130,7 @@ export const TOOLS: Tool[] = [
     name: 'change_piece',
     title: 'Change the piece',
     description: [
-      'Change the piece: resize it, switch the head between 4 and 6 prongs, thicken the prongs, change the stone size or the band, rename it, turn it into a plain band, or set a shrinkage allowance.',
+      'Change the piece: resize it, give the stone\'s measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band or the metal, turn the stone east-west or north-south, rename it, make it a plain band, or set a shrinkage allowance.',
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
       'Or pass a whole edited `tree`, with or without `set`.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
@@ -176,7 +186,7 @@ export const TOOLS: Tool[] = [
     title: 'Check it will cast',
     description: [
       'Check whether the piece will print and cast, without exporting it.',
-      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; prongs at least 1.0 mm; details at least 0.35 mm; gaps at least 0.3 mm; the surface within 0.01 mm of the intended shape.',
+      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece\'s metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.',
       'Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.',
       'A failed check is a normal answer, not an error: tell the person what to change.',
     ].join(' '),
@@ -189,7 +199,7 @@ export const TOOLS: Tool[] = [
     description: [
       'Make the files to send to a printer or caster: <name>.stl (binary STL, millimetres) with <name>.3mf beside it, and <name>.check.json, the check report the caster reads.',
       'The files are released ONLY if every casting check passes on the file as written. Otherwise nothing is exported, and the reply says what to thicken and where; that is a normal answer, not an error, so tell the person and offer the change.',
-      'The report says whether a shrinkage allowance was applied.',
+      'The stone is never in the casting files. The report says whether a shrinkage allowance was applied. A platinum piece goes to a SPECIALIST platinum caster (it is cast at about 1850-2200 °C), and the reply says so.',
     ].join(' '),
     inputSchema: { type: 'object', additionalProperties: false, properties: { tree: TREE } },
     annotations: annotations('export_for_casting', 'Make the casting files'),
@@ -198,7 +208,7 @@ export const TOOLS: Tool[] = [
     name: 'describe_piece',
     title: 'Describe the piece',
     description: [
-      'Read back what the piece is now, in a jeweler\'s terms: the ring size (with its system and the inner diameter in mm), the band\'s width, thickness and profile, the stone and its setting, the overall size, the metal volume, and the estimated weight in sterling silver and in 14k and 18k gold.',
+      'Read back what the piece is now, in a jeweler\'s terms: the ring size (with its system and the inner diameter in mm), the band\'s width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.',
       'Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece\'s tree.',
       'Changes nothing and makes no files.',
     ].join(' '),

@@ -11,7 +11,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -20,6 +20,19 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      - name: The committed bundle (dist/) is the one the sources build
+        run: git diff --exit-code -- dist/
+
+  kernel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: The vendored kernel is byte-identical to manifold-3d 3.5.4 on npm
+        run: node scripts/verify-kernel.mjs
 
   image:
     runs-on: ubuntu-latest
@@ -28,5 +41,15 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build the image
         run: docker build -t flo2-cad:ci .
-      - name: The image answers --version with no network
+      - name: It answers --version with no network on a read-only root
         run: docker run --rm --network none --read-only flo2-cad:ci --version
+      - name: It serves its six tools over stdio, confined like flo2's slot
+        run: |
+          { printf '%s\n' \
+              '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+              '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+              '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'; sleep 5; } \
+            | timeout 60 docker run --rm -i --cpus 1 --memory 1g --network none --read-only flo2-cad:ci > out.jsonl || true
+          for t in start_piece change_piece preview_piece check_piece export_for_casting describe_piece; do
+            grep -q "\"name\":\"$t\"" out.jsonl || { echo "missing $t"; cat out.jsonl; exit 1; }
+          done

@@ -139,10 +139,11 @@ const UK_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 /**
  * A ring size, in its named system, as the inner diameter in mm.
  * - US: diameter = 11.63 mm + 0.8128 mm per size (quarter sizes allowed), US 3 to 16.
- * - UK: letters A to Z, half sizes allowed; inner circumference 37.8 mm at A and
- *   1.25 mm more per letter.
+ * - UK (BS 6820:1987): letters A to Z, half sizes allowed; inner circumference
+ *   40.0 mm at C and 1.25 mm per letter, so 37.5 mm at A (Goldsmiths' chart: N = 53.8 mm).
  * - EU (ISO 8653): the size IS the inner circumference in mm, EU 38 to 76.
- * Sources for these conversions are cited on the design in Phase 2.
+ * Sources: https://en.wikipedia.org/wiki/Ring_size (US formula; BS 6820; ISO 8653),
+ * https://www.goldsmiths.co.uk/i/know-your-ring-size (read 2026-10-03).
  */
 export function ringInnerDiameterMm(v: unknown, path: string): { size: RingSize; diameterMm: number } {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) {
@@ -178,7 +179,7 @@ export function ringInnerDiameterMm(v: unknown, path: string): { size: RingSize;
     if (!m || i < 0) {
       throw new CallError(sizePath, `"${text}" is not a UK ring size; UK sizes are letters A to Z, with halves, for example "N" or "N½".`);
     }
-    const circumference = 37.8 + 1.25 * i + (m[2] ? 0.625 : 0);
+    const circumference = 37.5 + 1.25 * i + (m[2] ? 0.625 : 0);
     return { size: { system, size: raw as string | number }, diameterMm: round(circumference / Math.PI, 3) };
   }
   const c = parseFraction(text);
@@ -195,4 +196,14 @@ function parseFraction(t: string): number | null {
   m = /^(\d+)\s+(\d)\/(\d)$/.exec(s);
   if (m) return Number(m[1]) + Number(m[2]) / Number(m[3]);
   return null;
+}
+
+/** A stone's carat weight as a grading report states it ("2.00 ct"). Informational only: it never sizes anything. */
+export function caratText(v: unknown, path: string): string {
+  const { num, unit, text } = split(v, path, '2.00 ct');
+  if (unit !== 'ct') {
+    throw new CallError(path, `"${text}" must be a carat weight written with "ct", for example "2.00 ct". It is kept for reference only; the stone is sized from its measured length, width and depth.`);
+  }
+  if (num <= 0 || num > 50) throw new CallError(path, `${num} ct is not a plausible weight for one stone.`);
+  return `${num} ct`;
 }

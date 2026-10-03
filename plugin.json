@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "flo2-cad",
+  "version": "0.2.0",
+  "description": "Design casting-ready jewelry with an agent: a ring in a named size with a prong or bezel head, round or emerald-cut stones sized from their grading report, checked against cited casting limits before any STL or 3MF is released.",
+  "author": {
+    "name": "Anthony Sligar"
+  },
+  "homepage": "https://github.com/sligara7/flo2-cad",
+  "repository": "https://github.com/sligara7/flo2-cad",
+  "keywords": ["jewelry", "cad", "casting", "ring", "mcp", "stl", "3mf"]
+}

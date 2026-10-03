@@ -4,11 +4,12 @@
 // piece (contract §3: a new session resumes from the saved <name>.tree.json).
 
 import { CallError } from './errors.js';
-import { applySet, checkStartArgs, getSetting, PARAMS, readTemplate, treeFromTemplate, validateTree, OPERATIONS, PARTS, type PieceTree, type TemplateView } from './piece/tree.js';
+import { checkPiece, describeNumbers, placeholderNote, preview, summary } from './engine.js';
+import { METALS } from './metals.js';
+import { applySet, checkStartArgs, getSetting, OPERATIONS, PARAMS, PARTS, readPiece, treeFromTemplate, validateTree, type PieceTree } from './piece/tree.js';
+import type { ViewName } from './render/render.js';
 import { MIME, callError, reply, type OutFile, type ToolReply } from './reply.js';
-import { STUB_BANNER, stubCheck, stubPreviewPng, type CheckRun } from './stub/engine.js';
 import { DEFAULT_VIEWS, PREVIEW_VIEWS, TOOLS, type ToolName } from './tools.js';
-import { STUB_ENGINE } from './version.js';
 
 const ALLOWED_ARGS: Readonly<Record<string, ReadonlySet<string>>> = Object.fromEntries(
   TOOLS.map((t) => [t.name, new Set(Object.keys((t.inputSchema.properties ?? {}) as object))]),
@@ -24,16 +25,6 @@ function fmt(v: unknown): string {
   return JSON.stringify(v);
 }
 
-export function summary(tree: PieceTree, view: TemplateView): string {
-  const profile = view.profile.replace('_', '-');
-  const band = `${view.ringSize.system} size ${view.ringSize.size} (inner diameter ${view.innerDiameterMm.toFixed(2)} mm), ${profile} band ${view.bandWidthMm} mm wide and ${view.bandThicknessMm} mm thick`;
-  const head = view.head
-    ? `, one ${view.head.stoneDiameterMm} mm round stone in a ${view.head.prongCount}-prong head (prongs ${[...new Set(view.head.prongThicknessMm)].join(' / ')} mm thick)`
-    : ', no stone (a plain band)';
-  const kind = view.head ? 'Solitaire ring' : 'Plain band';
-  return `${kind} "${tree.name}", revision ${tree.revision}: ${band}${head}. Shrinkage allowance: ${tree.shrinkage}.`;
-}
-
 function treeFile(tree: PieceTree): OutFile {
   return { name: `${tree.name}.tree.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(tree, null, 2) + '\n', 'utf8') };
 }
@@ -42,15 +33,11 @@ function treeText(tree: PieceTree): string {
   return `The piece's tree, revision ${tree.revision} (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):\n${JSON.stringify(tree)}`;
 }
 
-function reportFile(run: CheckRun, name: string): OutFile {
-  return { name: `${name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(run.report, null, 2) + '\n', 'utf8') };
-}
-
 export class Session {
   #piece: PieceTree | undefined;
 
   /** The tools/call entry point. Malformed calls come back as isError replies naming the field path. */
-  call(name: string, args: Record<string, unknown>): ToolReply {
+  async call(name: string, args: Record<string, unknown>): Promise<ToolReply> {
     try {
       const allowed = ALLOWED_ARGS[name]!;
       for (const k of Object.keys(args)) {
@@ -58,17 +45,17 @@ export class Session {
       }
       switch (name as ToolName) {
         case 'start_piece':
-          return this.start(args);
+          return await this.start(args);
         case 'change_piece':
-          return this.change(args);
+          return await this.change(args);
         case 'preview_piece':
-          return this.preview(args);
+          return await this.preview(args);
         case 'check_piece':
-          return this.check(args);
+          return await this.check(args);
         case 'export_for_casting':
-          return this.export(args);
+          return await this.export(args);
         case 'describe_piece':
-          return this.describe(args);
+          return await this.describe(args);
       }
       throw new Error(`no handler for ${name}`);
     } catch (e) {
@@ -94,17 +81,24 @@ export class Session {
     return p !== false;
   }
 
-  #withPiece(tree: PieceTree, lead: string, wantPreview: boolean): ToolReply {
-    const view = readTemplate(tree);
+  async #withPiece(tree: PieceTree, lead: string, wantPreview: boolean): Promise<ToolReply> {
+    const v = readPiece(tree);
     const files: OutFile[] = [];
-    if (wantPreview) files.push({ name: `${tree.name}.preview.png`, mimeType: MIME.png, bytes: stubPreviewPng(view) });
+    if (wantPreview) {
+      const { png } = await preview(tree, [...DEFAULT_VIEWS]);
+      files.push({ name: `${tree.name}.preview.png`, mimeType: MIME.png, bytes: png });
+    }
     files.push(treeFile(tree));
-    const texts = [`${lead} ${summary(tree, view)}`, treeText(tree)];
-    if (STUB_ENGINE) texts.unshift(STUB_BANNER);
+    const texts = [`${lead} ${summary(tree, v)}`];
+    const ph = placeholderNote(v);
+    if (ph) texts.push(`PLACEHOLDER: ${ph} The picture says so too.`);
+    const note = METALS[v.metal].castingNote;
+    if (note) texts.push(note);
+    texts.push(treeText(tree));
     return reply(texts, files);
   }
 
-  start(args: Record<string, unknown>): ToolReply {
+  async start(args: Record<string, unknown>): Promise<ToolReply> {
     const template = checkStartArgs(args);
     const wantPreview = this.#previewFlag(args);
     const tree = treeFromTemplate(template, args);
@@ -113,14 +107,14 @@ export class Session {
     return this.#withPiece(tree, 'Started.', wantPreview);
   }
 
-  change(args: Record<string, unknown>): ToolReply {
+  async change(args: Record<string, unknown>): Promise<ToolReply> {
     const wantPreview = this.#previewFlag(args);
     const set = args['set'];
     if (args['tree'] === undefined && set === undefined) {
       throw new CallError('set', 'say what to change, e.g. {"prong_count": 6}, or pass an edited "tree".');
     }
     if (set !== undefined && (set === null || typeof set !== 'object' || Array.isArray(set) || Object.keys(set).length === 0)) {
-      throw new CallError('set', 'must be an object naming at least one setting, e.g. {"prong_thickness": "1.3 mm"}.');
+      throw new CallError('set', 'must be an object naming at least one setting, e.g. {"prong_thickness": "1.5 mm"}.');
     }
     const base = this.#open(args);
     let next: PieceTree;
@@ -138,7 +132,7 @@ export class Session {
     return this.#withPiece(next, `Changed ${lines.join('; ')}.`, wantPreview);
   }
 
-  preview(args: Record<string, unknown>): ToolReply {
+  async preview(args: Record<string, unknown>): Promise<ToolReply> {
     const tree = this.#open(args);
     const views = args['views'] ?? [...DEFAULT_VIEWS];
     if (!Array.isArray(views) || views.length < 1 || views.length > 4) throw new CallError('views', 'a list of 1 to 4 views.');
@@ -146,74 +140,89 @@ export class Session {
       if (!PREVIEW_VIEWS.includes(v)) throw new CallError(`views[${i}]`, `"${String(v)}" is not a view; the views are ${PREVIEW_VIEWS.join(', ')}.`);
       if (views.indexOf(v) !== i) throw new CallError(`views[${i}]`, `"${v}" is asked for twice.`);
     });
-    const view = readTemplate(tree);
-    const texts = [`Preview of ${summary(tree, view)} Views: ${views.join(', ')}.`];
-    if (STUB_ENGINE) texts.unshift(`${STUB_BANNER} The stub draws one schematic front view whatever views are asked for; prongs under the limit are red.`);
-    return reply(texts, [{ name: `${tree.name}.preview.png`, mimeType: MIME.png, bytes: stubPreviewPng(view) }]);
+    const { png } = await preview(tree, views as ViewName[]);
+    const v = readPiece(tree);
+    const texts = [`Preview of ${summary(tree, v)} Views: ${views.join(', ')}. The stone is drawn for the picture only; it is never part of a casting file.`];
+    const ph = placeholderNote(v);
+    if (ph) texts.push(`PLACEHOLDER: ${ph}`);
+    return reply(texts, [{ name: `${tree.name}.preview.png`, mimeType: MIME.png, bytes: png }]);
   }
 
-  #verdictText(tree: PieceTree, run: CheckRun): string {
-    const r = run.report;
-    const lines = r.checks.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? 'not measured'}`);
-    return [`Checks for "${tree.name}" revision ${tree.revision}, on ${r.stl.file} as written (${r.stl.triangles} triangles, sha256 ${r.stl.sha256.slice(0, 12)}…):`, ...lines].join('\n');
+  #verdictText(tree: PieceTree, r: Awaited<ReturnType<typeof checkPiece>>): string {
+    const stl = r.report['stl'] as { file: string; sha256: string; triangles: number } | null;
+    const lines = r.entries.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? 'not measured'}${c.where ? ` [${c.where.description}]` : ''}`);
+    const head = stl
+      ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${(r.report['metal'] as { name: string }).name}:`
+      : `Checks for "${tree.name}" revision ${tree.revision}: the casting file could not be made, so no check could run.`;
+    return [head, ...lines].join('\n');
   }
 
-  check(args: Record<string, unknown>): ToolReply {
+  async check(args: Record<string, unknown>): Promise<ToolReply> {
     const tree = this.#open(args);
-    const run = stubCheck(tree, readTemplate(tree), 'check');
+    const r = await checkPiece(tree, 'check');
+    const v = readPiece(tree);
     const head =
-      run.report.verdict === 'pass'
-        ? 'Every casting check passes; export_for_casting will release the files.'
-        : `It would NOT cast as it is. What to thicken and where:\n${run.fixes.map((f) => `- ${f}`).join('\n')}`;
-    const texts = [head, this.#verdictText(tree, run), `Shrinkage allowance: ${run.report.shrinkage.allowance}. Full report: ${tree.name}.check.json.`];
-    if (STUB_ENGINE) texts.unshift(STUB_BANNER);
-    return reply(texts, [reportFile(run, tree.name)]);
+      r.verdict === 'pass'
+        ? 'Every casting check passes on the file as an export would write it; export_for_casting will release it.'
+        : `It would NOT cast as it is. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`;
+    const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${(r.report['shrinkage'] as { allowance: string }).allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`];
+    const ph = placeholderNote(v);
+    if (ph) texts.push(`PLACEHOLDER: ${ph} The checks are only as true as the stone's size.`);
+    return reply(texts, [{ name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + '\n', 'utf8') }]);
   }
 
-  export(args: Record<string, unknown>): ToolReply {
+  async export(args: Record<string, unknown>): Promise<ToolReply> {
     const tree = this.#open(args);
-    const run = stubCheck(tree, readTemplate(tree), 'export');
-    const shrink = `Shrinkage allowance: ${run.report.shrinkage.applied ? `APPLIED, ${run.report.shrinkage.allowance}` : 'not applied (off)'}.`;
-    const texts: string[] = [];
-    if (STUB_ENGINE) texts.push(STUB_BANNER);
-    if (run.report.verdict !== 'pass') {
-      texts.push(
-        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:\n${run.fixes.map((f) => `- ${f}`).join('\n')}`,
-        this.#verdictText(tree, run),
-        `${shrink} The report is ${tree.name}.check.json.`,
-      );
-      return reply(texts, [reportFile(run, tree.name)]);
+    const r = await checkPiece(tree, 'export');
+    const v = readPiece(tree);
+    const report: OutFile = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + '\n', 'utf8') };
+    const sh = r.report['shrinkage'] as { applied: boolean; allowance: string };
+    const shrink = `Shrinkage allowance: ${sh.applied ? `APPLIED, ${sh.allowance}` : 'not applied (off)'}.`;
+    const note = METALS[v.metal].castingNote;
+    const ph = placeholderNote(v);
+    if (r.verdict !== 'pass' || !r.stl || !r.threeMf) {
+      const texts = [
+        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`,
+        this.#verdictText(tree, r),
+        `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,
+      ];
+      return reply(texts, [report]);
     }
-    texts.push(
-      `EXPORTED "${tree.name}" revision ${tree.revision}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written.`,
-      this.#verdictText(tree, run),
+    const texts = [
+      `EXPORTED "${tree.name}" revision ${tree.revision} in ${METALS[v.metal].name}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
+      this.#verdictText(tree, r),
       shrink,
-    );
+    ];
+    if (note) texts.push(note);
+    if (ph) texts.push(`PLACEHOLDER: ${ph} Do not cast this until the stone's real size is in.`);
     return reply(texts, [
-      { name: `${tree.name}.stl`, mimeType: MIME.stl, bytes: run.stl },
-      { name: `${tree.name}.3mf`, mimeType: MIME.threeMf, bytes: run.threeMf },
-      reportFile(run, tree.name),
+      { name: `${tree.name}.stl`, mimeType: MIME.stl, bytes: r.stl },
+      { name: `${tree.name}.3mf`, mimeType: MIME.threeMf, bytes: r.threeMf },
+      report,
     ]);
   }
 
-  describe(args: Record<string, unknown>): ToolReply {
+  async describe(args: Record<string, unknown>): Promise<ToolReply> {
     const tree = this.#open(args);
-    const view = readTemplate(tree);
+    const v = readPiece(tree);
+    const n = await describeNumbers(tree);
     const catalog = PARAMS.map((p) => {
-      const range = p.min !== undefined ? `, ${p.min} to ${p.max} mm` : p.values ? `, one of ${p.values.map((v) => JSON.stringify(v)).join(' / ')}` : '';
+      const range = p.min !== undefined ? `, ${p.min} to ${p.max} mm` : p.values ? `, one of ${p.values.map((x) => JSON.stringify(x)).join(' / ')}` : '';
       const dflt = p.default !== undefined ? `, default ${JSON.stringify(p.default)}` : '';
-      const limit = p.limit ? `, casting limit ${p.limit}` : '';
+      const limit = p.limit ? `, limit ${p.limit}` : '';
       return `- ${p.key} (now ${fmt(getSetting(tree, p.key))}${range}${dflt}${limit}): ${p.help}`;
     });
+    const metal = METALS[v.metal];
     const texts = [
-      summary(tree, view),
-      STUB_ENGINE
-        ? 'Overall size, metal volume and weight in sterling silver, 14k and 18k gold: not yet computed (Phase 1 stub engine).'
-        : '',
-      `Settings change_piece can set:\n${catalog.join('\n')}\nAny part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: seat_height (how high the stone sits above the band), prong_grip (how far each prong tip reaches over the stone), prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.3 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, with the finger pointing to 12).`,
+      summary(tree, v),
+      `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
+      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ''}`,
+      `Settings change_piece can set:\n${catalog.join('\n')}\nAny part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
       `A tree's parts: ${PARTS.join(', ')}. Its operations: ${OPERATIONS.join(', ')}.`,
       treeText(tree),
-    ].filter(Boolean);
+    ];
+    const ph = placeholderNote(v);
+    if (ph) texts.splice(1, 0, `PLACEHOLDER: ${ph}`);
     return reply(texts);
   }
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // flo2-cad: the Agent CAD engine as an MCP server over stdio.
-//   flo2-cad              serve MCP on stdin/stdout (what flo2's slot and a laptop agent run)
+//   flo2-cad              serve MCP on stdin/stdout, both protocol eras (what flo2's slot and a laptop agent run)
 //   flo2-cad --version    print the engine and kernel versions (flo2 asks this at start)
 //   flo2-cad --list-tools print the published tool list as JSON
 // Nothing but MCP messages is ever written to stdout while serving.
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createServer } from './server.js';
 import { TOOLS, TOOL_ACCESS } from './tools.js';
 import { ENGINE_NAME, ENGINE_VERSION, KERNEL_NAME, KERNEL_VERSION } from './version.js';
@@ -22,6 +22,5 @@ if (arg === '--version' || arg === '-v') {
   process.stderr.write(`${ENGINE_NAME}: unknown option ${arg}; try --help\n`);
   process.exitCode = 2;
 } else {
-  const server = createServer();
-  await server.connect(new StdioServerTransport());
+  serveStdio(() => createServer(), { onerror: (e) => process.stderr.write(`${ENGINE_NAME}: ${e.message}\n`) });
 }

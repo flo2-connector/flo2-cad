@@ -1,0 +1,31 @@
+{
+  "measured_at": "2026-10-03T21:04:37.343Z",
+  "where": "docker-slot",
+  "server": "docker image flo2-cad:phase2: --cpus 1 --memory 1g --network none --read-only",
+  "node": "v24.21.0",
+  "cpus_visible": 4,
+  "affinity": "pid 578144's current affinity mask: f",
+  "preview_4_views_512px_s": {
+    "cold_with_kernel_load": 3.018,
+    "warm": 1.86,
+    "limit": 5
+  },
+  "export_with_checks_s": {
+    "typical_solitaire_6_prongs": 8.739,
+    "emerald_bezel_platinum": 8.915
+  },
+  "peak_memory_MiB": {
+    "value": 189.6,
+    "limit": 1024
+  },
+  "install_MB": {
+    "engine_without_runtime": 1.78,
+    "files": 18,
+    "node_binary": 126.6,
+    "with_runtime": 128.38,
+    "limits": {
+      "without": 25,
+      "with": 150
+    }
+  }
+}
