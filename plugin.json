@@ -7,7 +7,7 @@
   "author": {
     "name": "Anthony Sligar"
   },
-  "homepage": "https://github.com/sligara7/flo2-cad",
-  "repository": "https://github.com/sligara7/flo2-cad",
+  "homepage": "https://github.com/flo2-connector/flo2-cad",
+  "repository": "https://github.com/flo2-connector/flo2-cad",
   "keywords": ["jewelry", "cad", "casting", "ring", "mcp", "stl", "3mf"]
 }
