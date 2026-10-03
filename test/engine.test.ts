@@ -115,6 +115,35 @@ describe('refusals say what to thicken and where', () => {
   });
 });
 
+describe('two parts too close together are refused (the gap check)', () => {
+  it('a 0.2 mm slot is refused with where it is', async () => {
+    const tree: PieceTree = treeFromTemplate('plain_band', { ring_size: { system: 'US', size: '7' }, name: 'slot' });
+    // A block on the band with a 0.2 mm slot sawn into it: two walls facing each other 0.2 mm apart.
+    tree.root.children!.push({
+      id: 'block',
+      op: 'translate',
+      params: { x: '0 mm', y: '0 mm', z: '10.6 mm' },
+      children: [
+        {
+          id: 'slotted',
+          op: 'difference',
+          children: [
+            { id: 'solid', op: 'box', params: { x: '4 mm', y: '2 mm', z: '2 mm' } },
+            { id: 'cut', op: 'translate', params: { z: '0.5 mm' }, children: [{ id: 'saw', op: 'box', params: { x: '0.2 mm', y: '3 mm', z: '2 mm' } }] },
+          ],
+        },
+      ],
+    });
+    const r = await checkPiece(tree, 'export');
+    assert.equal(r.verdict, 'fail');
+    assert.equal(r.threeMf, null);
+    const gap = r.entries.find((e) => e.id === 'gap')!;
+    assert.equal(gap.result, 'fail');
+    assert.ok(Math.abs(gap.value! - 0.2) < 0.01, `gap ${gap.value}`);
+    assert.ok(r.fixes.some((f) => /only 0\.2 mm apart/.test(f) && /open the gap to at least 0\.3 mm/.test(f)));
+  });
+});
+
 describe('the checker reads the file that was written', () => {
   it("the report's STL checksum is the released file's, and the 3MF holds the same mesh in mm", async () => {
     const tree = treeFromTemplate('solitaire_ring', { ring_size: { system: 'US', size: '8' }, name: 'sum' });
