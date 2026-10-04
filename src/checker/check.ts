@@ -4,6 +4,14 @@
 // say where the prongs, band, stone and bezel are; every number in the report is
 // measured from the file's own triangles.
 //
+// Two rules keep the readings about the SHAPE rather than about how it was cut
+// into triangles or what else touches it:
+//  · thickness and gaps follow the surface's direction: a sliver too narrow to
+//    have one of its own takes it from the surface it was cut from (surface.ts;
+//    fact:wall-check-reads-sliver-facets-as-zero-thickness);
+//  · a section is the whole mesh cut by a plane, clipped afterwards to the part
+//    the declaration names (sections, below; fact:band-check-measures-added-shapes-as-band).
+//
 // A check that cannot run is a FAIL (owner, round 1, Q6): any exception inside
 // a check becomes result "could_not_run", which blocks the export.
 
@@ -11,6 +19,7 @@ import { Bvh } from './bvh.js';
 import type { BandDecl, FeatureDecl, P2, ProngDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
+import { surfaceDirections } from './surface.js';
 
 export interface CheckLimits {
   wall: number;
@@ -105,7 +114,9 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
     return w.entry;
   });
 
-  const samples = sampleThickness(bvh);
+  // The surface's direction at each triangle: its own normal, except that a sliver takes the surface's it was cut from (surface.ts).
+  const surface = surfaceDirections(bvh, L.surfaceDeviation).normal;
+  const samples = sampleThickness(bvh, surface);
   guard('wall', 'Wall thickness', mm(L.wall), () => wallEntry(bvh, samples, L, decl));
   guard('detail', 'Smallest detail', mm(L.detail), () => detailEntry(bvh, samples, L, decl));
   if (decl.band) guard('band', 'Ring band thickness', mm(L.band), () => bandEntry(bvh, decl.band!, L));
@@ -117,7 +128,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
     guard('bezel_wall', 'Bezel wall thickness', mm(L.wall), () => bezelWallEntry(bvh, samples, decl, L));
     guard('bezel_lip', 'Bezel lip height', `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L));
   }
-  guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, L));
+  guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
   guard('surface_deviation', 'Surface smoothness', mm(L.surfaceDeviation), () => {
     if (!reference) throw new Error('no finer reference tessellation was supplied');
     return surfaceEntry(bvh, L, readBinaryStl(reference), decl);
@@ -232,18 +243,21 @@ interface Sample {
 /**
  * Local thickness at each triangle's centroid: the diameter of the largest ball
  * inside the solid that touches the surface there (a max-inscribed-sphere
- * measure, as ver:wall-thickness-check names). Surfaces that do not face back
- * towards the sample (normals within 105° of its own) cannot stop the ball, so a
- * convex edge does not read as a thin wall.
+ * measure, as ver:wall-thickness-check names). The ball grows along the
+ * surface's direction at the centroid (`S`, surface.ts), and only surfaces facing
+ * back towards it (more than 105° away) can stop it, so a convex edge does not
+ * read as a thin wall. A sliver's own lean is not trusted for either: one
+ * beside a 90° edge leaned far enough to make that edge look sharper than 105°,
+ * and the ball then stopped within a few thousandths of a millimetre.
  */
-function sampleThickness(bvh: Bvh): Sample[] {
+function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
   const out: Sample[] = [];
-  const N = bvh.normal, C = bvh.centroid, P = bvh.pos, T = bvh.tri;
+  const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t]! < 1e-10) continue;
-    const n: V3 = [N[t * 3]!, N[t * 3 + 1]!, N[t * 3 + 2]!];
+    const n: V3 = [S[t * 3]!, S[t * 3 + 1]!, S[t * 3 + 2]!];
     const p: V3 = [C[t * 3]!, C[t * 3 + 1]!, C[t * 3 + 2]!];
-    const opposing = (u: number) => N[u * 3]! * n[0] + N[u * 3 + 1]! * n[1] + N[u * 3 + 2]! * n[2] < -0.25;
+    const opposing = (u: number) => S[u * 3]! * n[0] + S[u * 3 + 1]! * n[1] + S[u * 3 + 2]! * n[2] < -0.25;
     const inward: V3 = [-n[0], -n[1], -n[2]];
     const hit = bvh.ray(p, inward, 50, opposing);
     if (!hit) continue;
@@ -254,7 +268,7 @@ function sampleThickness(bvh: Bvh): Sample[] {
     const bounds = (u: number) => {
       if (!opposing(u)) return false;
       const v = T[u * 3]! * 3;
-      return (cx - P[v]!) * N[u * 3]! + (cy - P[v + 1]!) * N[u * 3 + 1]! + (cz - P[v + 2]!) * N[u * 3 + 2]! < 1e-7;
+      return (cx - P[v]!) * S[u * 3]! + (cy - P[v + 1]!) * S[u * 3 + 1]! + (cz - P[v + 2]!) * S[u * 3 + 2]! < 1e-7;
     };
     for (let i = 0; i < 16 && hi - lo > 0.0005; i++) {
       const r = (lo + hi) / 2;
@@ -298,7 +312,7 @@ function whereOf(p: V3, decl: FeatureDecl, what: string): Where {
   return { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), point_mm: pt(p), description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
 }
 
-const MAXSPHERE = 'largest inscribed sphere at every triangle centroid of the written STL, only facing-back surfaces bounding it';
+const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it";
 
 /** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
 function onProngColumn(p: V3, decl: FeatureDecl): boolean {
@@ -336,29 +350,50 @@ function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: Feature
 }
 
 // --------------------------------------------------------------- sections
+//
+// A section is the WHOLE mesh cut by a plane, and only then clipped to the region
+// the declaration names: the band's own section (inner and outer radius, width) or a
+// disc round a prong's axis. The largest circle is the largest that fits inside BOTH
+// the metal and that region.
+//
+// Cutting first and clipping afterwards is what keeps the outline closed. The checker
+// used to keep only the cut segments inside a window round the band, so wherever other
+// metal joined the band (a head, or a shape added by a tree operation), the window cut
+// the outline open, the inside-or-outside test along it went wrong, and a 1.7 mm band
+// read 0.78 mm under an added pedestal, moving when only the pedestal changed and never
+// converging on the advice to thicken (fact:band-check-measures-added-shapes-as-band).
+// A skip zone over the head hid that for library heads only; clipping to the band's own
+// section needs no skip zone, so the band is now measured all the way round, under a
+// head or an added shape too, and a thin band there is refused like anywhere else.
 
-/** Segments where a plane cuts the mesh, mapped into 2D by `to2d`. */
-function slice(bvh: Bvh, normal: V3, offset: number, to2d: (p: V3) => P2, keep: (p: V3) => boolean, candidates?: Uint32Array): [P2, P2][] {
-  const segs: [P2, P2][] = [];
-  const count = candidates ? candidates.length : bvh.n;
-  for (let i = 0; i < count; i++) {
-    const t = candidates ? candidates[i]! : i;
-    const v = [bvh.vertex(t, 0), bvh.vertex(t, 1), bvh.vertex(t, 2)];
-    const d = v.map((q) => q[0] * normal[0] + q[1] * normal[1] + q[2] * normal[2] - offset);
-    const pts: V3[] = [];
+type Seg = [P2, P2];
+
+/** Where a plane (normal · p = offset) cuts the candidate triangles, in the plane's 2D coordinates; `want` drops segments that cannot matter. */
+function slice(bvh: Bvh, normal: V3, offset: number, to2d: (x: number, y: number, z: number) => P2, candidates: Uint32Array, want: (a: P2, b: P2) => boolean): Seg[] {
+  const segs: Seg[] = [];
+  const P = bvh.pos, T = bvh.tri;
+  const ends: P2[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const t = candidates[i]!;
+    ends.length = 0;
     for (let k = 0; k < 3; k++) {
-      const a = v[k]!, b = v[(k + 1) % 3]!, da = d[k]!, db = d[(k + 1) % 3]!;
-      if ((da < 0 && db >= 0) || (da >= 0 && db < 0)) {
-        const s = da / (da - db);
-        pts.push([a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1]), a[2] + s * (b[2] - a[2])]);
+      // Each edge from its lower-numbered vertex, so the two triangles sharing it cut it at bit-identical points.
+      let u = T[t * 3 + k]!, v = T[t * 3 + ((k + 1) % 3)]!;
+      if (u > v) [u, v] = [v, u];
+      const du = P[u * 3]! * normal[0] + P[u * 3 + 1]! * normal[1] + P[u * 3 + 2]! * normal[2] - offset;
+      const dv = P[v * 3]! * normal[0] + P[v * 3 + 1]! * normal[1] + P[v * 3 + 2]! * normal[2] - offset;
+      if ((du < 0 && dv >= 0) || (du >= 0 && dv < 0)) {
+        const s = du / (du - dv);
+        ends.push(to2d(P[u * 3]! + s * (P[v * 3]! - P[u * 3]!), P[u * 3 + 1]! + s * (P[v * 3 + 1]! - P[u * 3 + 1]!), P[u * 3 + 2]! + s * (P[v * 3 + 2]! - P[u * 3 + 2]!)));
       }
     }
-    if (pts.length === 2 && keep(pts[0]!) && keep(pts[1]!)) segs.push([to2d(pts[0]!), to2d(pts[1]!)]);
+    if (ends.length === 2 && want(ends[0]!, ends[1]!)) segs.push([ends[0]!, ends[1]!]);
   }
   return segs;
 }
 
-function inside(segs: [P2, P2][], x: number, y: number): boolean {
+/** Inside the closed section: crossings of the ray from (x, y) towards +x. */
+function inside(segs: Seg[], x: number, y: number): boolean {
   let c = false;
   for (const [a, b] of segs) {
     if (a[1] > y !== b[1] > y) {
@@ -369,7 +404,7 @@ function inside(segs: [P2, P2][], x: number, y: number): boolean {
   return c;
 }
 
-function distToSegs(segs: [P2, P2][], x: number, y: number): number {
+function distToSegs(segs: Seg[], x: number, y: number): number {
   let best = Infinity;
   for (const [a, b] of segs) {
     const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -380,23 +415,26 @@ function distToSegs(segs: [P2, P2][], x: number, y: number): number {
   return best;
 }
 
-/** Diameter of the largest circle inside a closed section (grid search, then three refinements). */
-export function inscribedDiameter(segs: [P2, P2][]): { d: number; at: P2 } | null {
-  if (segs.length < 3) return null;
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const [a, b] of segs) {
-    x0 = Math.min(x0, a[0], b[0]);
-    x1 = Math.max(x1, a[0], b[0]);
-    y0 = Math.min(y0, a[1], b[1]);
-    y1 = Math.max(y1, a[1], b[1]);
-  }
+/** The region a section is clipped to: its bounding box, and how far a point lies inside its edge (negative outside). */
+interface Region {
+  box: [number, number, number, number];
+  depth(x: number, y: number): number;
+}
+
+/**
+ * Diameter of the largest circle inside both the metal (the closed section `segs`) and
+ * `region` (grid search, then five refinements); null when no point of the region is metal.
+ */
+export function largestCircleIn(segs: Seg[], region: Region): { d: number; at: P2 } | null {
+  const [x0, x1, y0, y1] = region.box;
   let best = { r: -1, x: 0, y: 0 };
   const scan = (cx0: number, cx1: number, cy0: number, cy1: number, n: number) => {
     for (let i = 0; i <= n; i++)
       for (let j = 0; j <= n; j++) {
         const x = cx0 + ((cx1 - cx0) * i) / n, y = cy0 + ((cy1 - cy0) * j) / n;
-        if (!inside(segs, x, y)) continue;
-        const r = distToSegs(segs, x, y);
+        const edge = region.depth(x, y);
+        if (edge <= 0 || edge <= best.r || !inside(segs, x, y)) continue;
+        const r = Math.min(edge, distToSegs(segs, x, y));
         if (r > best.r) best = { r, x, y };
       }
   };
@@ -410,56 +448,53 @@ export function inscribedDiameter(segs: [P2, P2][]): { d: number; at: P2 } | nul
   return { d: 2 * best.r, at: [best.x, best.y] };
 }
 
-/** Triangles with any corner satisfying `near`. */
-function trianglesNear(bvh: Bvh, near: (x: number, y: number, z: number) => boolean): Uint32Array {
+/** Triangles whose bounds pass `keep` (min and max x, y, z, and the largest distance of a corner from the Y axis). */
+function trianglesWhere(bvh: Bvh, keep: (lo: V3, hi: V3, rhoMax: number) => boolean): Uint32Array {
   const out: number[] = [];
   const P = bvh.pos, T = bvh.tri;
+  const lo: V3 = [0, 0, 0], hi: V3 = [0, 0, 0];
   for (let t = 0; t < bvh.n; t++) {
+    let rhoMax = 0;
     for (let k = 0; k < 3; k++) {
       const v = T[t * 3 + k]! * 3;
-      if (near(P[v]!, P[v + 1]!, P[v + 2]!)) {
-        out.push(t);
-        break;
+      for (let c = 0; c < 3; c++) {
+        const x = P[v + c]!;
+        if (k === 0 || x < lo[c]!) lo[c] = x;
+        if (k === 0 || x > hi[c]!) hi[c] = x;
       }
+      rhoMax = Math.max(rhoMax, Math.hypot(P[v]!, P[v + 2]!));
     }
+    if (keep(lo, hi, rhoMax)) out.push(t);
   }
   return Uint32Array.from(out);
 }
 
 function bandEntry(bvh: Bvh, band: BandDecl, L: CheckLimits): CheckEntry {
+  const { innerRadius: rIn, outerRadius: rOut, halfWidth: hw } = band;
+  // Every triangle a section's inside test could need: anything in the band's slab along the
+  // finger that reaches out past the inside of the band (a corner's distance from the axis is
+  // a triangle's farthest point from it). Rays run outward, so nothing else can be crossed.
+  const cand = trianglesWhere(bvh, (lo, hi, rhoMax) => lo[1] <= hw && hi[1] >= -hw && rhoMax >= rIn);
+  const region: Region = { box: [rIn, rOut, -hw, hw], depth: (x, y) => Math.min(x - rIn, rOut - x, y + hw, hw - y) };
   let worst: { d: number; deg: number; p: V3 } | null = null;
-  const cand = trianglesNear(bvh, (x, y, z) => Math.abs(y) < band.halfWidth + 0.5 && Math.hypot(x, z) < band.outerRadius + 1);
   for (let deg = 0; deg < 360; deg += 5) {
-    const off = Math.min(Math.abs(deg), Math.abs(360 - deg));
-    if (off < band.skipTopDeg) continue;
     const a = (deg * Math.PI) / 180;
     const dir: V3 = [Math.sin(a), 0, Math.cos(a)];
     const normal: V3 = [Math.cos(a), 0, -Math.sin(a)];
-    const segs = slice(
-      bvh,
-      normal,
-      0,
-      (q) => [q[0] * dir[0] + q[2] * dir[2], q[1]],
-      (q) => {
-        const rho = q[0] * dir[0] + q[2] * dir[2];
-        return rho > band.innerRadius - 0.3 && rho < band.outerRadius + 0.6 && Math.abs(q[1]) < band.halfWidth + 0.3;
-      },
-      cand,
-    );
-    const ins = inscribedDiameter(segs);
-    if (!ins) continue;
+    const segs = slice(bvh, normal, 0, (x, y, z) => [x * dir[0] + z * dir[2], y], cand, (p, q) => Math.max(p[0], q[0]) >= rIn && Math.max(p[1], q[1]) >= -hw && Math.min(p[1], q[1]) <= hw);
+    const ins = largestCircleIn(segs, region);
+    if (!ins) throw new Error(`the band's own section ${deg}° round from the top holds no metal, so the file and the band's declaration disagree and the band cannot be measured there`);
     if (!worst || ins.d < worst.d) worst = { d: ins.d, deg, p: [dir[0] * ins.at[0], ins.at[1], dir[2] * ins.at[0]] };
   }
-  if (!worst) throw new Error('no section of the band could be measured');
   return {
     id: 'band',
     name: 'Ring band thickness',
     limit: mm(L.band),
-    result: worst.d >= L.band ? 'pass' : 'fail',
-    measured: mm(worst.d),
-    value: r3(worst.d),
-    where: { part: 'band', feature: `${worst.deg}° round the band from the top`, point_mm: pt(worst.p), description: `the band's thinnest section, ${worst.deg}° round from the top` },
-    method: "the band's cross-section every 5° round the finger (away from the head), measured as the largest circle that fits inside it",
+    result: worst!.d >= L.band ? 'pass' : 'fail',
+    measured: mm(worst!.d),
+    value: r3(worst!.d),
+    where: { part: 'band', feature: `${worst!.deg}° round the band from the top`, point_mm: pt(worst!.p), description: `the band's thinnest section, ${worst!.deg}° round from the top` },
+    method: "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
   };
 }
 
@@ -467,11 +502,13 @@ function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
   const results: { label: string; value: number; where: Where }[] = [];
   for (const pr of prongs) {
     let worst: { d: number; z: number; at: P2 } | null = null;
-    const rad = pr.nominalDiameter / 2 + 0.35;
-    const cand = trianglesNear(bvh, (x, y, z) => z > pr.sectionFromZ - 0.5 && z < pr.sectionToZ + 0.5 && Math.hypot(x - pr.axis[0], y - pr.axis[1]) <= rad + 0.3);
+    const R = pr.nominalDiameter / 2 + 0.35;
+    const [ax, ay] = pr.axis;
+    const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
+    const region: Region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
     const at = (z: number) => {
-      const segs = slice(bvh, [0, 0, 1], z, (q) => [q[0], q[1]], (q) => Math.hypot(q[0] - pr.axis[0], q[1] - pr.axis[1]) <= rad, cand);
-      const ins = inscribedDiameter(segs);
+      const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
+      const ins = largestCircleIn(segs, region);
       if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
     };
     // Every 0.1 mm up the column, then every 0.02 mm around the narrowest.
@@ -504,7 +541,7 @@ function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
     value: thinnest.value,
     where: thinnest.where,
     ...(failing.length ? { failing } : {}),
-    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
+    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
   };
 }
 
@@ -614,14 +651,16 @@ function bezelLipEntry(bvh: Bvh, decl: FeatureDecl, L: CheckLimits): CheckEntry 
 
 // ------------------------------------------------------------------- gaps
 
-function gapEntry(bvh: Bvh, L: CheckLimits): CheckEntry {
-  const N = bvh.normal, C = bvh.centroid;
+function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
+  // Along the surface's direction, and facing judged by it, for the same reason as the
+  // thickness: two slivers leaning opposite ways looked like walls 0.001 mm apart.
+  const C = bvh.centroid;
   let best: { d: number; p: V3 } | null = null;
   const reach = Math.max(2, L.gap * 3);
   for (let t = 0; t < bvh.n; t++) {
-    const n: V3 = [N[t * 3]!, N[t * 3 + 1]!, N[t * 3 + 2]!];
+    const n: V3 = [S[t * 3]!, S[t * 3 + 1]!, S[t * 3 + 2]!];
     const p: V3 = [C[t * 3]! + n[0] * 1e-5, C[t * 3 + 1]! + n[1] * 1e-5, C[t * 3 + 2]! + n[2] * 1e-5];
-    const facing = (u: number) => N[u * 3]! * n[0] + N[u * 3 + 1]! * n[1] + N[u * 3 + 2]! * n[2] < -0.9;
+    const facing = (u: number) => S[u * 3]! * n[0] + S[u * 3 + 1]! * n[1] + S[u * 3 + 2]! * n[2] < -0.9;
     const hit = bvh.ray(p, n, reach, facing);
     if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p };
   }
@@ -633,7 +672,7 @@ function gapEntry(bvh: Bvh, L: CheckLimits): CheckEntry {
       result: 'pass',
       measured: `no gap narrower than ${mm(reach)} between facing surfaces`,
       where: null,
-      method: 'a ray outward from every triangle centroid, to the nearest surface facing back (normals within 25° of opposite)',
+      method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
     };
   }
   return {
@@ -644,7 +683,7 @@ function gapEntry(bvh: Bvh, L: CheckLimits): CheckEntry {
     measured: mm(best.d),
     value: r3(best.d),
     where: { part: 'piece', point_mm: pt(best.p), description: 'the narrowest gap between two facing surfaces' },
-    method: 'a ray outward from every triangle centroid, to the nearest surface facing back (normals within 25° of opposite)',
+    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
   };
 }
 

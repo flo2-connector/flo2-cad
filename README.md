@@ -76,14 +76,14 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Check | Limit | Measured how, on the STL as written |
 |---|---|---|
 | One watertight solid | manifold edges, no self-intersections, faces outward, exactly one shell | own STL parser, edge pairing, shells, signed volume, triangle crossing tests |
-| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle |
-| Ring band | ≥ 1.0 mm | largest circle in the band's cross-section, every 5° |
-| Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section, every 0.1 mm (0.02 mm near the narrowest) |
+| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle's centroid, along the surface's direction there: a triangle's own normal, except that a sliver too narrow to have a direction takes it from the surface it was cut from |
+| Ring band | ≥ 1.0 mm | largest circle in the band's own section, every 5° all the way round: the whole piece is cut, then clipped to the band's inner and outer radius and width, so a head or an added shape is never counted as band |
+| Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section (the whole piece cut, clipped to a disc round the prong's axis), every 0.1 mm (0.02 mm near the narrowest) |
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
 | Bezel wall | ≥ 0.8 mm | largest inscribed sphere on the rim |
 | Bezel lip | covers 50-75 % of the crown (Revere, JCK) | top of the bezel less the girdle |
-| Details | ≥ 0.35 mm | thinnest feature anywhere |
-| Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces |
+| Details | ≥ 0.35 mm | thinnest feature anywhere, measured as the walls are |
+| Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces, along the surface's direction as for the walls |
 | Surface | ≤ 0.01 mm off the intended shape | distance from a 0.0015 mm reference tessellation to the written facets |
 
 How each metal is handled:
@@ -164,5 +164,7 @@ npm run measure
   no primary source gives them. The table and girdle are cited in `src/library/stones.ts`.
 - **Prongs** are judged by their narrowest section, as `con:minimum-prong-thickness` says. The inscribed-sphere wall
   check leaves prong columns to that rule, because near a seat notch's sharp edge the sphere reads thinner than the
-  section.
+  section. That reading is the notch's real shape, not its triangles: its two flanks face each other at 105-109°, just
+  past the 105° that marks a wall's far side, and it reads 0.71 mm and 0.65 mm at two tessellations, with or without
+  the sliver rule.
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
