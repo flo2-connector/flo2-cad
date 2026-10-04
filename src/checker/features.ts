@@ -9,12 +9,14 @@ export type P2 = [number, number];
 export type P3 = [number, number, number];
 
 export interface BandDecl {
-  /** The band runs around the Y axis. */
+  /**
+   * The band runs around the Y axis. Its own section, between these radii and
+   * within halfWidth of the middle, is what the band check measures, all the way
+   * round: metal outside it (a head, an added shape) is never counted as band.
+   */
   innerRadius: number;
   outerRadius: number;
   halfWidth: number;
-  /** Sections within this angle of straight up (+Z) are skipped: the head sits there. */
-  skipTopDeg: number;
 }
 
 export interface ProngDecl {

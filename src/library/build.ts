@@ -230,13 +230,12 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
   const decl: FeatureDecl = { prongs: [], scale: 1 };
-  const bandDecl: BandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2, skipTopDeg: 0 };
+  const bandDecl: BandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
   decl.band = bandDecl;
   const layout: Built['layout'] = {};
 
   let metal: Manifold = band;
   let stoneSolid: Manifold | undefined;
-  let headReachX = 0;
 
   if (v.head) {
     const sv = v.head.stone;
@@ -293,9 +292,7 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
           sectionToZ: zTable - 0.02,
         };
         decl.prongs.push(prong);
-        headReachX = Math.max(headReachX, Math.abs(cx) + tk / 2);
       });
-      headReachX = Math.max(headReachX, ...(railOuter.toPolygons()[0] as P2[]).map((p) => Math.abs(p[0])));
       head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
     } else {
       const hv = v.head;
@@ -318,12 +315,10 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
       head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
       const bezelDecl: BezelDecl = { outer: outerPts, zBottom, nominalWall: hv.wallMm };
       decl.bezel = bezelDecl;
-      headReachX = Math.max(...outerPts.map((p) => Math.abs(p[0])));
     }
     // Trim the head clear of the finger hole, then join it to the band.
     const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
     metal = A.t(A.t(head.subtract(finger)).add(band));
-    bandDecl.skipTopDeg = Math.min(90, (Math.asin(Math.min(1, (headReachX + 0.6) / rOut)) * 180) / Math.PI + 4);
   }
 
   // Any operations the agent added beside the band and head.

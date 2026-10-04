@@ -21846,6 +21846,26 @@ var Bvh = class {
     }
     return false;
   }
+  /** Calls fn for every triangle closer than r to (px, py, pz). */
+  forEachWithin(px, py, pz, r, fn) {
+    if (this.n === 0) return;
+    const r22 = r * r;
+    const p = [px, py, pz];
+    const stack = [0];
+    while (stack.length) {
+      const node2 = stack.pop();
+      if (this.#boxDistSq(node2, p) >= r22) continue;
+      if (this.#left[node2] < 0) {
+        const s = this.#first[node2], e = s + this.#count[node2];
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i];
+          if (this.distSq(px, py, pz, t) < r22) fn(t);
+        }
+      } else {
+        stack.push(this.#left[node2], this.#right[node2]);
+      }
+    }
+  }
   /** The nearest hit along a ray from o in unit direction d, among triangles that pass `keep`. */
   ray(o, d, maxDist, keep) {
     if (this.n === 0) return null;
@@ -21948,6 +21968,52 @@ function readBinaryStl(bytes) {
   return { positions: Float64Array.from(pos), triangles: tris, count };
 }
 
+// src/checker/surface.ts
+var LEAN_MARGIN_DEG = 15;
+var SLIVER_ASPECT = 4;
+var SEARCH_MM = 0.1;
+function surfaceDirections(bvh, surfaceDeviationMm) {
+  const n = bvh.n, P = bvh.pos, T = bvh.tri, N = bvh.normal, A = bvh.area, C = bvh.centroid;
+  const widthLimit = surfaceDeviationMm / Math.tan(LEAN_MARGIN_DEG * Math.PI / 180);
+  const out = Float64Array.from(N);
+  const sliver = new Uint8Array(n);
+  const longest = new Float64Array(n);
+  let slivers = 0;
+  for (let t = 0; t < n; t++) {
+    let l = 0;
+    for (let k = 0; k < 3; k++) {
+      const a = T[t * 3 + k] * 3, b = T[t * 3 + (k + 1) % 3] * 3;
+      l = Math.max(l, Math.hypot(P[b] - P[a], P[b + 1] - P[a + 1], P[b + 2] - P[a + 2]));
+    }
+    longest[t] = l;
+    const width = l > 0 ? 2 * A[t] / l : 0;
+    if (width < widthLimit && l > SLIVER_ASPECT * width) {
+      sliver[t] = 1;
+      slivers++;
+    }
+  }
+  let borrowed = 0;
+  for (let t = 0; t < n; t++) {
+    if (!sliver[t]) continue;
+    const nx = N[t * 3], ny = N[t * 3 + 1], nz = N[t * 3 + 2];
+    let best = -1, bestCos = -2;
+    bvh.forEachWithin(C[t * 3], C[t * 3 + 1], C[t * 3 + 2], Math.max(SEARCH_MM, longest[t]), (u) => {
+      if (sliver[u]) return;
+      const c = nx * N[u * 3] + ny * N[u * 3 + 1] + nz * N[u * 3 + 2];
+      if (c > bestCos) {
+        bestCos = c;
+        best = u;
+      }
+    });
+    if (best < 0) continue;
+    out[t * 3] = N[best * 3];
+    out[t * 3 + 1] = N[best * 3 + 1];
+    out[t * 3 + 2] = N[best * 3 + 2];
+    borrowed++;
+  }
+  return { normal: out, slivers, borrowed, sliverWidthMm: widthLimit };
+}
+
 // src/checker/check.ts
 var r3 = (x) => Math.round(x * 1e3) / 1e3;
 var mm = (x) => `${r3(x)} mm`;
@@ -21991,7 +22057,8 @@ function runChecks(stl, decl, L2, reference) {
     volume = w.volume;
     return w.entry;
   });
-  const samples = sampleThickness(bvh);
+  const surface = surfaceDirections(bvh, L2.surfaceDeviation).normal;
+  const samples = sampleThickness(bvh, surface);
   guard("wall", "Wall thickness", mm(L2.wall), () => wallEntry(bvh, samples, L2, decl));
   guard("detail", "Smallest detail", mm(L2.detail), () => detailEntry(bvh, samples, L2, decl));
   if (decl.band) guard("band", "Ring band thickness", mm(L2.band), () => bandEntry(bvh, decl.band, L2));
@@ -22003,7 +22070,7 @@ function runChecks(stl, decl, L2, reference) {
     guard("bezel_wall", "Bezel wall thickness", mm(L2.wall), () => bezelWallEntry(bvh, samples, decl, L2));
     guard("bezel_lip", "Bezel lip height", `${Math.round(L2.lipMinOfCrown * 100)}-${Math.round(L2.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L2));
   }
-  guard("gap", "Smallest gap", mm(L2.gap), () => gapEntry(bvh, L2));
+  guard("gap", "Smallest gap", mm(L2.gap), () => gapEntry(bvh, surface, L2));
   guard("surface_deviation", "Surface smoothness", mm(L2.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
     return surfaceEntry(bvh, L2, readBinaryStl(reference), decl);
@@ -22100,14 +22167,14 @@ function watertight(mesh, bvh) {
     volume: vol
   };
 }
-function sampleThickness(bvh) {
+function sampleThickness(bvh, S) {
   const out = [];
-  const N = bvh.normal, C = bvh.centroid, P = bvh.pos, T = bvh.tri;
+  const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t] < 1e-10) continue;
-    const n = [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
+    const n = [S[t * 3], S[t * 3 + 1], S[t * 3 + 2]];
     const p = [C[t * 3], C[t * 3 + 1], C[t * 3 + 2]];
-    const opposing = (u) => N[u * 3] * n[0] + N[u * 3 + 1] * n[1] + N[u * 3 + 2] * n[2] < -0.25;
+    const opposing = (u) => S[u * 3] * n[0] + S[u * 3 + 1] * n[1] + S[u * 3 + 2] * n[2] < -0.25;
     const inward = [-n[0], -n[1], -n[2]];
     const hit = bvh.ray(p, inward, 50, opposing);
     if (!hit) continue;
@@ -22116,7 +22183,7 @@ function sampleThickness(bvh) {
     const bounds = (u) => {
       if (!opposing(u)) return false;
       const v = T[u * 3] * 3;
-      return (cx - P[v]) * N[u * 3] + (cy - P[v + 1]) * N[u * 3 + 1] + (cz - P[v + 2]) * N[u * 3 + 2] < 1e-7;
+      return (cx - P[v]) * S[u * 3] + (cy - P[v + 1]) * S[u * 3 + 1] + (cz - P[v + 2]) * S[u * 3 + 2] < 1e-7;
     };
     for (let i = 0; i < 16 && hi - lo > 5e-4; i++) {
       const r = (lo + hi) / 2;
@@ -22156,7 +22223,7 @@ function whereOf(p, decl, what) {
   const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
   return { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, point_mm: pt(p), description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
 }
-var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, only facing-back surfaces bounding it";
+var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it";
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
 }
@@ -22188,22 +22255,24 @@ function detailEntry(_bvh, samples, L2, decl) {
     method: MAXSPHERE
   };
 }
-function slice(bvh, normal, offset, to2d, keep, candidates) {
+function slice(bvh, normal, offset, to2d, candidates, want) {
   const segs = [];
-  const count = candidates ? candidates.length : bvh.n;
-  for (let i = 0; i < count; i++) {
-    const t = candidates ? candidates[i] : i;
-    const v = [bvh.vertex(t, 0), bvh.vertex(t, 1), bvh.vertex(t, 2)];
-    const d = v.map((q) => q[0] * normal[0] + q[1] * normal[1] + q[2] * normal[2] - offset);
-    const pts = [];
+  const P = bvh.pos, T = bvh.tri;
+  const ends = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const t = candidates[i];
+    ends.length = 0;
     for (let k = 0; k < 3; k++) {
-      const a = v[k], b = v[(k + 1) % 3], da = d[k], db = d[(k + 1) % 3];
-      if (da < 0 && db >= 0 || da >= 0 && db < 0) {
-        const s = da / (da - db);
-        pts.push([a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1]), a[2] + s * (b[2] - a[2])]);
+      let u = T[t * 3 + k], v = T[t * 3 + (k + 1) % 3];
+      if (u > v) [u, v] = [v, u];
+      const du = P[u * 3] * normal[0] + P[u * 3 + 1] * normal[1] + P[u * 3 + 2] * normal[2] - offset;
+      const dv = P[v * 3] * normal[0] + P[v * 3 + 1] * normal[1] + P[v * 3 + 2] * normal[2] - offset;
+      if (du < 0 && dv >= 0 || du >= 0 && dv < 0) {
+        const s = du / (du - dv);
+        ends.push(to2d(P[u * 3] + s * (P[v * 3] - P[u * 3]), P[u * 3 + 1] + s * (P[v * 3 + 1] - P[u * 3 + 1]), P[u * 3 + 2] + s * (P[v * 3 + 2] - P[u * 3 + 2])));
       }
     }
-    if (pts.length === 2 && keep(pts[0]) && keep(pts[1])) segs.push([to2d(pts[0]), to2d(pts[1])]);
+    if (ends.length === 2 && want(ends[0], ends[1])) segs.push([ends[0], ends[1]]);
   }
   return segs;
 }
@@ -22227,22 +22296,16 @@ function distToSegs(segs, x, y) {
   }
   return best;
 }
-function inscribedDiameter(segs) {
-  if (segs.length < 3) return null;
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const [a, b] of segs) {
-    x0 = Math.min(x0, a[0], b[0]);
-    x1 = Math.max(x1, a[0], b[0]);
-    y0 = Math.min(y0, a[1], b[1]);
-    y1 = Math.max(y1, a[1], b[1]);
-  }
+function largestCircleIn(segs, region) {
+  const [x0, x1, y0, y1] = region.box;
   let best = { r: -1, x: 0, y: 0 };
   const scan = (cx0, cx1, cy0, cy1, n) => {
     for (let i = 0; i <= n; i++)
       for (let j = 0; j <= n; j++) {
         const x = cx0 + (cx1 - cx0) * i / n, y = cy0 + (cy1 - cy0) * j / n;
-        if (!inside(segs, x, y)) continue;
-        const r = distToSegs(segs, x, y);
+        const edge = region.depth(x, y);
+        if (edge <= 0 || edge <= best.r || !inside(segs, x, y)) continue;
+        const r = Math.min(edge, distToSegs(segs, x, y));
         if (r > best.r) best = { r, x, y };
       }
   };
@@ -22255,45 +22318,39 @@ function inscribedDiameter(segs) {
   }
   return { d: 2 * best.r, at: [best.x, best.y] };
 }
-function trianglesNear(bvh, near) {
+function trianglesWhere(bvh, keep) {
   const out = [];
   const P = bvh.pos, T = bvh.tri;
+  const lo = [0, 0, 0], hi = [0, 0, 0];
   for (let t = 0; t < bvh.n; t++) {
+    let rhoMax = 0;
     for (let k = 0; k < 3; k++) {
       const v = T[t * 3 + k] * 3;
-      if (near(P[v], P[v + 1], P[v + 2])) {
-        out.push(t);
-        break;
+      for (let c = 0; c < 3; c++) {
+        const x = P[v + c];
+        if (k === 0 || x < lo[c]) lo[c] = x;
+        if (k === 0 || x > hi[c]) hi[c] = x;
       }
+      rhoMax = Math.max(rhoMax, Math.hypot(P[v], P[v + 2]));
     }
+    if (keep(lo, hi, rhoMax)) out.push(t);
   }
   return Uint32Array.from(out);
 }
 function bandEntry(bvh, band, L2) {
+  const { innerRadius: rIn, outerRadius: rOut, halfWidth: hw } = band;
+  const cand = trianglesWhere(bvh, (lo, hi, rhoMax) => lo[1] <= hw && hi[1] >= -hw && rhoMax >= rIn);
+  const region = { box: [rIn, rOut, -hw, hw], depth: (x, y) => Math.min(x - rIn, rOut - x, y + hw, hw - y) };
   let worst = null;
-  const cand = trianglesNear(bvh, (x, y, z) => Math.abs(y) < band.halfWidth + 0.5 && Math.hypot(x, z) < band.outerRadius + 1);
   for (let deg = 0; deg < 360; deg += 5) {
-    const off = Math.min(Math.abs(deg), Math.abs(360 - deg));
-    if (off < band.skipTopDeg) continue;
     const a = deg * Math.PI / 180;
     const dir = [Math.sin(a), 0, Math.cos(a)];
     const normal = [Math.cos(a), 0, -Math.sin(a)];
-    const segs = slice(
-      bvh,
-      normal,
-      0,
-      (q) => [q[0] * dir[0] + q[2] * dir[2], q[1]],
-      (q) => {
-        const rho = q[0] * dir[0] + q[2] * dir[2];
-        return rho > band.innerRadius - 0.3 && rho < band.outerRadius + 0.6 && Math.abs(q[1]) < band.halfWidth + 0.3;
-      },
-      cand
-    );
-    const ins = inscribedDiameter(segs);
-    if (!ins) continue;
+    const segs = slice(bvh, normal, 0, (x, y, z) => [x * dir[0] + z * dir[2], y], cand, (p, q) => Math.max(p[0], q[0]) >= rIn && Math.max(p[1], q[1]) >= -hw && Math.min(p[1], q[1]) <= hw);
+    const ins = largestCircleIn(segs, region);
+    if (!ins) throw new Error(`the band's own section ${deg}\xB0 round from the top holds no metal, so the file and the band's declaration disagree and the band cannot be measured there`);
     if (!worst || ins.d < worst.d) worst = { d: ins.d, deg, p: [dir[0] * ins.at[0], ins.at[1], dir[2] * ins.at[0]] };
   }
-  if (!worst) throw new Error("no section of the band could be measured");
   return {
     id: "band",
     name: "Ring band thickness",
@@ -22302,18 +22359,20 @@ function bandEntry(bvh, band, L2) {
     measured: mm(worst.d),
     value: r3(worst.d),
     where: { part: "band", feature: `${worst.deg}\xB0 round the band from the top`, point_mm: pt(worst.p), description: `the band's thinnest section, ${worst.deg}\xB0 round from the top` },
-    method: "the band's cross-section every 5\xB0 round the finger (away from the head), measured as the largest circle that fits inside it"
+    method: "the band's cross-section every 5\xB0 all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band"
   };
 }
 function prongEntry(bvh, prongs, L2) {
   const results = [];
   for (const pr of prongs) {
     let worst = null;
-    const rad = pr.nominalDiameter / 2 + 0.35;
-    const cand = trianglesNear(bvh, (x, y, z) => z > pr.sectionFromZ - 0.5 && z < pr.sectionToZ + 0.5 && Math.hypot(x - pr.axis[0], y - pr.axis[1]) <= rad + 0.3);
+    const R = pr.nominalDiameter / 2 + 0.35;
+    const [ax, ay] = pr.axis;
+    const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
+    const region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
     const at2 = (z) => {
-      const segs = slice(bvh, [0, 0, 1], z, (q) => [q[0], q[1]], (q) => Math.hypot(q[0] - pr.axis[0], q[1] - pr.axis[1]) <= rad, cand);
-      const ins = inscribedDiameter(segs);
+      const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
+      const ins = largestCircleIn(segs, region);
       if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
     };
     const steps = Math.max(8, Math.ceil((pr.sectionToZ - pr.sectionFromZ) / 0.1));
@@ -22347,7 +22406,7 @@ function prongEntry(bvh, prongs, L2) {
     value: thinnest.value,
     where: thinnest.where,
     ...failing.length ? { failing } : {},
-    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
+    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
   };
 }
 function gripEntry(bvh, decl, L2) {
@@ -22447,14 +22506,14 @@ function bezelLipEntry(bvh, decl, L2) {
     method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
   };
 }
-function gapEntry(bvh, L2) {
-  const N = bvh.normal, C = bvh.centroid;
+function gapEntry(bvh, S, L2) {
+  const C = bvh.centroid;
   let best = null;
   const reach = Math.max(2, L2.gap * 3);
   for (let t = 0; t < bvh.n; t++) {
-    const n = [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
+    const n = [S[t * 3], S[t * 3 + 1], S[t * 3 + 2]];
     const p = [C[t * 3] + n[0] * 1e-5, C[t * 3 + 1] + n[1] * 1e-5, C[t * 3 + 2] + n[2] * 1e-5];
-    const facing = (u) => N[u * 3] * n[0] + N[u * 3 + 1] * n[1] + N[u * 3 + 2] * n[2] < -0.9;
+    const facing = (u) => S[u * 3] * n[0] + S[u * 3 + 1] * n[1] + S[u * 3 + 2] * n[2] < -0.9;
     const hit = bvh.ray(p, n, reach, facing);
     if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p };
   }
@@ -22466,7 +22525,7 @@ function gapEntry(bvh, L2) {
       result: "pass",
       measured: `no gap narrower than ${mm(reach)} between facing surfaces`,
       where: null,
-      method: "a ray outward from every triangle centroid, to the nearest surface facing back (normals within 25\xB0 of opposite)"
+      method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
     };
   }
   return {
@@ -22477,7 +22536,7 @@ function gapEntry(bvh, L2) {
     measured: mm(best.d),
     value: r3(best.d),
     where: { part: "piece", point_mm: pt(best.p), description: "the narrowest gap between two facing surfaces" },
-    method: "a ray outward from every triangle centroid, to the nearest surface facing back (normals within 25\xB0 of opposite)"
+    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
   };
 }
 function surfaceEntry(bvh, L2, ref, decl) {
@@ -24047,12 +24106,11 @@ function buildWith(k, A, tree, opts) {
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
   const decl = { prongs: [], scale: 1 };
-  const bandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2, skipTopDeg: 0 };
+  const bandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
   decl.band = bandDecl;
   const layout = {};
   let metal = band;
   let stoneSolid;
-  let headReachX = 0;
   if (v.head) {
     const sv = v.head.stone;
     const spec = { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
@@ -24102,9 +24160,7 @@ function buildWith(k, A, tree, opts) {
           sectionToZ: zTable - 0.02
         };
         decl.prongs.push(prong);
-        headReachX = Math.max(headReachX, Math.abs(cx) + tk / 2);
       });
-      headReachX = Math.max(headReachX, ...railOuter.toPolygons()[0].map((p) => Math.abs(p[0])));
       head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
     } else {
       const hv = v.head;
@@ -24127,11 +24183,9 @@ function buildWith(k, A, tree, opts) {
       head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
       const bezelDecl = { outer: outerPts, zBottom, nominalWall: hv.wallMm };
       decl.bezel = bezelDecl;
-      headReachX = Math.max(...outerPts.map((p) => Math.abs(p[0])));
     }
     const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
     metal = A.t(A.t(head.subtract(finger)).add(band));
-    bandDecl.skipTopDeg = Math.min(90, Math.asin(Math.min(1, (headReachX + 0.6) / rOut)) * 180 / Math.PI + 4);
   }
   for (const extra of v.extras) metal = A.t(metal.add(A.t(buildOp(k, A, extra, tol))));
   const scale2 = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;

@@ -203,6 +203,27 @@ export class Bvh {
     return false;
   }
 
+  /** Calls fn for every triangle closer than r to (px, py, pz). */
+  forEachWithin(px: number, py: number, pz: number, r: number, fn: (t: number) => void): void {
+    if (this.n === 0) return;
+    const r2 = r * r;
+    const p: V3 = [px, py, pz];
+    const stack = [0];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (this.#boxDistSq(node, p) >= r2) continue;
+      if (this.#left[node]! < 0) {
+        const s = this.#first[node]!, e = s + this.#count[node]!;
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i]!;
+          if (this.distSq(px, py, pz, t) < r2) fn(t);
+        }
+      } else {
+        stack.push(this.#left[node]!, this.#right[node]!);
+      }
+    }
+  }
+
   /** The nearest hit along a ray from o in unit direction d, among triangles that pass `keep`. */
   ray(o: V3, d: V3, maxDist: number, keep: (t: number) => boolean): { t: number; dist: number } | null {
     if (this.n === 0) return null;
