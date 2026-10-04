@@ -17,11 +17,16 @@
 // And a thin place is named by the part whose metal holds it: the band only inside
 // the band's own declared section, an added shape by its id (partAt, below).
 //
+// A sheet from the tree's thicken operation (a cupped petal, a leaf) declares its
+// middle surface and nominal thickness; the sheet check measures the file square to
+// that surface and holds it to the wall minimum, and a thin place on a sheet is
+// reported under the sheet's own name (sheets, below).
+//
 // A check that cannot run is a FAIL (owner, round 1, Q6): any exception inside
 // a check becomes result "could_not_run", which blocks the export.
 
 import { Bvh } from './bvh.js';
-import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl } from './features.js';
+import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
 import { surfaceDirections } from './surface.js';
@@ -42,12 +47,14 @@ export interface Where {
   part: string;
   feature?: string;
   clock?: string;
+  /** On a sheet: the other sheets that meet it here, when the place lies on more than one. */
+  meets?: string[];
   point_mm: [number, number, number];
   description: string;
 }
 
 export interface CheckEntry {
-  id: 'watertight' | 'wall' | 'band' | 'prong' | 'bezel_wall' | 'bezel_lip' | 'prong_grip' | 'detail' | 'gap' | 'surface_deviation';
+  id: 'watertight' | 'wall' | 'band' | 'prong' | 'bezel_wall' | 'bezel_lip' | 'prong_grip' | 'sheet' | 'detail' | 'gap' | 'surface_deviation';
   name: string;
   limit: string;
   result: 'pass' | 'fail' | 'could_not_run';
@@ -55,8 +62,8 @@ export interface CheckEntry {
   /** The measured value in mm, when there is one. */
   value?: number;
   where: Where | null;
-  /** Every failing feature, when more than one fails (e.g. each thin prong). */
-  failing?: { label: string; value: number; where: Where }[];
+  /** Every failing feature, when more than one fails (e.g. each thin prong). `nominal` is what the feature was declared to be, when it says. */
+  failing?: { label: string; value: number; nominal?: number; where: Where }[];
   method: string;
 }
 
@@ -133,6 +140,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
     guard('bezel_wall', 'Bezel wall thickness', mm(L.wall), () => bezelWallEntry(bvh, samples, decl, L));
     guard('bezel_lip', 'Bezel lip height', `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L));
   }
+  if (decl.sheets?.length) guard('sheet', 'Sheet thickness', `${mm(L.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets!, L));
   guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
   guard('surface_deviation', 'Surface smoothness', mm(L.surfaceDeviation), () => {
     if (!reference) throw new Error('no finer reference tessellation was supplied');
@@ -324,9 +332,12 @@ function minSample(samples: Sample[], keep: (s: Sample) => boolean = () => true)
  * band's own declared section (the band check's region), otherwise the added shape
  * whose bounds hold it. Labelling by the band's envelope instead, 0.3 mm round it,
  * called a thin overhang beside the band "the band" and advised a thicker band, which
- * does not reach it (fact:wall-check-reads-overhang-beside-band-edge).
+ * does not reach it (fact:wall-check-reads-overhang-beside-band-edge). A sheet from the
+ * thicken operation is named before the added shape round it: the place lies within
+ * half its thickness of the sheet's middle surface, and every sheet that close is named
+ * (where two meet).
  */
-function partAt(p: V3, decl: FeatureDecl, centre?: V3): { part: string; feature?: string; clock?: string } {
+function partAt(p: V3, decl: FeatureDecl, centre?: V3): { part: string; feature?: string; clock?: string; meets?: string[] } {
   for (const pr of decl.prongs) {
     if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
       return { part: 'head', feature: pr.label, clock: pr.clock };
@@ -334,16 +345,24 @@ function partAt(p: V3, decl: FeatureDecl, centre?: V3): { part: string; feature?
   }
   if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: 'head', feature: 'bezel', clock: clockAt(p[0], p[1]) };
   const bandAt = () => ({ part: 'band', feature: `${Math.round(((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360)}° round the band from the top` });
+  const sheetPart = (q: V3) => {
+    const [sheet, ...others] = sheetsAt(q, decl);
+    return sheet ? { part: 'sheet', feature: sheet.label, ...(others.length ? { meets: others.map((o) => o.label) } : {}) } : null;
+  };
   if (centre) {
     const b = decl.band;
     if (b) {
       const rho = Math.hypot(centre[0], centre[2]);
       if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
     }
+    const sheet = sheetPart(centre);
+    if (sheet) return sheet;
     const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
     if (holding.length) return { part: 'added shape', feature: holding.map((a) => a.id).join(', ') };
     return { part: 'piece' };
   }
+  const sheet = sheetPart(p);
+  if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
     if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
@@ -366,8 +385,9 @@ export function quoteIds(ids: string): string {
 
 function whereOf(p: V3, decl: FeatureDecl, what: string, centre?: V3): Where {
   const a = partAt(p, decl, centre);
-  const where = { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), point_mm: pt(p) };
+  const where = { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), ...(a.meets ? { meets: a.meets } : {}), point_mm: pt(p) };
   if (a.part === 'added shape') return { ...where, description: `${what} in the added shape ${quoteIds(a.feature!)}` };
+  if (a.part === 'sheet') return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}` };
   const at = a.feature ? `${a.feature}${a.clock && a.part === 'head' ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ''}` : a.part;
   return { ...where, description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
 }
@@ -406,6 +426,86 @@ function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: Feature
     value: r3(m.thickness),
     where: whereOf(m.p, decl, 'the thinnest feature', m.centre),
     method: MAXSPHERE,
+  };
+}
+
+// ------------------------------------------------------------------ sheets
+//
+// A sheet's thickness is measured SQUARE TO ITS SURFACE, where it was declared: from
+// each declared point on its middle surface, a ray along the normal to the first face
+// the file has on each side. That is the thickness a jeweler means by a 1.0 mm petal,
+// and it reads the same at the sheet's edge as in its middle. A reading counts only
+// where both rays leave through faces that face along them (within 45°), as the
+// sheet's own two faces do: a point cut away from the metal (its first face faces back
+// at it), or one beside a rim or a slanting cut that a ray grazes, is not a reading of
+// the sheet's thickness and is skipped, and the wall check still measures what is
+// there. Where the sheet runs into other metal (its base buried in the flower's
+// centre), the reading is thicker there, never thinner.
+
+function nearestSheetPoint(sh: SheetDecl, p: V3): number {
+  let best = Infinity;
+  for (const q of sh.points) best = Math.min(best, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2);
+  return Math.sqrt(best);
+}
+
+/**
+ * The declared sheets a point of the file lies on, nearest first: within half a
+ * sheet's thickness of its middle surface, give or take the declaration's spacing.
+ * More than one means the point is where sheets meet.
+ */
+function sheetsAt(p: V3, decl: FeatureDecl): SheetDecl[] {
+  const near: { sh: SheetDecl; d: number }[] = [];
+  for (const sh of decl.sheets ?? []) {
+    const d = nearestSheetPoint(sh, p);
+    if (d <= sh.nominalThickness / 2 + sh.spacing) near.push({ sh, d });
+  }
+  return near.sort((a, b) => a.d - b.d).map((x) => x.sh);
+}
+
+/** A face "faces along" a ray within 45°. */
+const ALONG = Math.SQRT1_2;
+
+function sheetEntry(bvh: Bvh, S: Float64Array, sheets: SheetDecl[], L: CheckLimits): CheckEntry {
+  const results: { label: string; value: number; nominal: number; where: Where; measured: number }[] = [];
+  const any = () => true;
+  for (const sh of sheets) {
+    let worst: { d: number; p: V3 } | null = null;
+    let measured = 0;
+    const reach = Math.max(10, sh.nominalThickness * 10);
+    sh.points.forEach((p, i) => {
+      const n = sh.normals[i]!;
+      const up = bvh.ray(p, n, reach, any);
+      const down = bvh.ray(p, [-n[0], -n[1], -n[2]], reach, any);
+      if (!up || !down) return;
+      // The sheet's own faces: the first face met each way faces along the ray.
+      if (S[up.t * 3]! * n[0] + S[up.t * 3 + 1]! * n[1] + S[up.t * 3 + 2]! * n[2] < ALONG) return;
+      if (-(S[down.t * 3]! * n[0] + S[down.t * 3 + 1]! * n[1] + S[down.t * 3 + 2]! * n[2]) < ALONG) return;
+      measured++;
+      const d = up.dist + down.dist;
+      if (!worst || d < worst.d) worst = { d, p };
+    });
+    if (!worst) throw new Error(`no declared point of the sheet "${sh.label}" lies inside the metal, so the file and the sheet's declaration disagree and it cannot be measured`);
+    const w = worst as { d: number; p: V3 };
+    results.push({
+      label: sh.label,
+      value: r3(w.d),
+      nominal: r3(sh.nominalThickness),
+      measured,
+      where: { part: 'sheet', feature: sh.label, point_mm: pt(w.p), description: `the sheet "${sh.label}", its thinnest place measured square to its surface` },
+    });
+  }
+  const failing = results.filter((r) => r.value < L.wall);
+  const thinnest = results.reduce((a, b) => (b.value < a.value ? b : a));
+  return {
+    id: 'sheet',
+    name: 'Sheet thickness',
+    limit: `${mm(L.wall)}, square to the surface`,
+    result: failing.length ? 'fail' : 'pass',
+    measured: `${mm(thinnest.value)} ("${thinnest.label}"); each, measured (declared): ${results.map((r) => `${r.label} ${r.value} (${r.nominal})`).join(', ')} mm`,
+    value: thinnest.value,
+    where: thinnest.where,
+    ...(failing.length ? { failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where })) } : {}),
+    method: `each sheet made by the thicken operation, measured square to its surface at the points on its middle surface it declares (${results.map((r) => `${r.measured} on ${r.label}`).join(', ')}): a ray each way along the surface's normal to the first face of the written STL, the two distances summed, where both faces face along the rays within 45° (the sheet's own faces); points cut away, or beside a rim or a slanting cut, are skipped and left to the wall check`,
   };
 }
 

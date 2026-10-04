@@ -47,6 +47,24 @@ export interface BezelDecl {
   nominalWall: number;
 }
 
+/**
+ * A thin sheet given a thickness by the tree's thicken operation (a cupped petal, a
+ * leaf). It declares what it was MEANT to be: its middle surface, sampled as points
+ * with the surface's normal at each, and its nominal thickness. The checker measures
+ * the written file square to the surface at those points and holds what it reads to
+ * the wall minimum.
+ */
+export interface SheetDecl {
+  /** The thicken node's id, which is also how change_piece reaches its settings ("<id>.thickness"). */
+  label: string;
+  nominalThickness: number;
+  /** How far apart the points are, so a point of the file can be told to lie on this sheet. */
+  spacing: number;
+  points: P3[];
+  /** Unit normals, one per point. */
+  normals: P3[];
+}
+
 export interface AddedDecl {
   /** The id of a shape the tree adds beside the library's parts (a child of the root), as the piece's summary names it. */
   id: string;
@@ -60,6 +78,8 @@ export interface FeatureDecl {
   prongs: ProngDecl[];
   stone?: StoneDecl;
   bezel?: BezelDecl;
+  /** Sheets from thicken operations, if any. */
+  sheets?: SheetDecl[];
   /** The shapes the tree adds beside the band and head, each by its id. */
   added?: AddedDecl[];
   /** The uniform scale applied for shrinkage (1 when off). */

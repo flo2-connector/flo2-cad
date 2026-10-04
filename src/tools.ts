@@ -81,7 +81,11 @@ const TREE: JsonSchema = {
     revision: { type: 'integer', minimum: 1 },
     template: { type: 'string', enum: [...TEMPLATES] },
     shrinkage: { type: 'string' },
-    root: { type: 'object', description: 'The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece explains the parts and operations.' },
+    root: {
+      type: 'object',
+      description:
+        'The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.',
+    },
   },
 };
 
@@ -132,7 +136,7 @@ export const TOOLS: Tool[] = [
     description: [
       'Change the piece: resize it, give the stone\'s measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band or the metal, turn the stone east-west or north-south, rename it, make it a plain band, or set a shrinkage allowance.',
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
-      'Or pass a whole edited `tree`, with or without `set`.',
+      'Or pass a whole edited `tree`, with or without `set`. That is how you add shapes of your own: add operation nodes to the root\'s children, such as a cupped or curled petal or leaf ("thicken"), a wire ("sweep") or a fillet ("smooth_union"); describe_piece lists every operation and its settings. Then "<id>.<setting>" in `set` reaches any of them, e.g. {"petal_1.thickness": "1.0 mm"}.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
       'Returns the new picture, what changed, and the updated tree; the piece\'s revision number goes up by one.',
     ].join(' '),
@@ -186,7 +190,7 @@ export const TOOLS: Tool[] = [
     title: 'Check it will cast',
     description: [
       'Check whether the piece will print and cast, without exporting it.',
-      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece\'s metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.',
+      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece\'s metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.',
       'Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.',
       'A failed check is a normal answer, not an error: tell the person what to change.',
     ].join(' '),

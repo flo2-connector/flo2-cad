@@ -6,7 +6,7 @@
 import { CallError } from './errors.js';
 import { checkPiece, describeNumbers, placeholderNote, preview, summary } from './engine.js';
 import { METALS } from './metals.js';
-import { applySet, checkStartArgs, getSetting, OPERATIONS, PARAMS, PARTS, readPiece, treeFromTemplate, validateTree, type PieceTree } from './piece/tree.js';
+import { applySet, checkStartArgs, getSetting, OP_HELP, OP_PARAMS, OPERATIONS, PARAMS, PARTS, readPiece, treeFromTemplate, validateTree, type PieceTree } from './piece/tree.js';
 import type { ViewName } from './render/render.js';
 import { MIME, callError, reply, type OutFile, type ToolReply } from './reply.js';
 import { DEFAULT_VIEWS, PREVIEW_VIEWS, TOOLS, type ToolName } from './tools.js';
@@ -218,13 +218,23 @@ export class Session {
       `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
       `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ''}`,
       `Settings change_piece can set:\n${catalog.join('\n')}\nAny part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
-      `A tree's parts: ${PARTS.join(', ')}. Its operations: ${OPERATIONS.join(', ')}.`,
+      `A tree's parts: ${PARTS.join(', ')}. To add a shape of your own, add a node {"id", "op", "params", "children"} to the root's children (ids are lower-case letters, digits and "_", unique in the piece) and pass the edited tree to change_piece. The operations, with their settings:\n${operationGuide()}`,
       treeText(tree),
     ];
     const ph = placeholderNote(v);
     if (ph) texts.splice(1, 0, `PLACEHOLDER: ${ph}`);
     return reply(texts);
   }
+}
+
+const UNIT_OF: Readonly<Record<string, string>> = { length: 'mm', angle: 'deg', points2: '[x, y] points in mm', points3: '[x, y, z] points in mm', plane: '"xy" | "yz" | "xz"', boolean: 'true | false', word: 'a word' };
+
+/** Every operation, its settings with their units, and what it makes. */
+function operationGuide(): string {
+  return OPERATIONS.map((op) => {
+    const settings = Object.entries(OP_PARAMS[op]).map(([k, kind]) => `${k} (${UNIT_OF[kind]})`);
+    return `- ${op}${settings.length ? ` {${settings.join(', ')}}` : ''}: ${OP_HELP[op]}`;
+  }).join('\n');
 }
 
 function listParts(tree: PieceTree): string {

@@ -51,6 +51,12 @@ The seam with flo2 is fixed, so this list is final for the increment. Any change
 - `bezel_wall`, `bezel_lip`
 - `shrinkage` (`off` \| `on` \| `"1.2 %"`)
 
+**Shapes of your own.** Pass an edited `tree` to `change_piece` with operation nodes added beside the band:
+primitives, booleans, transforms, `extrude`, `revolve`, `sweep`, `smooth_union`, and `thicken`, which gives a thin
+sheet, such as a cupped or curled petal or a leaf, a stated thickness along a sphere, a cylinder or a plane, its edges
+square to the surface. `describe_piece` lists every operation with its settings, and the design-jewelry skill walks
+through a five-petal flower.
+
 **Units and errors:**
 
 - A length is a string with its unit, like `"1.4 mm"`.
@@ -82,6 +88,7 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
 | Bezel wall | ≥ 0.8 mm | largest inscribed sphere on the rim |
 | Bezel lip | covers 50-75 % of the crown (Revere, JCK) | top of the bezel less the girdle |
+| Sheets (`thicken`) | ≥ 0.8 mm, the wall minimum | square to the surface: from each point the sheet declares on its middle surface, a ray each way along the normal to the first face, where both faces face along the rays (the sheet's own) |
 | Details | ≥ 0.35 mm | thinnest feature anywhere, measured as the walls are |
 | Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces, along the surface's direction as for the walls |
 | Surface | ≤ 0.01 mm off the intended shape | distance from a 0.0015 mm reference tessellation to the written facets |
@@ -168,3 +175,9 @@ npm run measure
   past the 105° that marks a wall's far side, and it reads 0.71 mm and 0.65 mm at two tessellations, with or without
   the sliver rule.
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
+- **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
+  its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face
+  curving back, so it reads the rim thinner than it is (measured: 99.8 % of the thickness at 5 times, 84-94 % at 4
+  times on a sphere, 62-70 % at 3 times). On a sphere, widths narrow by sin θ / θ as the cup deepens; lengths from
+  the origin are kept. A sheet stated at exactly 0.8 mm reads 0.799 mm, because the facets of its convex face cut
+  about a micrometre into it, and is refused: state at least 0.85 mm.

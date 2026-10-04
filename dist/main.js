@@ -22093,6 +22093,7 @@ function runChecks(stl, decl, L2, reference) {
     guard("bezel_wall", "Bezel wall thickness", mm(L2.wall), () => bezelWallEntry(bvh, samples, decl, L2));
     guard("bezel_lip", "Bezel lip height", `${Math.round(L2.lipMinOfCrown * 100)}-${Math.round(L2.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L2));
   }
+  if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L2.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L2));
   guard("gap", "Smallest gap", mm(L2.gap), () => gapEntry(bvh, surface, L2));
   guard("surface_deviation", "Surface smoothness", mm(L2.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
@@ -22239,16 +22240,24 @@ function partAt(p, decl, centre) {
   }
   if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]) };
   const bandAt = () => ({ part: "band", feature: `${Math.round((Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360)}\xB0 round the band from the top` });
+  const sheetPart = (q) => {
+    const [sheet2, ...others] = sheetsAt(q, decl);
+    return sheet2 ? { part: "sheet", feature: sheet2.label, ...others.length ? { meets: others.map((o) => o.label) } : {} } : null;
+  };
   if (centre) {
     const b = decl.band;
     if (b) {
       const rho = Math.hypot(centre[0], centre[2]);
       if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
     }
+    const sheet2 = sheetPart(centre);
+    if (sheet2) return sheet2;
     const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
     if (holding.length) return { part: "added shape", feature: holding.map((a) => a.id).join(", ") };
     return { part: "piece" };
   }
+  const sheet = sheetPart(p);
+  if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
     if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
@@ -22263,8 +22272,9 @@ function quoteIds(ids) {
 }
 function whereOf(p, decl, what, centre) {
   const a = partAt(p, decl, centre);
-  const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, point_mm: pt(p) };
+  const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, ...a.meets ? { meets: a.meets } : {}, point_mm: pt(p) };
   if (a.part === "added shape") return { ...where, description: `${what} in the added shape ${quoteIds(a.feature)}` };
+  if (a.part === "sheet") return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` };
   const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
   return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
 }
@@ -22298,6 +22308,62 @@ function detailEntry(_bvh, samples, L2, decl) {
     value: r3(m.thickness),
     where: whereOf(m.p, decl, "the thinnest feature", m.centre),
     method: MAXSPHERE
+  };
+}
+function nearestSheetPoint(sh, p) {
+  let best = Infinity;
+  for (const q of sh.points) best = Math.min(best, (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2);
+  return Math.sqrt(best);
+}
+function sheetsAt(p, decl) {
+  const near = [];
+  for (const sh of decl.sheets ?? []) {
+    const d = nearestSheetPoint(sh, p);
+    if (d <= sh.nominalThickness / 2 + sh.spacing) near.push({ sh, d });
+  }
+  return near.sort((a, b) => a.d - b.d).map((x) => x.sh);
+}
+var ALONG = Math.SQRT1_2;
+function sheetEntry(bvh, S, sheets, L2) {
+  const results = [];
+  const any2 = () => true;
+  for (const sh of sheets) {
+    let worst = null;
+    let measured = 0;
+    const reach = Math.max(10, sh.nominalThickness * 10);
+    sh.points.forEach((p, i) => {
+      const n = sh.normals[i];
+      const up = bvh.ray(p, n, reach, any2);
+      const down = bvh.ray(p, [-n[0], -n[1], -n[2]], reach, any2);
+      if (!up || !down) return;
+      if (S[up.t * 3] * n[0] + S[up.t * 3 + 1] * n[1] + S[up.t * 3 + 2] * n[2] < ALONG) return;
+      if (-(S[down.t * 3] * n[0] + S[down.t * 3 + 1] * n[1] + S[down.t * 3 + 2] * n[2]) < ALONG) return;
+      measured++;
+      const d = up.dist + down.dist;
+      if (!worst || d < worst.d) worst = { d, p };
+    });
+    if (!worst) throw new Error(`no declared point of the sheet "${sh.label}" lies inside the metal, so the file and the sheet's declaration disagree and it cannot be measured`);
+    const w = worst;
+    results.push({
+      label: sh.label,
+      value: r3(w.d),
+      nominal: r3(sh.nominalThickness),
+      measured,
+      where: { part: "sheet", feature: sh.label, point_mm: pt(w.p), description: `the sheet "${sh.label}", its thinnest place measured square to its surface` }
+    });
+  }
+  const failing = results.filter((r) => r.value < L2.wall);
+  const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
+  return {
+    id: "sheet",
+    name: "Sheet thickness",
+    limit: `${mm(L2.wall)}, square to the surface`,
+    result: failing.length ? "fail" : "pass",
+    measured: `${mm(thinnest.value)} ("${thinnest.label}"); each, measured (declared): ${results.map((r) => `${r.label} ${r.value} (${r.nominal})`).join(", ")} mm`,
+    value: thinnest.value,
+    where: thinnest.where,
+    ...failing.length ? { failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where })) } : {},
+    method: `each sheet made by the thicken operation, measured square to its surface at the points on its middle surface it declares (${results.map((r) => `${r.measured} on ${r.label}`).join(", ")}): a ray each way along the surface's normal to the first face of the written STL, the two distances summed, where both faces face along the rays within 45\xB0 (the sheet's own faces); points cut away, or beside a rim or a slanting cut, are skipped and left to the wall check`
   };
 }
 function slice(bvh, normal, offset, to2d, candidates, want) {
@@ -23030,6 +23096,258 @@ function caratText(v, path) {
   return `${num2} ct`;
 }
 
+// src/library/thicken.ts
+var SURFACES = ["flat", "sphere", "cylinder"];
+var SHEET_AXES = ["x", "y"];
+var SPHERE_MAX_DEG = 90;
+var CYLINDER_MAX_DEG = 150;
+var THICKNESS_RANGE_MM = [0.1, 5];
+var MIN_RADIUS_PER_THICKNESS = 5;
+var RADIUS_MAX_MM = 1e3;
+var ROUND_CORNERS_MAX_MM = 5;
+var IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0];
+function compose(a, b) {
+  const o = new Array(12);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 4; c++) {
+      let s = c === 3 ? a[r * 4 + 3] : 0;
+      for (let k = 0; k < 3; k++) s += a[r * 4 + k] * b[k * 4 + c];
+      o[r * 4 + c] = s;
+    }
+  }
+  return o;
+}
+var translation = (x, y, z) => [1, 0, 0, x, 0, 1, 0, y, 0, 0, 1, z];
+function rotation(xd, yd, zd) {
+  const rad = Math.PI / 180;
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(xd * rad), Math.sin(xd * rad), Math.cos(yd * rad), Math.sin(yd * rad), Math.cos(zd * rad), Math.sin(zd * rad)];
+  const rx = [1, 0, 0, 0, 0, cx, -sx, 0, 0, sx, cx, 0];
+  const ry = [cy, 0, sy, 0, 0, 1, 0, 0, -sy, 0, cy, 0];
+  const rz = [cz, -sz, 0, 0, sz, cz, 0, 0, 0, 0, 1, 0];
+  return compose(rz, compose(ry, rx));
+}
+function reflection(n) {
+  const [a, b, c] = n;
+  return [1 - 2 * a * a, -2 * a * b, -2 * a * c, 0, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 0, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 0];
+}
+var applyPoint = (m, p) => [
+  m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3],
+  m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7],
+  m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11]
+];
+function applyDirection(m, d) {
+  const v = [m[0] * d[0] + m[1] * d[1] + m[2] * d[2], m[4] * d[0] + m[5] * d[1] + m[6] * d[2], m[8] * d[0] + m[9] * d[1] + m[10] * d[2]];
+  const l = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / l, v[1] / l, v[2] / l];
+}
+function sheetSpec(n) {
+  const p = n.params ?? {};
+  const surface = p["surface"] ?? "flat";
+  return {
+    outline: p["outline"].map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]),
+    thickness: lengthMm(p["thickness"], "thickness"),
+    surface,
+    radius: surface === "flat" ? Infinity : lengthMm(p["radius"], "radius"),
+    axis: p["axis"] ?? "x",
+    roundCorners: p["round_corners"] === void 0 ? 0 : lengthMm(p["round_corners"], "round_corners")
+  };
+}
+function surfaceMap(s) {
+  const R = s.radius;
+  if (s.surface === "sphere") {
+    return (x, y, z) => {
+      const rho = Math.hypot(x, y);
+      const th = rho / R;
+      const c = rho > 1e-12 ? x / rho : 1, sn = rho > 1e-12 ? y / rho : 0;
+      const u = [Math.sin(th) * c, Math.sin(th) * sn, -Math.cos(th)];
+      const r = R - z;
+      return { p: [r * u[0], r * u[1], R + r * u[2]], n: [-u[0], -u[1], -u[2]] };
+    };
+  }
+  if (s.surface === "cylinder") {
+    const alongX = s.axis === "x";
+    return (x, y, z) => {
+      const across = alongX ? y : x;
+      const th = across / R;
+      const r = R - z;
+      const a = r * Math.sin(th);
+      const p = alongX ? [x, a, R - r * Math.cos(th)] : [a, y, R - r * Math.cos(th)];
+      const n = alongX ? [0, -Math.sin(th), Math.cos(th)] : [-Math.sin(th), 0, Math.cos(th)];
+      return { p, n };
+    };
+  }
+  return (x, y, z) => ({ p: [x, y, z], n: [0, 0, 1] });
+}
+function reachDeg(outline, s) {
+  if (s.surface === "flat") return 0;
+  let far = 0;
+  for (const [x, y] of outline) far = Math.max(far, s.surface === "sphere" ? Math.hypot(x, y) : Math.abs(s.axis === "x" ? y : x));
+  return far / s.radius * (180 / Math.PI);
+}
+function signedArea2(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a;
+}
+function gridSlab(k, x0, x1, y0, y1, h, zb, zt) {
+  const nx = Math.max(1, Math.ceil((x1 - x0) / h)), ny = Math.max(1, Math.ceil((y1 - y0) / h));
+  const layer = (nx + 1) * (ny + 1);
+  const vert = new Float32Array(layer * 2 * 3);
+  for (let top = 0; top < 2; top++) {
+    for (let j = 0; j <= ny; j++) {
+      for (let i = 0; i <= nx; i++) {
+        const v = (top * layer + j * (nx + 1) + i) * 3;
+        vert[v] = x0 + (x1 - x0) * i / nx;
+        vert[v + 1] = y0 + (y1 - y0) * j / ny;
+        vert[v + 2] = top ? zt : zb;
+      }
+    }
+  }
+  const id = (i, j, top) => top * layer + j * (nx + 1) + i;
+  const tri = [];
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const a = id(i, j, 1), b = id(i + 1, j, 1), c = id(i + 1, j + 1, 1), d = id(i, j + 1, 1);
+      tri.push(a, b, c, a, c, d);
+      const A = id(i, j, 0), B = id(i + 1, j, 0), C = id(i + 1, j + 1, 0), D2 = id(i, j + 1, 0);
+      tri.push(A, C, B, A, D2, C);
+    }
+  }
+  const side = (p, q) => tri.push(p, q, q + layer, p, q + layer, p + layer);
+  for (let i = 0; i < nx; i++) side(id(i, 0, 0), id(i + 1, 0, 0));
+  for (let j = 0; j < ny; j++) side(id(nx, j, 0), id(nx, j + 1, 0));
+  for (let i = nx; i > 0; i--) side(id(i, ny, 0), id(i - 1, ny, 0));
+  for (let j = ny; j > 0; j--) side(id(0, j, 0), id(0, j - 1, 0));
+  return new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: vert, triVerts: Uint32Array.from(tri) }));
+}
+function gridSpacing(s, tol) {
+  const rOut = s.radius + s.thickness / 2;
+  return Math.min(1, s.radius * Math.sqrt(8 * 0.9 * tol / rOut));
+}
+function divide(polys, step) {
+  return polys.map((poly) => {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const pieces = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+      for (let j = 0; j < pieces; j++) out.push([a[0] + (b[0] - a[0]) * j / pieces, a[1] + (b[1] - a[1]) * j / pieces]);
+    }
+    return out;
+  });
+}
+function buildThicken(k, A, n, tol, ctx) {
+  const { Manifold, CrossSection } = k;
+  const s = sheetSpec(n);
+  const t = s.thickness;
+  let cs = A.t(new CrossSection([signedArea2(s.outline) < 0 ? [...s.outline].reverse() : s.outline]));
+  if (s.roundCorners > 0) {
+    const rc = s.roundCorners;
+    const seg = segmentsFor(rc, tol, 16);
+    cs = A.t(A.t(A.t(A.t(cs.offset(-rc, "Round", 2, seg)).offset(rc, "Round", 2, seg)).offset(rc, "Round", 2, seg)).offset(-rc, "Round", 2, seg));
+  }
+  if (cs.isEmpty()) {
+    throw new CallError(`${n.id}.params.round_corners`, `rounding the corners by ${s.roundCorners} mm leaves nothing of the outline: no part of it is ${2 * s.roundCorners} mm across. Use a smaller round_corners or a wider outline.`);
+  }
+  if (s.surface !== "flat") cs = A.t(new CrossSection(divide(cs.toPolygons(), Math.min(0.25, 0.05 * s.radius))));
+  let solid;
+  if (s.surface === "flat") {
+    solid = A.t(A.t(Manifold.extrude(cs, t)).translate([0, 0, -t / 2]));
+  } else {
+    const map = surfaceMap(s);
+    const warp = (v, count) => {
+      for (let i = 0; i < count; i++) {
+        const q = map(v[i * 3], v[i * 3 + 1], v[i * 3 + 2]).p;
+        v[i * 3] = q[0];
+        v[i * 3 + 1] = q[1];
+        v[i * 3 + 2] = q[2];
+      }
+    };
+    const h = gridSpacing(s, tol);
+    const bb = cs.bounds();
+    const slab = A.t(A.t(gridSlab(k, bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h, -t / 2, t / 2)).warpBatch(warp));
+    const m = Math.min(0.3, (s.radius - t / 2) / 2);
+    const rOut = s.radius + t / 2 + m;
+    const lc = Math.min(1, s.radius * Math.sqrt(m / rOut));
+    const prism = A.t(A.t(A.t(A.t(Manifold.extrude(cs, t + 2 * m)).translate([0, 0, -(t / 2 + m)])).refineToLength(lc)).warpBatch(warp));
+    solid = A.t(slab.intersect(prism));
+  }
+  if (ctx?.sheets) ctx.sheets.push(declareSheet(n.id, s, cs.toPolygons(), ctx.m));
+  return solid;
+}
+function insideContours(polys, x, y) {
+  let c = false;
+  for (const poly of polys) {
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if (a[1] > y !== b[1] > y && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+    }
+  }
+  return c;
+}
+function distanceToEdges(polys, x, y) {
+  let best = Infinity;
+  for (const poly of polys) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const l2 = dx * dx + dy * dy;
+      const u = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2)) : 0;
+      best = Math.min(best, Math.hypot(x - a[0] - u * dx, y - a[1] - u * dy));
+    }
+  }
+  return best;
+}
+function insetBoundary(polys, step, inset) {
+  const out = [];
+  for (const poly of polys) {
+    const ccw2 = signedArea2(poly) > 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const l = Math.hypot(dx, dy);
+      if (l < 1e-9) continue;
+      const nx = (ccw2 ? -dy : dy) / l * inset, ny = (ccw2 ? dx : -dx) / l * inset;
+      const pieces = Math.max(1, Math.ceil(l / step));
+      for (let s = 0; s < pieces; s++) {
+        const x = a[0] + dx * (s + 0.5) / pieces + nx, y = a[1] + dy * (s + 0.5) / pieces + ny;
+        if (insideContours(polys, x, y)) out.push([x, y]);
+      }
+    }
+  }
+  return out;
+}
+function declareSheet(label, s, polys, m) {
+  let area = 0;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const poly of polys) {
+    area += signedArea2(poly) / 2;
+    for (const [x, y] of poly) {
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  }
+  const spacing = Math.min(1, Math.max(0.25, Math.sqrt(Math.abs(area) / 300)));
+  const inset = Math.min(0.05, s.thickness / 4);
+  const flat = [];
+  for (let y = y0 + spacing / 2; y < y1; y += spacing) {
+    for (let x = x0 + spacing / 2; x < x1; x += spacing) if (insideContours(polys, x, y) && distanceToEdges(polys, x, y) >= inset) flat.push([x, y]);
+  }
+  flat.push(...insetBoundary(polys, spacing / 2, inset));
+  const map = surfaceMap(s);
+  const points = [], normals = [];
+  for (const [x, y] of flat) {
+    const q = map(x, y, 0);
+    points.push(applyPoint(m, q.p));
+    normals.push(applyDirection(m, q.n));
+  }
+  return { label, nominalThickness: s.thickness, spacing, points, normals };
+}
+
 // src/piece/tree.ts
 var TREE_FORMAT = "flo2-cad.tree/1";
 var TEMPLATES = ["solitaire_ring", "plain_band", "emerald_bezel_solitaire"];
@@ -23047,7 +23365,8 @@ var OPERATIONS = [
   "sphere",
   "cylinder",
   "box",
-  "torus"
+  "torus",
+  "thicken"
 ];
 var BLENDABLE = /* @__PURE__ */ new Set(["sphere", "cylinder", "box", "torus", "sweep", "translate", "rotate", "mirror", "union", "smooth_union"]);
 var PARTS = ["ring_shank", "prong_head", "bezel"];
@@ -23443,7 +23762,7 @@ function validateNode(v, path, ids, inBlend) {
   if (op && ["union", "difference", "intersection", "smooth_union", "translate", "rotate", "mirror"].includes(op) && kids === 0) {
     throw new CallError(at(path, "children"), `a ${op} needs at least one child.`);
   }
-  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude"].includes(op) && kids > 0) {
+  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude", "thicken"].includes(op) && kids > 0) {
     throw new CallError(at(path, "children"), `a ${op} is a shape and has no children.`);
   }
 }
@@ -23528,7 +23847,25 @@ var OP_PARAMS = {
   torus: { major_radius: "length", minor_radius: "length" },
   extrude: { points: "points2", height: "length" },
   revolve: { points: "points2", degrees: "angle" },
-  sweep: { radius: "length", path: "points3", closed: "boolean" }
+  sweep: { radius: "length", path: "points3", closed: "boolean" },
+  thicken: { outline: "points2", thickness: "length", surface: "word", radius: "length", axis: "word", round_corners: "length" }
+};
+var OP_HELP = {
+  union: "joins its children into one solid.",
+  difference: "its first child, with every later child cut away.",
+  intersection: "only what all its children share.",
+  smooth_union: "joins its children with a fillet of `radius`; it can blend sphere, cylinder, box, torus, sweep and the transforms and unions of those.",
+  translate: "moves its children by x, y and z.",
+  rotate: "turns its children about x, then y, then z.",
+  mirror: 'reflects its children through the plane "xy", "yz" or "xz".',
+  sphere: "a ball of `radius`, centred on the origin.",
+  cylinder: "a round rod of `radius`, standing `height` tall on the origin along z.",
+  box: "a block x by y by z, centred on the origin.",
+  torus: "a ring round z, `major_radius` to the middle of its wire, the wire `minor_radius` thick.",
+  extrude: 'a closed 2D outline `points` [["x mm", "y mm"], ...] raised `height` along z.',
+  revolve: "a closed 2D profile `points` (x the radius, y the height) turned round z, all the way or `degrees`.",
+  sweep: 'a round wire of `radius` along the 3D `path` [["x mm", "y mm", "z mm"], ...]; `closed` joins its ends.',
+  thicken: 'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60\xB0). The outline stays within 90\xB0 round a sphere and 150\xB0 round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.'
 };
 var REQUIRED_OP_PARAMS = {
   smooth_union: ["radius"],
@@ -23539,7 +23876,8 @@ var REQUIRED_OP_PARAMS = {
   torus: ["major_radius", "minor_radius"],
   extrude: ["points", "height"],
   revolve: ["points"],
-  sweep: ["radius", "path"]
+  sweep: ["radius", "path"],
+  thicken: ["outline", "thickness"]
 };
 function validateOp(op, p, path) {
   const spec = OP_PARAMS[op];
@@ -23557,6 +23895,8 @@ function validateOp(op, p, path) {
       if (!["xy", "yz", "xz"].includes(v)) throw new CallError(kp, 'the mirror plane is "xy", "yz" or "xz".');
     } else if (kind === "boolean") {
       if (typeof v !== "boolean") throw new CallError(kp, "must be true or false.");
+    } else if (kind === "word") {
+      if (typeof v !== "string") throw new CallError(kp, 'must be a word in quotes, such as "sphere".');
     } else {
       const dim = kind === "points2" ? 2 : 3;
       if (!Array.isArray(v) || v.length < 2) throw new CallError(kp, `a list of at least 2 points, each [${dim === 2 ? '"x mm", "y mm"' : '"x mm", "y mm", "z mm"'}].`);
@@ -23565,6 +23905,56 @@ function validateOp(op, p, path) {
         pt2.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
       });
       if (kind === "points2" && v.length < 3) throw new CallError(kp, "a profile needs at least 3 points.");
+    }
+  }
+  if (op === "thicken") validateThicken(p, path);
+}
+function validateThicken(p, path) {
+  const surface = p["surface"] ?? "flat";
+  if (!SURFACES.includes(surface)) {
+    throw new CallError(at(path, "surface"), `must be "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way); got ${JSON.stringify(p["surface"])}.`);
+  }
+  const t = lengthMm(p["thickness"], at(path, "thickness"));
+  const [tMin, tMax] = THICKNESS_RANGE_MM;
+  if (t < tMin || t > tMax) {
+    throw new CallError(at(path, "thickness"), `${t} mm is outside what the library builds (${tMin} to ${tMax} mm). It is measured square to the surface; a casting needs at least the metal's wall minimum (0.8 mm).`);
+  }
+  if (surface === "flat") {
+    for (const k of ["radius", "axis"]) {
+      if (p[k] !== void 0) throw new CallError(at(path, k), `a flat sheet has no ${k}; leave it out, or set "surface" to "sphere" or "cylinder".`);
+    }
+  } else {
+    if (p["radius"] === void 0) throw new CallError(at(path, "radius"), `a ${surface} needs the radius its middle surface curves at, e.g. "8 mm": the smaller the radius, the deeper the ${surface === "sphere" ? "cup" : "curl"}.`);
+    const r = lengthMm(p["radius"], at(path, "radius"));
+    if (r < MIN_RADIUS_PER_THICKNESS * t - 1e-9) {
+      throw new CallError(
+        at(path, "radius"),
+        `${r} mm curves a ${t} mm sheet too tightly: the radius must be at least ${MIN_RADIUS_PER_THICKNESS} times the thickness (${Math.round(MIN_RADIUS_PER_THICKNESS * t * 1e3) / 1e3} mm here). Use a larger radius, or a thinner sheet. Below that the casting check reads the sheet's edge thinner than it is.`
+      );
+    }
+    if (r > RADIUS_MAX_MM) throw new CallError(at(path, "radius"), `${r} mm is more than the library builds (${RADIUS_MAX_MM} mm); use "surface": "flat" for a sheet this flat.`);
+  }
+  if (p["axis"] !== void 0) {
+    if (surface !== "cylinder") throw new CallError(at(path, "axis"), "only a cylinder has an axis; leave it out.");
+    if (!SHEET_AXES.includes(p["axis"])) throw new CallError(at(path, "axis"), `the line the sheet curls round: "x" (it rises as y grows) or "y" (it rises as x grows); got ${JSON.stringify(p["axis"])}.`);
+  }
+  if (p["round_corners"] !== void 0) {
+    const rc = lengthMm(p["round_corners"], at(path, "round_corners"));
+    if (rc < 0 || rc > ROUND_CORNERS_MAX_MM) throw new CallError(at(path, "round_corners"), `${rc} mm is outside what the library builds (0 to ${ROUND_CORNERS_MAX_MM} mm).`);
+  }
+  const outline = p["outline"].map((pt2, i) => [lengthMm(pt2[0], at(at(at(path, "outline"), i), 0)), lengthMm(pt2[1], at(at(at(path, "outline"), i), 1))]);
+  if (Math.abs(signedArea2(outline)) / 2 < 0.01) throw new CallError(at(path, "outline"), "the outline encloses no area; give the sheet's edge as a closed loop of points, in order round it.");
+  if (surface !== "flat") {
+    const r = lengthMm(p["radius"], at(path, "radius"));
+    const axis = p["axis"] ?? "x";
+    const reach = reachDeg(outline, { surface, radius: r, axis });
+    const max = surface === "sphere" ? SPHERE_MAX_DEG : CYLINDER_MAX_DEG;
+    if (reach > max + 1e-9) {
+      const minR = Math.ceil(reach / max * r * 10) / 10;
+      throw new CallError(
+        at(path, "outline"),
+        surface === "sphere" ? `the outline reaches ${Math.round(reach * Math.PI / 180 * r * 100) / 100} mm from the origin (the bottom of the cup), more than a quarter of the way round a sphere of radius ${r} mm (${SPHERE_MAX_DEG}\xB0). Use a radius of at least ${minR} mm, or a smaller outline.` : `the outline reaches ${Math.round(reach * Math.PI / 180 * r * 100) / 100} mm across the cylinder's axis from the origin, more than ${CYLINDER_MAX_DEG}\xB0 round a cylinder of radius ${r} mm. Use a radius of at least ${minR} mm, or a smaller outline.`
+      );
     }
   }
 }
@@ -23753,10 +24143,12 @@ function ccw(pts) {
   }
   return a < 0 ? [...pts].reverse() : pts;
 }
-function buildOp(k, A, n, tol) {
+var MIRROR_NORMAL = { xy: [0, 0, 1], yz: [1, 0, 0], xz: [0, 1, 0] };
+function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
   const { Manifold, CrossSection } = k;
   const p = n.params ?? {};
-  const kids = () => (n.children ?? []).map((c) => buildOp(k, A, c, tol));
+  const inner = n.op === "translate" ? { ...ctx, m: compose(ctx.m, translation(L(p, "x"), L(p, "y"), L(p, "z"))) } : n.op === "rotate" ? { ...ctx, m: compose(ctx.m, rotation(D(p, "x"), D(p, "y"), D(p, "z"))) } : n.op === "mirror" ? { ...ctx, m: compose(ctx.m, reflection(MIRROR_NORMAL[p["plane"]])) } : ctx;
+  const kids = () => (n.children ?? []).map((ch) => buildOp(k, A, ch, tol, inner));
   const all = () => {
     const ms = kids();
     return ms.length === 1 ? ms[0] : A.t(Manifold.union(ms));
@@ -23799,8 +24191,11 @@ function buildOp(k, A, n, tol) {
     case "union":
       return all();
     case "difference": {
-      const ms = kids();
-      return ms.length === 1 ? ms[0] : A.t(ms[0].subtract(A.t(Manifold.union(ms.slice(1)))));
+      const [first, ...rest] = n.children ?? [];
+      const keep = buildOp(k, A, first, tol, inner);
+      if (!rest.length) return keep;
+      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m }));
+      return A.t(keep.subtract(A.t(Manifold.union(cutters))));
     }
     case "intersection": {
       const ms = kids();
@@ -23811,9 +24206,11 @@ function buildOp(k, A, n, tol) {
     case "rotate":
       return A.t(all().rotate([D(p, "x"), D(p, "y"), D(p, "z")]));
     case "mirror":
-      return A.t(all().mirror(p["plane"] === "xy" ? [0, 0, 1] : p["plane"] === "yz" ? [1, 0, 0] : [0, 1, 0]));
+      return A.t(all().mirror(MIRROR_NORMAL[p["plane"]]));
     case "smooth_union":
       return smoothUnion(k, A, n, tol);
+    case "thicken":
+      return buildThicken(k, A, n, tol, ctx);
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }
@@ -24232,12 +24629,14 @@ function buildWith(k, A, tree, opts) {
     const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
     metal = A.t(A.t(head.subtract(finger)).add(band));
   }
+  const sheets = [];
   for (const extra of v.extras) {
-    const shape = A.t(buildOp(k, A, extra, tol));
+    const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets }));
     const bb2 = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb2.min], max: [...bb2.max] });
     metal = A.t(metal.add(shape));
   }
+  if (sheets.length) decl.sheets = sheets;
   const scale2 = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
   if (scale2 !== 1) {
     metal = A.t(metal.scale(scale2));
@@ -24297,6 +24696,11 @@ function scaleDecl(d, s) {
   for (const a of d.added ?? []) {
     a.min = [a.min[0] * s, a.min[1] * s, a.min[2] * s];
     a.max = [a.max[0] * s, a.max[1] * s, a.max[2] * s];
+  }
+  for (const sh of d.sheets ?? []) {
+    sh.points = sh.points.map(([x, y, z]) => [x * s, y * s, z * s]);
+    sh.nominalThickness *= s;
+    sh.spacing *= s;
   }
 }
 
@@ -24644,6 +25048,26 @@ async function preview(tree, views) {
 function suggestThicker(current, measured, limit) {
   return Math.ceil((current + (limit - measured) + 0.1) * 10) / 10;
 }
+function sheetNode(v, id) {
+  for (const e of v.extras) {
+    const n = findNode(e, id);
+    if (n?.op === "thicken") return n;
+  }
+  return void 0;
+}
+function sheetThickness(v, id) {
+  const n = sheetNode(v, id);
+  return n ? lengthMm(n.params?.["thickness"], `${id}.thickness`) : void 0;
+}
+function roundingFor(n, across) {
+  let narrowing = 1;
+  if (n) {
+    const s = sheetSpec(n);
+    const th = reachDeg(s.outline, s) * Math.PI / 180;
+    if (s.surface === "sphere" && th > 1e-6) narrowing = Math.sin(th) / th;
+  }
+  return Math.ceil((across / 2 + 0.05) / narrowing * 20) / 20;
+}
 function fixFor(e, v, metal) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
@@ -24672,6 +25096,15 @@ function fixFor(e, v, metal) {
       const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
       return (e.value ?? 0) < lo ? `Raise the bezel lip: it rises ${e.value} mm above the girdle, too little to be pushed over the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").` : `Lower the bezel lip: it rises ${e.value} mm above the girdle and would cover too much of the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`;
     }
+    case "sheet": {
+      const each = (e.failing ?? []).map((f) => {
+        const cur = sheetThickness(v, f.label) ?? f.nominal ?? f.value;
+        return { f, cur, to: Math.max(1, suggestThicker(cur, f.value, metal.limits.wall)) };
+      });
+      const lines = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${metal.limits.wall.toFixed(1)} mm.`);
+      const set = each.map(({ f, to }) => `"${f.label}.thickness": "${to} mm"`).join(", ");
+      return `${lines.join(" ")} Change: set {${set}}.`;
+    }
     case "prong_grip":
       return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. Change: set {"head.prong_grip": "0.2 mm"}.`;
     case "wall": {
@@ -24679,12 +25112,27 @@ function fixFor(e, v, metal) {
       if (/prong/.test(part) && h?.kind === "prong_head") return `Thicken ${part}: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise prong_thickness.`;
       if (part === "bezel" && h?.kind === "bezel") return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise bezel_wall.`;
       if (e.where?.part === "band") return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${metal.limits.wall.toFixed(1)} mm. Raise band_thickness.`;
+      if (e.where?.part === "sheet" && e.where.meets?.length) {
+        const names = [part, ...e.where.meets].map((x) => `"${x}"`).join(" and ");
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is ${e.value} mm across, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+      }
+      if (e.where?.part === "sheet" && sheetNode(v, part)) {
+        const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
+        return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+      }
       if (e.where?.part === "added shape") {
         return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
       }
       return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
     }
     case "detail":
+      if (e.where?.part === "sheet" && e.where.feature && e.where.meets?.length) {
+        const names = [e.where.feature, ...e.where.meets].map((x) => `"${x}"`).join(" and ");
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is only ${e.value} mm across (the finest detail must be ${metal.limits.detail} mm). Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+      }
+      if (e.where?.part === "sheet" && e.where.feature && sheetNode(v, e.where.feature)) {
+        return `The finest detail, ${e.value} mm across, is at the sheet "${e.where.feature}", at ${JSON.stringify(e.where.point_mm)} mm; it must be at least ${metal.limits.detail} mm. Widen or round that part of its outline (set {"${e.where.feature}.round_corners": "${roundingFor(sheetNode(v, e.where.feature), metal.limits.wall)} mm"}), or, if it is a wedge where the sheet joins other metal, move the sheet so it meets that metal squarely.`;
+      }
       return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${metal.limits.detail} mm, or remove it.`;
     case "gap":
       return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
@@ -24733,10 +25181,11 @@ async function checkPiece(tree, mode) {
   const withFix = entries.map((e) => ({ ...e, fix: fixFor(e, v, metal) }));
   const failingProngs = new Set((withFix.find((e) => e.id === "prong" && e.result === "fail")?.failing ?? []).map((f) => f.label));
   const bezelFails = withFix.some((e) => e.id === "bezel_wall" && e.result === "fail");
+  const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
   for (const e of withFix) {
     if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
       const f = e.where?.feature;
-      if (f && failingProngs.has(f) || f === "bezel" && bezelFails) e.fix = null;
+      if (f && failingProngs.has(f) || f === "bezel" && bezelFails || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
     }
   }
   const verdict = withFix.every((e) => e.result === "pass") ? "pass" : "fail";
@@ -24883,7 +25332,10 @@ var TREE = {
     revision: { type: "integer", minimum: 1 },
     template: { type: "string", enum: [...TEMPLATES] },
     shrinkage: { type: "string" },
-    root: { type: "object", description: 'The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece explains the parts and operations.' }
+    root: {
+      type: "object",
+      description: 'The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.'
+    }
   }
 };
 var PREVIEW_FLAG = {
@@ -24931,7 +25383,7 @@ var TOOLS = [
     description: [
       "Change the piece: resize it, give the stone's measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band or the metal, turn the stone east-west or north-south, rename it, make it a plain band, or set a shrinkage allowance.",
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
-      "Or pass a whole edited `tree`, with or without `set`.",
+      'Or pass a whole edited `tree`, with or without `set`. That is how you add shapes of your own: add operation nodes to the root\'s children, such as a cupped or curled petal or leaf ("thicken"), a wire ("sweep") or a fillet ("smooth_union"); describe_piece lists every operation and its settings. Then "<id>.<setting>" in `set` reaches any of them, e.g. {"petal_1.thickness": "1.0 mm"}.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
       "Returns the new picture, what changed, and the updated tree; the piece's revision number goes up by one."
     ].join(" "),
@@ -24985,7 +25437,7 @@ var TOOLS = [
     title: "Check it will cast",
     description: [
       "Check whether the piece will print and cast, without exporting it.",
-      "It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece's metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.",
+      `It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece's metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.`,
       "Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.",
       "A failed check is a normal answer, not an error: tell the person what to change."
     ].join(" "),
@@ -25209,7 +25661,8 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
       `Settings change_piece can set:
 ${catalog.join("\n")}
 Any part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
-      `A tree's parts: ${PARTS.join(", ")}. Its operations: ${OPERATIONS.join(", ")}.`,
+      `A tree's parts: ${PARTS.join(", ")}. To add a shape of your own, add a node {"id", "op", "params", "children"} to the root's children (ids are lower-case letters, digits and "_", unique in the piece) and pass the edited tree to change_piece. The operations, with their settings:
+${operationGuide()}`,
       treeText(tree)
     ];
     const ph = placeholderNote(v);
@@ -25217,6 +25670,13 @@ Any part's setting can also be set as "<part>.<setting>": the parts here are ${l
     return reply(texts);
   }
 };
+var UNIT_OF = { length: "mm", angle: "deg", points2: "[x, y] points in mm", points3: "[x, y, z] points in mm", plane: '"xy" | "yz" | "xz"', boolean: "true | false", word: "a word" };
+function operationGuide() {
+  return OPERATIONS.map((op) => {
+    const settings = Object.entries(OP_PARAMS[op]).map(([k, kind]) => `${k} (${UNIT_OF[kind]})`);
+    return `- ${op}${settings.length ? ` {${settings.join(", ")}}` : ""}: ${OP_HELP[op]}`;
+  }).join("\n");
+}
 function listParts(tree) {
   const out = [];
   const walk = (n) => {

@@ -12,10 +12,11 @@
 // coarser (owner, round 2, Q2).
 
 import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
-import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, StoneDecl } from '../checker/features.js';
+import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
 import type { PieceTree, PieceView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
 import { buildOp } from './ops.js';
+import { IDENTITY } from './thicken.js';
 import { stoneShape, type StoneSpec } from './stones.js';
 
 /** Per direction: a doubly curved facet (a torus, a domed band) adds both directions' chords, so each is half the 0.01 mm limit, less a margin. */
@@ -203,7 +204,7 @@ export async function buildPiece(tree: PieceTree, opts: { tol: number; applyShri
   }
 }
 
-function polygonsToMesh(m: Manifold): MeshOut {
+export function polygonsToMesh(m: Manifold): MeshOut {
   const mesh = m.getMesh();
   const np = mesh.numProp;
   const nv = mesh.vertProperties.length / np;
@@ -322,13 +323,16 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   }
 
   // Any operations the agent added beside the band and head, each declared by its id and
-  // bounds, so the checker can name the added shape a thin place is in.
+  // bounds, so the checker can name the added shape a thin place is in. A thickened sheet
+  // among them also declares itself (its nominal thickness and middle surface).
+  const sheets: SheetDecl[] = [];
   for (const extra of v.extras) {
-    const shape = A.t(buildOp(k, A, extra as TreeNode, tol));
+    const shape = A.t(buildOp(k, A, extra as TreeNode, tol, { m: IDENTITY, sheets }));
     const bb = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 });
     metal = A.t(metal.add(shape));
   }
+  if (sheets.length) decl.sheets = sheets;
 
   const scale = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
   if (scale !== 1) {
@@ -399,6 +403,11 @@ function scaleDecl(d: FeatureDecl, s: number): void {
   for (const a of d.added ?? []) {
     a.min = [a.min[0] * s, a.min[1] * s, a.min[2] * s];
     a.max = [a.max[0] * s, a.max[1] * s, a.max[2] * s];
+  }
+  for (const sh of d.sheets ?? []) {
+    sh.points = sh.points.map(([x, y, z]) => [x * s, y * s, z * s]);
+    sh.nominalThickness *= s;
+    sh.spacing *= s;
   }
 }
 

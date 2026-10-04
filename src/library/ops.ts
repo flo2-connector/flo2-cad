@@ -1,15 +1,22 @@
 // The tree's general operations (dec:how-a-piece-is-described: "a structured tree
 // of operations and jewelry parts, as data"; req:the-tree-has-sweeps-and-smooth-blends):
 // primitives, booleans, transforms, extrude, revolve, a SWEEP of a round wire along
-// a path, and a SMOOTH BLEND (smooth_union) evaluated as a level set of distance
-// functions (Manifold's levelSet). Every one evaluates to a closed solid; the
-// kernel guarantees manifold output.
+// a path, a SMOOTH BLEND (smooth_union) evaluated as a level set of distance
+// functions (Manifold's levelSet), and THICKEN, a curved sheet given a thickness
+// (thicken.ts). Every one evaluates to a closed solid; the kernel guarantees
+// manifold output.
+//
+// Each call carries where its node sits in the piece (an OpContext: the transforms
+// above it), so a sheet can declare itself to the checker in the piece's
+// coordinates. A shape that is cut AWAY (a difference's second child onwards)
+// declares nothing.
 
 import { segmentsFor, sphereSegments, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
 import { CallError } from '../errors.js';
 import type { TreeNode } from '../piece/tree.js';
 import { angleDeg, lengthMm } from '../units.js';
 import type { Arena } from './build.js';
+import { buildThicken, compose, IDENTITY, reflection, rotation, translation, type OpContext } from './thicken.js';
 
 type Params = Record<string, unknown>;
 
@@ -27,10 +34,21 @@ function ccw(pts: Vec2[]): Vec2[] {
   return a < 0 ? [...pts].reverse() : pts;
 }
 
-export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number): Manifold {
+const MIRROR_NORMAL: Readonly<Record<string, Vec3>> = { xy: [0, 0, 1], yz: [1, 0, 0], xz: [0, 1, 0] };
+
+export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpContext = { m: IDENTITY }): Manifold {
   const { Manifold, CrossSection } = k;
   const p = (n.params ?? {}) as Params;
-  const kids = () => (n.children ?? []).map((c) => buildOp(k, A, c, tol));
+  // A transform's children sit in its own frame; everything else passes the frame on.
+  const inner: OpContext =
+    n.op === 'translate'
+      ? { ...ctx, m: compose(ctx.m, translation(L(p, 'x'), L(p, 'y'), L(p, 'z'))) }
+      : n.op === 'rotate'
+        ? { ...ctx, m: compose(ctx.m, rotation(D(p, 'x'), D(p, 'y'), D(p, 'z'))) }
+        : n.op === 'mirror'
+          ? { ...ctx, m: compose(ctx.m, reflection(MIRROR_NORMAL[p['plane'] as string]!)) }
+          : ctx;
+  const kids = () => (n.children ?? []).map((ch) => buildOp(k, A, ch, tol, inner));
   const all = (): Manifold => {
     const ms = kids();
     return ms.length === 1 ? ms[0]! : A.t(Manifold.union(ms));
@@ -75,8 +93,12 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number): Manifold
     case 'union':
       return all();
     case 'difference': {
-      const ms = kids();
-      return ms.length === 1 ? ms[0]! : A.t(ms[0]!.subtract(A.t(Manifold.union(ms.slice(1)))));
+      const [first, ...rest] = n.children ?? [];
+      const keep = buildOp(k, A, first!, tol, inner);
+      if (!rest.length) return keep;
+      // What is cut away is not metal, so a sheet inside it declares nothing.
+      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m }));
+      return A.t(keep.subtract(A.t(Manifold.union(cutters))));
     }
     case 'intersection': {
       const ms = kids();
@@ -87,9 +109,11 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number): Manifold
     case 'rotate':
       return A.t(all().rotate([D(p, 'x'), D(p, 'y'), D(p, 'z')]));
     case 'mirror':
-      return A.t(all().mirror(p['plane'] === 'xy' ? [0, 0, 1] : p['plane'] === 'yz' ? [1, 0, 0] : [0, 1, 0]));
+      return A.t(all().mirror(MIRROR_NORMAL[p['plane'] as string]!));
     case 'smooth_union':
       return smoothUnion(k, A, n, tol);
+    case 'thicken':
+      return buildThicken(k, A, n, tol, ctx);
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }

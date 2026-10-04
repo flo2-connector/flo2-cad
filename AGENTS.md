@@ -47,8 +47,9 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 - **Licences.** Take ideas only from GPL sources (OpenSCAD, Blender, JewelCraft, 3D Print Toolbox), never code.
   Kiln's MIT code may be copied, keeping its notice.
 - **A piece is a tree of data. No agent code runs.**
-  - The tree holds the library parts (ring_shank, prong_head, bezel) and the operations, including `sweep` and
-    `smooth_union`.
+  - The tree holds the library parts (ring_shank, prong_head, bezel) and the operations, including `sweep`,
+    `smooth_union` and `thicken` (a curved sheet, such as a cupped petal, given a thickness along its surface; it
+    declares itself to the checker, which measures it square to its surface).
   - A head is a choice: prongs or a full bezel.
   - Stones are round or emerald cut, sized from their MEASURED dimensions. A carat weight is for reference only.
   - The stone is never in a casting file.
