@@ -321,8 +321,14 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
     metal = A.t(A.t(head.subtract(finger)).add(band));
   }
 
-  // Any operations the agent added beside the band and head.
-  for (const extra of v.extras) metal = A.t(metal.add(A.t(buildOp(k, A, extra as TreeNode, tol))));
+  // Any operations the agent added beside the band and head, each declared by its id and
+  // bounds, so the checker can name the added shape a thin place is in.
+  for (const extra of v.extras) {
+    const shape = A.t(buildOp(k, A, extra as TreeNode, tol));
+    const bb = shape.boundingBox();
+    (decl.added ??= []).push({ id: extra.id, min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 });
+    metal = A.t(metal.add(shape));
+  }
 
   const scale = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
   if (scale !== 1) {
@@ -389,6 +395,10 @@ function scaleDecl(d: FeatureDecl, s: number): void {
     d.bezel.outer = d.bezel.outer.map(([x, y]) => [x * s, y * s]);
     d.bezel.zBottom *= s;
     d.bezel.nominalWall *= s;
+  }
+  for (const a of d.added ?? []) {
+    a.min = [a.min[0] * s, a.min[1] * s, a.min[2] * s];
+    a.max = [a.max[0] * s, a.max[1] * s, a.max[2] * s];
   }
 }
 

@@ -5,7 +5,7 @@
 // back, and the very same bytes are what an export releases.
 
 import { createHash } from 'node:crypto';
-import { runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
+import { quoteIds, runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
 import { writeBinaryStl } from './files/stl.js';
 import { write3mf } from './files/threemf.js';
 import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Built } from './library/build.js';
@@ -151,6 +151,9 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
       if (/prong/.test(part) && h?.kind === 'prong_head') return `Thicken ${part}: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise prong_thickness.`;
       if (part === 'bezel' && h?.kind === 'bezel') return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise bezel_wall.`;
       if (e.where?.part === 'band') return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${metal.limits.wall.toFixed(1)} mm. Raise band_thickness.`;
+      if (e.where?.part === 'added shape') {
+        return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
+      }
       return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
     }
     case 'detail':
