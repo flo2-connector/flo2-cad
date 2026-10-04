@@ -22,6 +22,8 @@ export class Bvh {
   #nodes = 0;
   #triMin: Float64Array;
   #triMax: Float64Array;
+  /** Scratch for the nearest point found by distSq and anyWithin. */
+  #q = new Float64Array(3);
 
   constructor(pos: Float64Array, tri: Uint32Array) {
     this.pos = pos;
@@ -101,8 +103,11 @@ export class Bvh {
     return node;
   }
 
-  /** Squared distance from (px, py, pz) to triangle t (Ericson 5.1.5), allocation-free. */
-  distSq(px: number, py: number, pz: number, t: number): number {
+  /**
+   * The point of triangle t nearest (px, py, pz) (Ericson 5.1.5), written into `out`, allocation-free.
+   * Returns true when it lies inside the face, false when it lies on an edge or at a corner.
+   */
+  closestPoint(px: number, py: number, pz: number, t: number, out: Float64Array): boolean {
     const P = this.pos, T = this.tri;
     const a = T[t * 3]! * 3, b = T[t * 3 + 1]! * 3, c = T[t * 3 + 2]! * 3;
     const ax = P[a]!, ay = P[a + 1]!, az = P[a + 2]!;
@@ -111,6 +116,7 @@ export class Bvh {
     const apx = px - ax, apy = py - ay, apz = pz - az;
     const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
     let qx: number, qy: number, qz: number;
+    let inFace = false;
     if (d1 <= 0 && d2 <= 0) {
       qx = ax; qy = ay; qz = az;
     } else {
@@ -136,9 +142,20 @@ export class Bvh {
         const den = 1 / (va + vb + vc);
         const v = vb * den, w = vc * den;
         qx = ax + abx * v + acx * w; qy = ay + aby * v + acy * w; qz = az + abz * v + acz * w;
+        inFace = true;
       }
     }
-    const dx = px - qx, dy = py - qy, dz = pz - qz;
+    out[0] = qx;
+    out[1] = qy;
+    out[2] = qz;
+    return inFace;
+  }
+
+  /** Squared distance from (px, py, pz) to triangle t, allocation-free. */
+  distSq(px: number, py: number, pz: number, t: number): number {
+    const q = this.#q;
+    this.closestPoint(px, py, pz, t, q);
+    const dx = px - q[0]!, dy = py - q[1]!, dz = pz - q[2]!;
     return dx * dx + dy * dy + dz * dz;
   }
 
@@ -181,10 +198,15 @@ export class Bvh {
     return d;
   }
 
-  /** Whether some triangle that passes `keep` lies closer than r to p. */
-  anyWithin(p: V3, r: number, keep: (t: number) => boolean): boolean {
+  /**
+   * Whether some triangle that passes `keep` lies closer than r to p and, when `meets` is
+   * given, passes it too: it is handed the triangle's point nearest p and whether that point
+   * lies inside its face (false on an edge or at a corner).
+   */
+  anyWithin(p: V3, r: number, keep: (t: number) => boolean, meets?: (t: number, q: Float64Array, inFace: boolean) => boolean): boolean {
     if (this.n === 0) return false;
     const r2 = r * r;
+    const q = this.#q;
     const stack = [0];
     while (stack.length) {
       const node = stack.pop()!;
@@ -194,7 +216,9 @@ export class Bvh {
         for (let i = s; i < e; i++) {
           const t = this.#order[i]!;
           if (!keep(t)) continue;
-          if (this.distSq(p[0], p[1], p[2], t) < r2) return true;
+          const inFace = this.closestPoint(p[0], p[1], p[2], t, q);
+          const dx = p[0] - q[0]!, dy = p[1] - q[1]!, dz = p[2] - q[2]!;
+          if (dx * dx + dy * dy + dz * dz < r2 && (!meets || meets(t, q, inFace))) return true;
         }
       } else {
         stack.push(this.#left[node]!, this.#right[node]!);

@@ -65,6 +65,14 @@ export interface SheetDecl {
   normals: P3[];
 }
 
+export interface AddedDecl {
+  /** The id of a shape the tree adds beside the library's parts (a child of the root), as the piece's summary names it. */
+  id: string;
+  /** Its bounds. The checker names a thin place by the added shape whose bounds hold it, once the band's own section does not. */
+  min: P3;
+  max: P3;
+}
+
 export interface FeatureDecl {
   band?: BandDecl;
   prongs: ProngDecl[];
@@ -72,6 +80,8 @@ export interface FeatureDecl {
   bezel?: BezelDecl;
   /** Sheets from thicken operations, if any. */
   sheets?: SheetDecl[];
+  /** The shapes the tree adds beside the band and head, each by its id. */
+  added?: AddedDecl[];
   /** The uniform scale applied for shrinkage (1 when off). */
   scale: number;
 }

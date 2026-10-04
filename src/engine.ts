@@ -5,7 +5,7 @@
 // back, and the very same bytes are what an export releases.
 
 import { createHash } from 'node:crypto';
-import { runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
+import { quoteIds, runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
 import { writeBinaryStl } from './files/stl.js';
 import { write3mf } from './files/threemf.js';
 import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Built } from './library/build.js';
@@ -203,6 +203,9 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
         // the outline, or in a wedge where the sheet joins other metal.
         const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
         return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+      }
+      if (e.where?.part === 'added shape') {
+        return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
       }
       return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
     }

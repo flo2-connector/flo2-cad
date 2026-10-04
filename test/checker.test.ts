@@ -20,8 +20,17 @@
 //    and not the others); giving each sliver the direction of the surface it was cut from
 //    reads 0.999 / 0.95 / 0.998 mm, as the same plate without slivers does.
 //
-// A genuinely thin band under an ornament, and a genuinely thin plate with slivers, are
-// still refused.
+//  · fact:wall-check-reads-overhang-beside-band-edge (found 2026-10-04, pinned by tests
+//    that failed on main d513ba8). A pedestal added over a 1.7 mm band and overhanging its
+//    flat sides read as a 0.80 mm wall "on the band", with advice to raise band_thickness.
+//    Cause, measured: the ball beside the band's edge was stopped at a corner where the
+//    pedestal's underside meets the band's side, a corner it reached from the side (59
+//    degrees), because the 105-degree test judged the underside's whole triangle (134
+//    degrees) rather than the direction the ball met it from. And the advice named the
+//    band because anything within 0.3 mm of the band's envelope was labelled band.
+//
+// A genuinely thin band under an ornament, a genuinely thin plate with slivers, and a
+// genuinely thin overhang are still refused, the overhang naming the added shape.
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -209,4 +218,98 @@ describe('thickness and gaps read the shape, not how it was cut into triangles',
       assert.ok(Math.abs(wall.value! - 0.6) < 0.01, `wall ${wall.value}`);
     });
   }
+});
+
+// ------------------------------------------------- shapes beside the band
+
+/**
+ * A US 7 half-round band (2.6 mm wide, 1.7 mm thick, 14k) with one added shape over
+ * its top. `pedestal`: a cylinder 2.4 mm tall, sunk `sinkMm` into the band's top, so
+ * where it is wider than the band its underside overhangs the band's flat sides.
+ * `flange`: a plate `thick` mm thick, sunk so its underside sits 0.9 mm above the
+ * finger, wider than the band by `overhang` mm on each side: a genuinely thin overhang.
+ */
+function bandWith(shape: { pedestal: { radius: number; sinkMm: number } } | { flange: { thick: number; overhang: number } } | null): PieceTree {
+  const tree = treeFromTemplate('plain_band', {
+    ring_size: { system: 'US', size: '7' },
+    name: 'beside',
+    band_profile: 'half_round',
+    band_width: '2.6 mm',
+    band_thickness: '1.7 mm',
+    metal: 'gold_14k_yellow',
+  });
+  const v = readPiece(tree);
+  const rIn = v.innerDiameterMm / 2, rOut = rIn + v.bandThicknessMm;
+  if (shape && 'pedestal' in shape) {
+    const { radius, sinkMm } = shape.pedestal;
+    tree.root.children!.push({ id: 'pedestal', op: 'translate', params: { z: `${rOut - sinkMm} mm` }, children: [{ id: 'ped', op: 'cylinder', params: { radius: `${radius} mm`, height: '2.4 mm' } }] });
+  } else if (shape) {
+    const { thick, overhang } = shape.flange;
+    tree.root.children!.push({
+      id: 'flange',
+      op: 'translate',
+      params: { z: `${rIn + 0.9 + thick / 2} mm` },
+      children: [{ id: 'plate', op: 'box', params: { x: '3 mm', y: `${v.bandWidthMm + 2 * overhang} mm`, z: `${thick} mm` } }],
+    });
+  }
+  return tree;
+}
+
+describe('a shape added over the band and overhanging its sides', () => {
+  // fact:wall-check-reads-overhang-beside-band-edge, measured on main d513ba8: with the
+  // pedestal sunk 1.0 mm the wall read 0.799 mm "on the band, 346 deg" and the advice was to
+  // raise band_thickness, on metal that reads 1.56 mm without the pedestal. The thinnest
+  // sample sits on the band's dome 0.11 mm from its edge, leaning 46 degrees towards the
+  // band's flat side. Its ball is held by that flat side (a convex edge's neighbour, which the
+  // 105-degree test rightly ignores), and was stopped at the one point of it where the
+  // pedestal's underside meets it: the corner (-2.25, -1.30, 9.36). The underside's triangles
+  // face 134.5 degrees away, so they counted, though the ball met them only at that corner,
+  // from 58.7 degrees, from the side and not from across the metal. Without the 105-degree
+  // test the same sample reads 0.46 mm: the edge itself. Every combination below read
+  // 0.80-0.90 mm on main; none of them adds any metal thinner than the band's own.
+  for (const [radius, sinkMm] of [
+    [2.6, 1.0],
+    [2.6, 1.06],
+    [2.2, 1.0],
+    [3.0, 1.06],
+  ] as const) {
+    it(`a pedestal (radius ${radius} mm, sunk ${sinkMm} mm) reads as the band does without it, and no advice touches the band`, async () => {
+      const plain = entry((await checkPiece(bandWith(null), 'check')).entries, 'wall');
+      const r = await checkPiece(bandWith({ pedestal: { radius, sinkMm } }), 'check');
+      const wall = entry(r.entries, 'wall');
+      assert.equal(wall.result, 'pass', `wall ${wall.measured} at ${wall.where?.description}`);
+      assert.ok(wall.value! > plain.value! - 0.03, `wall ${wall.value} at ${wall.where?.description}; the band alone reads ${plain.value}`);
+      assert.deepEqual(r.fixes, []);
+    });
+  }
+
+  it('a genuinely thin overhang (0.5 mm) is refused at 0.5 mm, and the advice names the added shape, not the band', async () => {
+    const r = await checkPiece(bandWith({ flange: { thick: 0.5, overhang: 1.0 } }), 'check');
+    const wall = entry(r.entries, 'wall');
+    assert.equal(wall.result, 'fail');
+    assert.ok(Math.abs(wall.value! - 0.5) < 0.01, `wall ${wall.value}`);
+    assert.equal(wall.where?.part, 'added shape', JSON.stringify(wall.where));
+    assert.equal(wall.where?.feature, 'flange');
+    const advice = r.entries.find((e) => e.id === 'wall')!.fix!;
+    assert.match(advice, /"flange"/);
+    assert.doesNotMatch(advice, /Raise band_thickness|Thicken the band/);
+    assert.equal(entry(r.entries, 'band').result, 'pass');
+  });
+
+  it('a thin overhang only 0.25 mm past the band\'s side is the added shape\'s too, not the band\'s', async () => {
+    const r = await checkPiece(bandWith({ flange: { thick: 0.5, overhang: 0.25 } }), 'check');
+    const wall = entry(r.entries, 'wall');
+    assert.equal(wall.result, 'fail', `wall ${wall.measured} at ${wall.where?.description}`);
+    assert.equal(wall.where?.part, 'added shape', JSON.stringify(wall.where));
+    assert.doesNotMatch(r.entries.find((e) => e.id === 'wall')!.fix!, /Raise band_thickness|Thicken the band/);
+  });
+
+  it('a 1.0 mm overhang reads 1.0 mm, not the corner where it meets the band\'s side', async () => {
+    // Main read 0.894 mm "on the band, 9 deg" here: the same corner, met from the side.
+    const r = await checkPiece(bandWith({ flange: { thick: 1.0, overhang: 1.0 } }), 'check');
+    const wall = entry(r.entries, 'wall');
+    assert.equal(wall.result, 'pass', `wall ${wall.measured} at ${wall.where?.description}`);
+    assert.ok(Math.abs(wall.value! - 1.0) < 0.01, `wall ${wall.value} at ${wall.where?.description}`);
+    assert.deepEqual(r.fixes, []);
+  });
 });

@@ -4,13 +4,18 @@
 // say where the prongs, band, stone and bezel are; every number in the report is
 // measured from the file's own triangles.
 //
-// Two rules keep the readings about the SHAPE rather than about how it was cut
+// Three rules keep the readings about the SHAPE rather than about how it was cut
 // into triangles or what else touches it:
 //  · thickness and gaps follow the surface's direction: a sliver too narrow to
 //    have one of its own takes it from the surface it was cut from (surface.ts;
 //    fact:wall-check-reads-sliver-facets-as-zero-thickness);
+//  · a thickness ball is stopped only by metal's far side met from across, never by
+//    a crease or corner it reaches from the side (sampleThickness, below;
+//    fact:wall-check-reads-overhang-beside-band-edge);
 //  · a section is the whole mesh cut by a plane, clipped afterwards to the part
 //    the declaration names (sections, below; fact:band-check-measures-added-shapes-as-band).
+// And a thin place is named by the part whose metal holds it: the band only inside
+// the band's own declared section, an added shape by its id (partAt, below).
 //
 // A sheet from the tree's thicken operation (a cupped petal, a leaf) declares its
 // middle surface and nominal thickness; the sheet check measures the file square to
@@ -21,7 +26,7 @@
 // a check becomes result "could_not_run", which blocks the export.
 
 import { Bvh } from './bvh.js';
-import type { BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
+import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
 import { surfaceDirections } from './surface.js';
@@ -246,6 +251,8 @@ interface Sample {
   t: number;
   p: V3;
   thickness: number;
+  /** The ball's centre: the middle of the metal the reading is about, which names the part it belongs to. */
+  centre: V3;
 }
 
 /**
@@ -257,6 +264,19 @@ interface Sample {
  * read as a thin wall. A sliver's own lean is not trusted for either: one
  * beside a 90° edge leaned far enough to make that edge look sharper than 105°,
  * and the ball then stopped within a few thousandths of a millimetre.
+ *
+ * The 105° test is applied where the ball MEETS a surface, not to the whole of
+ * any triangle it touches. Where the ball reaches a triangle inside its face, the
+ * face's direction is the surface's there, as before. Where it reaches one only at
+ * an edge or a corner, that point is a crease or a corner of the surface, and the
+ * direction it is met from decides. Judging the whole triangle let a crease stop
+ * the ball from the side: on a band with an added pedestal overhanging its flat
+ * side, a ball beside the band's edge was held by that flat side (the convex
+ * edge's neighbour, rightly ignored) and stopped at the one point of it where the
+ * pedestal's underside met it, a corner it reached from 59° though the underside
+ * faces 134° away, and 1.56 mm of metal read 0.80 mm
+ * (fact:wall-check-reads-overhang-beside-band-edge). Metal's real far side is met
+ * from across, so a thin wall or a thin overhang reads as thin as it is.
  */
 function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
   const out: Sample[] = [];
@@ -273,20 +293,28 @@ function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
     let cx = 0, cy = 0, cz = 0;
     // A surface bounds the ball only if the ball's centre lies behind it, inside the metal:
     // a ball that has slipped out past a side face must not be stopped from outside.
+    // And only where the ball meets it from across: at an edge or a corner of the
+    // triangle, the direction from the centre to that point must face back too.
     const bounds = (u: number) => {
       if (!opposing(u)) return false;
       const v = T[u * 3]! * 3;
       return (cx - P[v]!) * S[u * 3]! + (cy - P[v + 1]!) * S[u * 3 + 1]! + (cz - P[v + 2]!) * S[u * 3 + 2]! < 1e-7;
+    };
+    const metFromAcross = (_u: number, q: Float64Array, inFace: boolean) => {
+      if (inFace) return true;
+      const dx = q[0]! - cx, dy = q[1]! - cy, dz = q[2]! - cz;
+      const l = Math.hypot(dx, dy, dz);
+      return l === 0 || (dx * n[0] + dy * n[1] + dz * n[2]) / l < -0.25;
     };
     for (let i = 0; i < 16 && hi - lo > 0.0005; i++) {
       const r = (lo + hi) / 2;
       cx = p[0] - n[0] * r;
       cy = p[1] - n[1] * r;
       cz = p[2] - n[2] * r;
-      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds)) hi = r;
+      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds, metFromAcross)) hi = r;
       else lo = r;
     }
-    out.push({ t, p, thickness: 2 * lo });
+    out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
 }
@@ -297,40 +325,74 @@ function minSample(samples: Sample[], keep: (s: Sample) => boolean = () => true)
   return best;
 }
 
-function partAt(p: V3, decl: FeatureDecl): { part: string; feature?: string; clock?: string; meets?: string[] } {
+/**
+ * Which part a place belongs to. `p` is the place on the surface; `centre`, for a
+ * thickness reading, is the middle of the metal the reading is about, and it decides
+ * between the band and a shape the tree added: the band only when it lies inside the
+ * band's own declared section (the band check's region), otherwise the added shape
+ * whose bounds hold it. Labelling by the band's envelope instead, 0.3 mm round it,
+ * called a thin overhang beside the band "the band" and advised a thicker band, which
+ * does not reach it (fact:wall-check-reads-overhang-beside-band-edge). A sheet from the
+ * thicken operation is named before the added shape round it: the place lies within
+ * half its thickness of the sheet's middle surface, and every sheet that close is named
+ * (where two meet).
+ */
+function partAt(p: V3, decl: FeatureDecl, centre?: V3): { part: string; feature?: string; clock?: string; meets?: string[] } {
   for (const pr of decl.prongs) {
     if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
       return { part: 'head', feature: pr.label, clock: pr.clock };
     }
   }
   if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: 'head', feature: 'bezel', clock: clockAt(p[0], p[1]) };
-  const [sheet, ...others] = sheetsAt(p, decl);
-  if (sheet) return { part: 'sheet', feature: sheet.label, ...(others.length ? { meets: others.map((o) => o.label) } : {}) };
+  const bandAt = () => ({ part: 'band', feature: `${Math.round(((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360)}° round the band from the top` });
+  const sheetPart = (q: V3) => {
+    const [sheet, ...others] = sheetsAt(q, decl);
+    return sheet ? { part: 'sheet', feature: sheet.label, ...(others.length ? { meets: others.map((o) => o.label) } : {}) } : null;
+  };
+  if (centre) {
+    const b = decl.band;
+    if (b) {
+      const rho = Math.hypot(centre[0], centre[2]);
+      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
+    }
+    const sheet = sheetPart(centre);
+    if (sheet) return sheet;
+    const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
+    if (holding.length) return { part: 'added shape', feature: holding.map((a) => a.id).join(', ') };
+    return { part: 'piece' };
+  }
+  const sheet = sheetPart(p);
+  if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
-    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) {
-      const deg = ((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360;
-      return { part: 'band', feature: `${Math.round(deg)}° round the band from the top` };
-    }
+    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
   }
   return { part: 'piece' };
 }
 
-function whereOf(p: V3, decl: FeatureDecl, what: string): Where {
-  const a = partAt(p, decl);
-  const at = a.feature ? `${a.feature}${a.clock && a.part === 'head' ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ''}` : a.part;
-  const on = a.part === 'sheet' ? `the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}` : `the ${a.part}: ${at}`;
-  return {
-    part: a.part,
-    ...(a.feature ? { feature: a.feature } : {}),
-    ...(a.clock ? { clock: a.clock } : {}),
-    ...(a.meets ? { meets: a.meets } : {}),
-    point_mm: pt(p),
-    description: `${what} on ${on}`,
-  };
+/** Whether a point lies in an added shape's bounds (a hair's tolerance for points on them). */
+function inBox(a: AddedDecl, c: V3): boolean {
+  return [0, 1, 2].every((k) => c[k]! >= a.min[k]! - 1e-3 && c[k]! <= a.max[k]! + 1e-3);
 }
 
-const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it";
+/** "flange", or "a" or "b" when the bounds of more than one added shape hold the place. */
+export function quoteIds(ids: string): string {
+  return ids
+    .split(', ')
+    .map((id) => `"${id}"`)
+    .join(' or ');
+}
+
+function whereOf(p: V3, decl: FeatureDecl, what: string, centre?: V3): Where {
+  const a = partAt(p, decl, centre);
+  const where = { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), ...(a.meets ? { meets: a.meets } : {}), point_mm: pt(p) };
+  if (a.part === 'added shape') return { ...where, description: `${what} in the added shape ${quoteIds(a.feature!)}` };
+  if (a.part === 'sheet') return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}` };
+  const at = a.feature ? `${a.feature}${a.clock && a.part === 'head' ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ''}` : a.part;
+  return { ...where, description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
+}
+
+const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 
 /** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
 function onProngColumn(p: V3, decl: FeatureDecl): boolean {
@@ -347,7 +409,7 @@ function wallEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDec
     result: m.thickness >= L.wall ? 'pass' : 'fail',
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, 'thinnest wall'),
+    where: whereOf(m.p, decl, 'thinnest wall', m.centre),
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`,
   };
 }
@@ -362,7 +424,7 @@ function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: Feature
     result: m.thickness >= L.detail ? 'pass' : 'fail',
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, 'the thinnest feature'),
+    where: whereOf(m.p, decl, 'the thinnest feature', m.centre),
     method: MAXSPHERE,
   };
 }

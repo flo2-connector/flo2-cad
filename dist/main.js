@@ -21659,6 +21659,8 @@ var Bvh = class {
   #nodes = 0;
   #triMin;
   #triMax;
+  /** Scratch for the nearest point found by distSq and anyWithin. */
+  #q = new Float64Array(3);
   constructor(pos, tri) {
     this.pos = pos;
     this.tri = tri;
@@ -21735,8 +21737,11 @@ var Bvh = class {
     this.#right[node2] = this.#build(mid, end);
     return node2;
   }
-  /** Squared distance from (px, py, pz) to triangle t (Ericson 5.1.5), allocation-free. */
-  distSq(px, py, pz, t) {
+  /**
+   * The point of triangle t nearest (px, py, pz) (Ericson 5.1.5), written into `out`, allocation-free.
+   * Returns true when it lies inside the face, false when it lies on an edge or at a corner.
+   */
+  closestPoint(px, py, pz, t, out) {
     const P = this.pos, T = this.tri;
     const a = T[t * 3] * 3, b = T[t * 3 + 1] * 3, c = T[t * 3 + 2] * 3;
     const ax = P[a], ay = P[a + 1], az = P[a + 2];
@@ -21745,6 +21750,7 @@ var Bvh = class {
     const apx = px - ax, apy = py - ay, apz = pz - az;
     const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
     let qx, qy, qz;
+    let inFace = false;
     if (d1 <= 0 && d2 <= 0) {
       qx = ax;
       qy = ay;
@@ -21784,9 +21790,19 @@ var Bvh = class {
         qx = ax + abx * v + acx * w;
         qy = ay + aby * v + acy * w;
         qz = az + abz * v + acz * w;
+        inFace = true;
       }
     }
-    const dx = px - qx, dy = py - qy, dz = pz - qz;
+    out[0] = qx;
+    out[1] = qy;
+    out[2] = qz;
+    return inFace;
+  }
+  /** Squared distance from (px, py, pz) to triangle t, allocation-free. */
+  distSq(px, py, pz, t) {
+    const q = this.#q;
+    this.closestPoint(px, py, pz, t, q);
+    const dx = px - q[0], dy = py - q[1], dz = pz - q[2];
     return dx * dx + dy * dy + dz * dz;
   }
   /** Squared distance from p to the nearest triangle, searching no further than maxDist. */
@@ -21825,10 +21841,15 @@ var Bvh = class {
     }
     return d;
   }
-  /** Whether some triangle that passes `keep` lies closer than r to p. */
-  anyWithin(p, r, keep) {
+  /**
+   * Whether some triangle that passes `keep` lies closer than r to p and, when `meets` is
+   * given, passes it too: it is handed the triangle's point nearest p and whether that point
+   * lies inside its face (false on an edge or at a corner).
+   */
+  anyWithin(p, r, keep, meets) {
     if (this.n === 0) return false;
     const r22 = r * r;
+    const q = this.#q;
     const stack = [0];
     while (stack.length) {
       const node2 = stack.pop();
@@ -21838,7 +21859,9 @@ var Bvh = class {
         for (let i = s; i < e; i++) {
           const t = this.#order[i];
           if (!keep(t)) continue;
-          if (this.distSq(p[0], p[1], p[2], t) < r22) return true;
+          const inFace = this.closestPoint(p[0], p[1], p[2], t, q);
+          const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
+          if (dx * dx + dy * dy + dz * dz < r22 && (!meets || meets(t, q, inFace))) return true;
         }
       } else {
         stack.push(this.#left[node2], this.#right[node2]);
@@ -22186,15 +22209,21 @@ function sampleThickness(bvh, S) {
       const v = T[u * 3] * 3;
       return (cx - P[v]) * S[u * 3] + (cy - P[v + 1]) * S[u * 3 + 1] + (cz - P[v + 2]) * S[u * 3 + 2] < 1e-7;
     };
+    const metFromAcross = (_u, q, inFace) => {
+      if (inFace) return true;
+      const dx = q[0] - cx, dy = q[1] - cy, dz = q[2] - cz;
+      const l = Math.hypot(dx, dy, dz);
+      return l === 0 || (dx * n[0] + dy * n[1] + dz * n[2]) / l < -0.25;
+    };
     for (let i = 0; i < 16 && hi - lo > 5e-4; i++) {
       const r = (lo + hi) / 2;
       cx = p[0] - n[0] * r;
       cy = p[1] - n[1] * r;
       cz = p[2] - n[2] * r;
-      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds)) hi = r;
+      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds, metFromAcross)) hi = r;
       else lo = r;
     }
-    out.push({ t, p, thickness: 2 * lo });
+    out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
 }
@@ -22203,38 +22232,53 @@ function minSample(samples, keep = () => true) {
   for (const s of samples) if (keep(s) && (!best || s.thickness < best.thickness)) best = s;
   return best;
 }
-function partAt(p, decl) {
+function partAt(p, decl, centre) {
   for (const pr of decl.prongs) {
     if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
       return { part: "head", feature: pr.label, clock: pr.clock };
     }
   }
   if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]) };
-  const [sheet, ...others] = sheetsAt(p, decl);
-  if (sheet) return { part: "sheet", feature: sheet.label, ...others.length ? { meets: others.map((o) => o.label) } : {} };
+  const bandAt = () => ({ part: "band", feature: `${Math.round((Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360)}\xB0 round the band from the top` });
+  const sheetPart = (q) => {
+    const [sheet2, ...others] = sheetsAt(q, decl);
+    return sheet2 ? { part: "sheet", feature: sheet2.label, ...others.length ? { meets: others.map((o) => o.label) } : {} } : null;
+  };
+  if (centre) {
+    const b = decl.band;
+    if (b) {
+      const rho = Math.hypot(centre[0], centre[2]);
+      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
+    }
+    const sheet2 = sheetPart(centre);
+    if (sheet2) return sheet2;
+    const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
+    if (holding.length) return { part: "added shape", feature: holding.map((a) => a.id).join(", ") };
+    return { part: "piece" };
+  }
+  const sheet = sheetPart(p);
+  if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
-    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) {
-      const deg = (Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360;
-      return { part: "band", feature: `${Math.round(deg)}\xB0 round the band from the top` };
-    }
+    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
   }
   return { part: "piece" };
 }
-function whereOf(p, decl, what) {
-  const a = partAt(p, decl);
-  const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
-  const on = a.part === "sheet" ? `the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` : `the ${a.part}: ${at2}`;
-  return {
-    part: a.part,
-    ...a.feature ? { feature: a.feature } : {},
-    ...a.clock ? { clock: a.clock } : {},
-    ...a.meets ? { meets: a.meets } : {},
-    point_mm: pt(p),
-    description: `${what} on ${on}`
-  };
+function inBox(a, c) {
+  return [0, 1, 2].every((k) => c[k] >= a.min[k] - 1e-3 && c[k] <= a.max[k] + 1e-3);
 }
-var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it";
+function quoteIds(ids) {
+  return ids.split(", ").map((id) => `"${id}"`).join(" or ");
+}
+function whereOf(p, decl, what, centre) {
+  const a = partAt(p, decl, centre);
+  const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, ...a.meets ? { meets: a.meets } : {}, point_mm: pt(p) };
+  if (a.part === "added shape") return { ...where, description: `${what} in the added shape ${quoteIds(a.feature)}` };
+  if (a.part === "sheet") return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` };
+  const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
+  return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
+}
+var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
 }
@@ -22248,7 +22292,7 @@ function wallEntry(bvh, samples, L2, decl) {
     result: m.thickness >= L2.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, "thinnest wall"),
+    where: whereOf(m.p, decl, "thinnest wall", m.centre),
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`
   };
 }
@@ -22262,7 +22306,7 @@ function detailEntry(_bvh, samples, L2, decl) {
     result: m.thickness >= L2.detail ? "pass" : "fail",
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, "the thinnest feature"),
+    where: whereOf(m.p, decl, "the thinnest feature", m.centre),
     method: MAXSPHERE
   };
 }
@@ -24586,7 +24630,12 @@ function buildWith(k, A, tree, opts) {
     metal = A.t(A.t(head.subtract(finger)).add(band));
   }
   const sheets = [];
-  for (const extra of v.extras) metal = A.t(metal.add(A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets }))));
+  for (const extra of v.extras) {
+    const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets }));
+    const bb2 = shape.boundingBox();
+    (decl.added ??= []).push({ id: extra.id, min: [...bb2.min], max: [...bb2.max] });
+    metal = A.t(metal.add(shape));
+  }
   if (sheets.length) decl.sheets = sheets;
   const scale2 = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
   if (scale2 !== 1) {
@@ -24643,6 +24692,10 @@ function scaleDecl(d, s) {
     d.bezel.outer = d.bezel.outer.map(([x, y]) => [x * s, y * s]);
     d.bezel.zBottom *= s;
     d.bezel.nominalWall *= s;
+  }
+  for (const a of d.added ?? []) {
+    a.min = [a.min[0] * s, a.min[1] * s, a.min[2] * s];
+    a.max = [a.max[0] * s, a.max[1] * s, a.max[2] * s];
   }
   for (const sh of d.sheets ?? []) {
     sh.points = sh.points.map(([x, y, z]) => [x * s, y * s, z * s]);
@@ -25066,6 +25119,9 @@ function fixFor(e, v, metal) {
       if (e.where?.part === "sheet" && sheetNode(v, part)) {
         const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
         return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+      }
+      if (e.where?.part === "added shape") {
+        return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
       }
       return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
     }
