@@ -111,6 +111,29 @@ describe('reply shapes over MCP (contract §1, §3, §4)', () => {
     }
   });
 
+  it('an agent can find and use the thicken operation: the tools say how, describe_piece lists its settings, and a petal previews', async () => {
+    const { tools } = await client.listTools();
+    assert.match(tools.find((t) => t.name === 'change_piece')!.description!, /cupped or curled petal or leaf \("thicken"\)/);
+    assert.match(tools.find((t) => t.name === 'check_piece')!.description!, /each thickened sheet .* at least 0\.8 mm, measured square to its surface/);
+    const started = await call('start_piece', { template: 'plain_band', ring_size: { system: 'US', size: '7' }, name: 'petal-ring', preview: false });
+    const d = await call('describe_piece', {});
+    assert.match(texts(d), /- thicken \{outline \(\[x, y\] points in mm\), thickness \(mm\), surface \(a word\), radius \(mm\), axis \(a word\), round_corners \(mm\)\}: a thin sheet/);
+    const tree = JSON.parse(bytes(started, 'cadfile:///petal-ring.tree.json').toString('utf8'));
+    tree.root.children.push({
+      id: 'lift',
+      op: 'translate',
+      params: { z: '10.2 mm' },
+      children: [{ id: 'petal_1', op: 'thicken', params: { outline: [['-1.5 mm', '-2 mm'], ['1.5 mm', '-2 mm'], ['2 mm', '2 mm'], ['0 mm', '4 mm'], ['-2 mm', '2 mm']], thickness: '1.0 mm', surface: 'sphere', radius: '8 mm', round_corners: '0.5 mm' } }],
+    });
+    const changed = await call('change_piece', { tree });
+    assert.equal(changed.isError, false, texts(changed));
+    assert.deepEqual(Object.keys(files(changed)).sort(), ['cadfile:///petal-ring.preview.png', 'cadfile:///petal-ring.tree.json']);
+    assert.match(texts(changed), /Plus 1 added shape\(s\): "lift"/);
+    const tight = await call('change_piece', { set: { 'petal_1.radius': '3 mm' }, preview: false });
+    assert.equal(tight.isError, true);
+    assert.match(texts(tight), /tree\.root\.children\[1\]\.children\[0\]\.params\.radius: 3 mm curves a 1 mm sheet too tightly/);
+  });
+
   it('malformed calls are isError and name the field path', async () => {
     const noUnit = await call('change_piece', { set: { prong_thickness: 1.4 } });
     assert.equal(noUnit.isError, true);

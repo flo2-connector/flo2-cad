@@ -12,10 +12,11 @@
 // coarser (owner, round 2, Q2).
 
 import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
-import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, StoneDecl } from '../checker/features.js';
+import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
 import type { PieceTree, PieceView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
 import { buildOp } from './ops.js';
+import { IDENTITY } from './thicken.js';
 import { stoneShape, type StoneSpec } from './stones.js';
 
 /** Per direction: a doubly curved facet (a torus, a domed band) adds both directions' chords, so each is half the 0.01 mm limit, less a margin. */
@@ -203,7 +204,7 @@ export async function buildPiece(tree: PieceTree, opts: { tol: number; applyShri
   }
 }
 
-function polygonsToMesh(m: Manifold): MeshOut {
+export function polygonsToMesh(m: Manifold): MeshOut {
   const mesh = m.getMesh();
   const np = mesh.numProp;
   const nv = mesh.vertProperties.length / np;
@@ -321,8 +322,11 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
     metal = A.t(A.t(head.subtract(finger)).add(band));
   }
 
-  // Any operations the agent added beside the band and head.
-  for (const extra of v.extras) metal = A.t(metal.add(A.t(buildOp(k, A, extra as TreeNode, tol))));
+  // Any operations the agent added beside the band and head. A thickened sheet among
+  // them declares itself to the checker (its nominal thickness and middle surface).
+  const sheets: SheetDecl[] = [];
+  for (const extra of v.extras) metal = A.t(metal.add(A.t(buildOp(k, A, extra as TreeNode, tol, { m: IDENTITY, sheets }))));
+  if (sheets.length) decl.sheets = sheets;
 
   const scale = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
   if (scale !== 1) {
@@ -389,6 +393,11 @@ function scaleDecl(d: FeatureDecl, s: number): void {
     d.bezel.outer = d.bezel.outer.map(([x, y]) => [x * s, y * s]);
     d.bezel.zBottom *= s;
     d.bezel.nominalWall *= s;
+  }
+  for (const sh of d.sheets ?? []) {
+    sh.points = sh.points.map(([x, y, z]) => [x * s, y * s, z * s]);
+    sh.nominalThickness *= s;
+    sh.spacing *= s;
   }
 }
 

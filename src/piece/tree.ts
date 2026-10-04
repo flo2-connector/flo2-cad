@@ -13,6 +13,19 @@
 import { CallError, at } from '../errors.js';
 import { METAL_IDS, METALS, type MetalId } from '../metals.js';
 import { anyQuantity, caratText, lengthMm, looksLikeQuantity, percent, ringInnerDiameterMm, type RingSize } from '../units.js';
+import {
+  CYLINDER_MAX_DEG,
+  MIN_RADIUS_PER_THICKNESS,
+  RADIUS_MAX_MM,
+  reachDeg,
+  ROUND_CORNERS_MAX_MM,
+  SHEET_AXES,
+  signedArea2,
+  SPHERE_MAX_DEG,
+  SURFACES,
+  THICKNESS_RANGE_MM,
+  type Surface,
+} from '../library/thicken.js';
 
 export const TREE_FORMAT = 'flo2-cad.tree/1';
 
@@ -58,6 +71,7 @@ export const OPERATIONS = [
   'cylinder',
   'box',
   'torus',
+  'thicken',
 ] as const;
 export type Operation = (typeof OPERATIONS)[number];
 
@@ -519,7 +533,7 @@ function validateNode(v: unknown, path: string, ids: Set<string>, inBlend: boole
   if (op && ['union', 'difference', 'intersection', 'smooth_union', 'translate', 'rotate', 'mirror'].includes(op) && kids === 0) {
     throw new CallError(at(path, 'children'), `a ${op} needs at least one child.`);
   }
-  if (op && ['sphere', 'cylinder', 'box', 'torus', 'sweep', 'revolve', 'extrude'].includes(op) && kids > 0) {
+  if (op && ['sphere', 'cylinder', 'box', 'torus', 'sweep', 'revolve', 'extrude', 'thicken'].includes(op) && kids > 0) {
     throw new CallError(at(path, 'children'), `a ${op} is a shape and has no children.`);
   }
 }
@@ -598,7 +612,7 @@ function validateBezel(p: Record<string, unknown>, path: string): void {
 }
 
 /** Each operation's settings, with the unit each takes. */
-export const OP_PARAMS: Readonly<Record<Operation, Readonly<Record<string, 'length' | 'angle' | 'points2' | 'points3' | 'plane' | 'boolean'>>>> = {
+export const OP_PARAMS: Readonly<Record<Operation, Readonly<Record<string, 'length' | 'angle' | 'points2' | 'points3' | 'plane' | 'boolean' | 'word'>>>> = {
   union: {},
   difference: {},
   intersection: {},
@@ -613,6 +627,30 @@ export const OP_PARAMS: Readonly<Record<Operation, Readonly<Record<string, 'leng
   extrude: { points: 'points2', height: 'length' },
   revolve: { points: 'points2', degrees: 'angle' },
   sweep: { radius: 'length', path: 'points3', closed: 'boolean' },
+  thicken: { outline: 'points2', thickness: 'length', surface: 'word', radius: 'length', axis: 'word', round_corners: 'length' },
+};
+
+/**
+ * What each operation makes, for describe_piece: the words an agent reads to add a
+ * shape of its own. Each starts at the origin; place it with translate and rotate.
+ */
+export const OP_HELP: Readonly<Record<Operation, string>> = {
+  union: 'joins its children into one solid.',
+  difference: 'its first child, with every later child cut away.',
+  intersection: 'only what all its children share.',
+  smooth_union: 'joins its children with a fillet of `radius`; it can blend sphere, cylinder, box, torus, sweep and the transforms and unions of those.',
+  translate: 'moves its children by x, y and z.',
+  rotate: 'turns its children about x, then y, then z.',
+  mirror: 'reflects its children through the plane "xy", "yz" or "xz".',
+  sphere: 'a ball of `radius`, centred on the origin.',
+  cylinder: 'a round rod of `radius`, standing `height` tall on the origin along z.',
+  box: 'a block x by y by z, centred on the origin.',
+  torus: 'a ring round z, `major_radius` to the middle of its wire, the wire `minor_radius` thick.',
+  extrude: 'a closed 2D outline `points` [["x mm", "y mm"], ...] raised `height` along z.',
+  revolve: 'a closed 2D profile `points` (x the radius, y the height) turned round z, all the way or `degrees`.',
+  sweep: 'a round wire of `radius` along the 3D `path` [["x mm", "y mm", "z mm"], ...]; `closed` joins its ends.',
+  thicken:
+    'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60°). The outline stays within 90° round a sphere and 150° round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.',
 };
 
 const REQUIRED_OP_PARAMS: Readonly<Partial<Record<Operation, readonly string[]>>> = {
@@ -625,6 +663,7 @@ const REQUIRED_OP_PARAMS: Readonly<Partial<Record<Operation, readonly string[]>>
   extrude: ['points', 'height'],
   revolve: ['points'],
   sweep: ['radius', 'path'],
+  thicken: ['outline', 'thickness'],
 };
 
 function validateOp(op: Operation, p: Record<string, unknown>, path: string): void {
@@ -643,6 +682,8 @@ function validateOp(op: Operation, p: Record<string, unknown>, path: string): vo
       if (!['xy', 'yz', 'xz'].includes(v as string)) throw new CallError(kp, 'the mirror plane is "xy", "yz" or "xz".');
     } else if (kind === 'boolean') {
       if (typeof v !== 'boolean') throw new CallError(kp, 'must be true or false.');
+    } else if (kind === 'word') {
+      if (typeof v !== 'string') throw new CallError(kp, 'must be a word in quotes, such as "sphere".');
     } else {
       const dim = kind === 'points2' ? 2 : 3;
       if (!Array.isArray(v) || v.length < 2) throw new CallError(kp, `a list of at least 2 points, each [${dim === 2 ? '"x mm", "y mm"' : '"x mm", "y mm", "z mm"'}].`);
@@ -651,6 +692,64 @@ function validateOp(op: Operation, p: Record<string, unknown>, path: string): vo
         pt.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
       });
       if (kind === 'points2' && v.length < 3) throw new CallError(kp, 'a profile needs at least 3 points.');
+    }
+  }
+  if (op === 'thicken') validateThicken(p, path);
+}
+
+/**
+ * A thicken's settings beyond their units (library/thicken.ts has the form). What the
+ * library can BUILD is checked here; the casting limit on the thickness is the
+ * checker's, so a too-thin sheet can still be drawn and previewed, and is then refused.
+ */
+function validateThicken(p: Record<string, unknown>, path: string): void {
+  const surface = (p['surface'] ?? 'flat') as Surface;
+  if (!SURFACES.includes(surface)) {
+    throw new CallError(at(path, 'surface'), `must be "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way); got ${JSON.stringify(p['surface'])}.`);
+  }
+  const t = lengthMm(p['thickness'], at(path, 'thickness'));
+  const [tMin, tMax] = THICKNESS_RANGE_MM;
+  if (t < tMin || t > tMax) {
+    throw new CallError(at(path, 'thickness'), `${t} mm is outside what the library builds (${tMin} to ${tMax} mm). It is measured square to the surface; a casting needs at least the metal's wall minimum (0.8 mm).`);
+  }
+  if (surface === 'flat') {
+    for (const k of ['radius', 'axis']) {
+      if (p[k] !== undefined) throw new CallError(at(path, k), `a flat sheet has no ${k}; leave it out, or set "surface" to "sphere" or "cylinder".`);
+    }
+  } else {
+    if (p['radius'] === undefined) throw new CallError(at(path, 'radius'), `a ${surface} needs the radius its middle surface curves at, e.g. "8 mm": the smaller the radius, the deeper the ${surface === 'sphere' ? 'cup' : 'curl'}.`);
+    const r = lengthMm(p['radius'], at(path, 'radius'));
+    if (r < MIN_RADIUS_PER_THICKNESS * t - 1e-9) {
+      throw new CallError(
+        at(path, 'radius'),
+        `${r} mm curves a ${t} mm sheet too tightly: the radius must be at least ${MIN_RADIUS_PER_THICKNESS} times the thickness (${Math.round(MIN_RADIUS_PER_THICKNESS * t * 1000) / 1000} mm here). Use a larger radius, or a thinner sheet. Below that the casting check reads the sheet's edge thinner than it is.`,
+      );
+    }
+    if (r > RADIUS_MAX_MM) throw new CallError(at(path, 'radius'), `${r} mm is more than the library builds (${RADIUS_MAX_MM} mm); use "surface": "flat" for a sheet this flat.`);
+  }
+  if (p['axis'] !== undefined) {
+    if (surface !== 'cylinder') throw new CallError(at(path, 'axis'), 'only a cylinder has an axis; leave it out.');
+    if (!SHEET_AXES.includes(p['axis'] as 'x' | 'y')) throw new CallError(at(path, 'axis'), `the line the sheet curls round: "x" (it rises as y grows) or "y" (it rises as x grows); got ${JSON.stringify(p['axis'])}.`);
+  }
+  if (p['round_corners'] !== undefined) {
+    const rc = lengthMm(p['round_corners'], at(path, 'round_corners'));
+    if (rc < 0 || rc > ROUND_CORNERS_MAX_MM) throw new CallError(at(path, 'round_corners'), `${rc} mm is outside what the library builds (0 to ${ROUND_CORNERS_MAX_MM} mm).`);
+  }
+  const outline = (p['outline'] as unknown[][]).map((pt, i) => [lengthMm(pt[0], at(at(at(path, 'outline'), i), 0)), lengthMm(pt[1], at(at(at(path, 'outline'), i), 1))] as [number, number]);
+  if (Math.abs(signedArea2(outline)) / 2 < 0.01) throw new CallError(at(path, 'outline'), 'the outline encloses no area; give the sheet\'s edge as a closed loop of points, in order round it.');
+  if (surface !== 'flat') {
+    const r = lengthMm(p['radius'], at(path, 'radius'));
+    const axis = (p['axis'] as 'x' | 'y' | undefined) ?? 'x';
+    const reach = reachDeg(outline, { surface, radius: r, axis });
+    const max = surface === 'sphere' ? SPHERE_MAX_DEG : CYLINDER_MAX_DEG;
+    if (reach > max + 1e-9) {
+      const minR = Math.ceil(((reach / max) * r) * 10) / 10;
+      throw new CallError(
+        at(path, 'outline'),
+        surface === 'sphere'
+          ? `the outline reaches ${Math.round(((reach * Math.PI) / 180) * r * 100) / 100} mm from the origin (the bottom of the cup), more than a quarter of the way round a sphere of radius ${r} mm (${SPHERE_MAX_DEG}°). Use a radius of at least ${minR} mm, or a smaller outline.`
+          : `the outline reaches ${Math.round(((reach * Math.PI) / 180) * r * 100) / 100} mm across the cylinder's axis from the origin, more than ${CYLINDER_MAX_DEG}° round a cylinder of radius ${r} mm. Use a radius of at least ${minR} mm, or a smaller outline.`,
+      );
     }
   }
 }

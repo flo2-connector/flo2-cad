@@ -10,7 +10,9 @@ import { writeBinaryStl } from './files/stl.js';
 import { write3mf } from './files/threemf.js';
 import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Built } from './library/build.js';
 import { METALS, SETTING, type Metal } from './metals.js';
-import { readPiece, STONE_DEFAULTS, type PieceTree, type PieceView } from './piece/tree.js';
+import { findNode, readPiece, STONE_DEFAULTS, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
+import { lengthMm } from './units.js';
+import { reachDeg, sheetSpec } from './library/thicken.js';
 import { renderPreview, type RenderItem, type ViewName } from './render/render.js';
 import { ENGINE_NAME, ENGINE_VERSION, KERNEL_NAME, KERNEL_VERSION } from './version.js';
 
@@ -113,6 +115,37 @@ function suggestThicker(current: number, measured: number, limit: number): numbe
   return Math.ceil((current + (limit - measured) + 0.1) * 10) / 10;
 }
 
+/** A thicken node among the piece's added shapes, by id. */
+function sheetNode(v: PieceView, id: string): TreeNode | undefined {
+  for (const e of v.extras) {
+    const n = findNode(e, id);
+    if (n?.op === 'thicken') return n;
+  }
+  return undefined;
+}
+
+/** A sheet's thickness as the tree sets it (before any shrinkage allowance). */
+function sheetThickness(v: PieceView, id: string): number | undefined {
+  const n = sheetNode(v, id);
+  return n ? lengthMm(n.params?.['thickness'], `${id}.thickness`) : undefined;
+}
+
+/**
+ * The round_corners that leaves no part of a sheet narrower than `across` mm on its
+ * surface. Rounding the outline by r leaves nothing narrower than 2r in the outline;
+ * laid on a sphere, widths narrow by sin θ / θ at θ round from the origin, so r is
+ * taken at the outline's farthest reach.
+ */
+function roundingFor(n: TreeNode | undefined, across: number): number {
+  let narrowing = 1;
+  if (n) {
+    const s = sheetSpec(n);
+    const th = (reachDeg(s.outline, s) * Math.PI) / 180;
+    if (s.surface === 'sphere' && th > 1e-6) narrowing = Math.sin(th) / th;
+  }
+  return Math.ceil(((across / 2 + 0.05) / narrowing) * 20) / 20;
+}
+
 /** What to thicken and where, in the person's terms, for one failing check. */
 function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
   if (e.result === 'pass') return null;
@@ -144,6 +177,15 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
         ? `Raise the bezel lip: it rises ${e.value} mm above the girdle, too little to be pushed over the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`
         : `Lower the bezel lip: it rises ${e.value} mm above the girdle and would cover too much of the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`;
     }
+    case 'sheet': {
+      const each = (e.failing ?? []).map((f) => {
+        const cur = sheetThickness(v, f.label) ?? f.nominal ?? f.value;
+        return { f, cur, to: Math.max(1.0, suggestThicker(cur, f.value, metal.limits.wall)) };
+      });
+      const lines = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${metal.limits.wall.toFixed(1)} mm.`);
+      const set = each.map(({ f, to }) => `"${f.label}.thickness": "${to} mm"`).join(', ');
+      return `${lines.join(' ')} Change: set {${set}}.`;
+    }
     case 'prong_grip':
       return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join('; ')}; each must reach ${SETTING.gripMin} mm to hold the stone. Change: set {"head.prong_grip": "0.2 mm"}.`;
     case 'wall': {
@@ -151,9 +193,27 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
       if (/prong/.test(part) && h?.kind === 'prong_head') return `Thicken ${part}: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise prong_thickness.`;
       if (part === 'bezel' && h?.kind === 'bezel') return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise bezel_wall.`;
       if (e.where?.part === 'band') return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${metal.limits.wall.toFixed(1)} mm. Raise band_thickness.`;
+      if (e.where?.part === 'sheet' && e.where.meets?.length) {
+        const names = [part, ...e.where.meets].map((x) => `"${x}"`).join(' and ');
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is ${e.value} mm across, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+      }
+      if (e.where?.part === 'sheet' && sheetNode(v, part)) {
+        // The sheet itself is thick enough (the sheet check says so, or this advice is
+        // dropped), so the metal is thin some other way here: across a narrow part of
+        // the outline, or in a wedge where the sheet joins other metal.
+        const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
+        return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+      }
       return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
     }
     case 'detail':
+      if (e.where?.part === 'sheet' && e.where.feature && e.where.meets?.length) {
+        const names = [e.where.feature, ...e.where.meets].map((x) => `"${x}"`).join(' and ');
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is only ${e.value} mm across (the finest detail must be ${metal.limits.detail} mm). Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+      }
+      if (e.where?.part === 'sheet' && e.where.feature && sheetNode(v, e.where.feature)) {
+        return `The finest detail, ${e.value} mm across, is at the sheet "${e.where.feature}", at ${JSON.stringify(e.where.point_mm)} mm; it must be at least ${metal.limits.detail} mm. Widen or round that part of its outline (set {"${e.where.feature}.round_corners": "${roundingFor(sheetNode(v, e.where.feature), metal.limits.wall)} mm"}), or, if it is a wedge where the sheet joins other metal, move the sheet so it meets that metal squarely.`;
+      }
       return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${metal.limits.detail} mm, or remove it.`;
     case 'gap':
       return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
@@ -207,10 +267,11 @@ export async function checkPiece(tree: PieceTree, mode: 'check' | 'export'): Pro
   // detail checks that tripped on the same feature need no second instruction.
   const failingProngs = new Set((withFix.find((e) => e.id === 'prong' && e.result === 'fail')?.failing ?? []).map((f) => f.label));
   const bezelFails = withFix.some((e) => e.id === 'bezel_wall' && e.result === 'fail');
+  const failingSheets = new Set((withFix.find((e) => e.id === 'sheet' && e.result === 'fail')?.failing ?? []).map((f) => f.label));
   for (const e of withFix) {
     if ((e.id === 'wall' || e.id === 'detail') && e.result === 'fail') {
       const f = e.where?.feature;
-      if ((f && failingProngs.has(f)) || (f === 'bezel' && bezelFails)) e.fix = null;
+      if ((f && failingProngs.has(f)) || (f === 'bezel' && bezelFails) || (e.where?.part === 'sheet' && f && failingSheets.has(f))) e.fix = null;
     }
   }
   const verdict = withFix.every((e) => e.result === 'pass') ? 'pass' : 'fail';

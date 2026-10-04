@@ -1,6 +1,6 @@
 ---
 name: design-jewelry
-description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, or a band for printing and casting. It covers what to ask, units, stone sizes from a grading report, refusals and what to thicken, and platinum.
+description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, or a ring with petals, leaves or a flower on it, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, refusals and what to thicken, and platinum.
 compatibility: Needs the flo2-cad MCP server, which provides start_piece, change_piece, preview_piece, check_piece, export_for_casting and describe_piece.
 ---
 
@@ -88,8 +88,79 @@ The limits, so you can explain them:
 | The surface | within 0.01 mm of the intended shape |
 | A bezel lip | covers 50 % to 75 % of the stone's crown |
 | Each prong's reach over the girdle | at least 0.15 mm |
+| A petal or leaf (a thickened sheet) | at least 0.8 mm, measured square to its surface |
 
 A **too-thin prong or bezel can still be drawn and previewed**. It just will not export. Previews are never refused.
+
+## Petals, leaves and other shapes of your own
+
+The templates make bands and solitaires. Anything else, such as a flower on a ring, is added to the ring's recipe as
+shapes. `describe_piece` lists every shape and operation with its settings.
+
+- **How.** Add nodes to the recipe's top node (its `root`) `children`, beside the band, and pass the whole edited
+  recipe as `tree` to `change_piece`. A node is `{"id": "petal_1", "op": "thicken", "params": {...}}`. Ids are
+  lower-case letters, digits and `_`, unique in the piece.
+- **Where.** X runs across the hand, Y along the finger, and Z up through the top of the ring. The top of the band is
+  at z = half the inner diameter + the band thickness (`describe_piece` gives the inner diameter). Every shape starts
+  at the origin; place it with `translate` and `rotate`.
+- **Name the parts so you can talk about them.** A refusal names a shape by its id ("the sheet "petal_3""), and
+  `set` reaches its settings as `"<id>.<setting>"`, for example `{"petal_3.thickness": "1.0 mm"}`.
+
+### Cupped and curled petals and leaves: `thicken`
+
+`thicken` makes a thin sheet with a stated thickness that follows a curved surface, like a petal domed from sheet
+metal. Its edges stay square to the surface, so nothing thins to a knife edge.
+
+- `outline`: the petal laid flat, as you would cut it from sheet, as `[["x mm", "y mm"], ...]` round its edge. Put its
+  base near the origin and its tip along +y.
+- `thickness`: measured square to the surface. Use at least 0.8 mm for casting, and 1.0 mm to be comfortable.
+- `surface`:
+  - `"sphere"`: a cup, curved the same every way. Good for cupped petals.
+  - `"cylinder"`: a curl, curved one way round `axis`. With `"axis": "x"` the petal curls up along its length. With
+    `"axis": "y"` it is fluted, with a channel down its middle.
+  - `"flat"`.
+- `radius`: how tightly it curves. Smaller is deeper. It must be at least 5 times the thickness, so 5 mm or more for a
+  1.0 mm petal; 7 to 10 mm makes a gentle cup.
+- `round_corners` (optional): rounds every corner of the outline, so no tip is sharp. About 0.5 mm suits a petal.
+
+The surface touches the origin there and rises away from it, upward, and the sheet's middle lies on it. Lengths
+along the petal are kept, so a 7 mm petal stays 7 mm long however much it is cupped. On a sphere its width narrows a
+little as it curves away: 84 % at 60° round. The outline must stay within 90° round a sphere (a quarter of the way)
+and 150° round a cylinder; the refusal says what radius would do.
+
+**A flower on a ring.** Five cupped petals round a centre disc, on a post from the top of a US 7 band 1.8 mm thick
+(its top at z = 10.46 mm). Tilt each petal about its own base, then move it out, then turn it into place. Bury the
+petal bases in the disc, and keep the petals clear of each other, or the gap check refuses the crevice between them.
+
+```json
+{"id": "post", "op": "translate", "params": {"z": "9.86 mm"}, "children": [
+  {"id": "post_rod", "op": "cylinder", "params": {"radius": "1.2 mm", "height": "2.6 mm"}}]},
+{"id": "flower", "op": "translate", "params": {"z": "12.46 mm"}, "children": [
+  {"id": "disc_lift", "op": "translate", "params": {"z": "-1.2 mm"}, "children": [
+    {"id": "disc", "op": "cylinder", "params": {"radius": "2.6 mm", "height": "2.4 mm"}}]},
+  {"id": "petal_1_turn", "op": "rotate", "params": {"z": "0 deg"}, "children": [
+    {"id": "petal_1_place", "op": "translate", "params": {"y": "1.8 mm"}, "children": [
+      {"id": "petal_1_tilt", "op": "rotate", "params": {"x": "20 deg"}, "children": [
+        {"id": "petal_1", "op": "thicken", "params": {
+          "outline": [["0.5 mm", "0 mm"], ["1.05 mm", "0.88 mm"], ["1.53 mm", "1.75 mm"], ["1.91 mm", "2.63 mm"],
+                      ["2.14 mm", "3.5 mm"], ["2.2 mm", "4.38 mm"], ["2.08 mm", "5.25 mm"], ["1.73 mm", "6.13 mm"],
+                      ["0.5 mm", "7 mm"], ["-0.5 mm", "7 mm"], ["-1.73 mm", "6.13 mm"], ["-2.08 mm", "5.25 mm"],
+                      ["-2.2 mm", "4.38 mm"], ["-2.14 mm", "3.5 mm"], ["-1.91 mm", "2.63 mm"], ["-1.53 mm", "1.75 mm"],
+                      ["-1.05 mm", "0.88 mm"], ["-0.5 mm", "0 mm"]],
+          "thickness": "1.0 mm", "surface": "sphere", "radius": "7 mm", "round_corners": "0.5 mm"}}]}]}]}]}
+```
+
+Add `petal_2` to `petal_5` the same way, turned 72, 144, 216 and 288 deg. That flower passes every casting check in
+silver and exports.
+
+**When a petal is refused**, the reply names it and says what to set:
+
+- "Thicken the sheet "petal_1": measured square to its surface it is 0.6 mm ... Change: set
+  {"petal_1.thickness": "1 mm"}."
+- A thin place across a petal that is thick enough means a pointed tip or a thin neck in its outline, or a thin wedge
+  where it meets other metal. Round the outline (the reply gives a `round_corners`), or move the petal so it meets
+  the other metal squarely.
+- Where two petals meet in a thin wedge, the reply names both. Move or turn them apart, or overlap them squarely.
 
 ## Platinum
 
