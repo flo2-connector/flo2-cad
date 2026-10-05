@@ -21,9 +21,35 @@ function xmlEscape(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Numbers as the 3MF schema's ST_Number: plain decimal, no exponent. */
-function num(v: number): string {
-  return (Math.round(v * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, '');
+/**
+ * A coordinate as the 3MF schema's ST_Number (plain decimal, no exponent): the shortest one
+ * that reads back as the very float32 the STL holds, so both casting files carry the same
+ * vertices, the ones the checker read back from the STL. Six fixed decimals, as before, are
+ * coarser than float32 below 8 mm and merged vertices the STL kept apart: the moonstone's
+ * 3MF would have collapsed 114 triangles
+ * (fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05).
+ */
+export function float32Text(v: number): string {
+  const f = Math.fround(v);
+  if (f === 0) return '0';
+  // Nine significant digits name every float32; most need fewer.
+  for (let p = 1; p < 9; p++) {
+    const s = f.toPrecision(p);
+    if (Math.fround(Number(s)) === f) return plainDecimal(s);
+  }
+  return plainDecimal(f.toPrecision(9));
+}
+
+/** A number written out without an exponent, and without trailing zeros after its point. */
+function plainDecimal(s: string): string {
+  let out = s;
+  const e = s.search(/e/i);
+  if (e >= 0) {
+    // toPrecision uses an exponent for very small or large values: write the same digits out in full.
+    const decimals = Math.max(0, (s.slice(0, e).split('.')[1]?.length ?? 0) - Number(s.slice(e + 1)));
+    out = Number(s).toFixed(decimals);
+  }
+  return out.includes('.') ? out.replace(/0+$/, '').replace(/\.$/, '') : out;
 }
 
 export function write3mf(mesh: Mesh, metadata: Readonly<Record<string, string>>): Buffer {
@@ -33,7 +59,7 @@ export function write3mf(mesh: Mesh, metadata: Readonly<Record<string, string>>)
   for (const [k, v] of Object.entries(metadata)) parts.push(`  <metadata name="${xmlEscape(k)}">${xmlEscape(v)}</metadata>\n`);
   parts.push('  <resources>\n    <object id="1" type="model">\n      <mesh>\n        <vertices>\n');
   const p = mesh.positions;
-  for (let i = 0; i < p.length; i += 3) parts.push(`          <vertex x="${num(p[i]!)}" y="${num(p[i + 1]!)}" z="${num(p[i + 2]!)}"/>\n`);
+  for (let i = 0; i < p.length; i += 3) parts.push(`          <vertex x="${float32Text(p[i]!)}" y="${float32Text(p[i + 1]!)}" z="${float32Text(p[i + 2]!)}"/>\n`);
   parts.push('        </vertices>\n        <triangles>\n');
   const t = mesh.triangles;
   for (let i = 0; i < t.length; i += 3) parts.push(`          <triangle v1="${t[i]}" v2="${t[i + 1]}" v3="${t[i + 2]}"/>\n`);
