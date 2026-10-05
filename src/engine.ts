@@ -11,6 +11,7 @@ import { write3mf } from './files/threemf.js';
 import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Across, type Built, type PieceDims } from './library/build.js';
 import { METALS, SETTING, type Metal } from './metals.js';
 import { findNode, readPiece, STONE_DEFAULTS, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
+import type { Mesh } from './kernel/manifold.js';
 import { lengthMm } from './units.js';
 import { reachDeg, sheetSpec } from './library/thicken.js';
 import { renderPreview, type RenderItem, type ViewName } from './render/render.js';
@@ -304,12 +305,14 @@ export async function checkPiece(tree: PieceTree, mode: 'check' | 'export'): Pro
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
   try {
-    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true });
+    // Each blend's level set, built once for the casting file and taken again by the reference build.
+    const meshes = new Map<string, Mesh>();
+    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false } });
     tBuild = performance.now() - t0;
     const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : 'off';
     stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${v.metal} mm shrinkage ${shrink}`);
     // The same piece, far more finely tessellated: what the surface check measures against.
-    const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true });
+    const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
     const refStl = writeBinaryStl(ref.metal, 'flo2-cad reference');
     tBuild = performance.now() - t0;
     const run = runChecks(stl, built.decl, limitsFor(metal), refStl);

@@ -20,6 +20,8 @@ export class Bvh {
   readonly normal: Float64Array;
   readonly centroid: Float64Array;
   readonly area: Float64Array;
+  /** Per triangle: the radius of the sphere round its centroid that holds it (its farthest corner). */
+  readonly reach: Float64Array;
   // Flat nodes: bbox (6), left/first, right/count, leaf flag.
   #bmin: Float64Array;
   #bmax: Float64Array;
@@ -33,6 +35,8 @@ export class Bvh {
   #triMax: Float64Array;
   /** Scratch for the nearest point found by distSq and anyWithin. */
   #q = new Float64Array(3);
+  /** Scratch stack for collectNear (the tree is split at medians, so it is about log2(n / 6) deep; one slot a level and one more). */
+  #stack = new Int32Array(256);
 
   constructor(pos: Float64Array, tri: Uint32Array) {
     this.pos = pos;
@@ -42,6 +46,7 @@ export class Bvh {
     this.normal = new Float64Array(n * 3);
     this.centroid = new Float64Array(n * 3);
     this.area = new Float64Array(n);
+    this.reach = new Float64Array(n);
     this.#triMin = new Float64Array(n * 3);
     this.#triMax = new Float64Array(n * 3);
     for (let t = 0; t < n; t++) {
@@ -60,6 +65,9 @@ export class Bvh {
         this.#triMin[t * 3 + k] = Math.min(pa, pb, pc);
         this.#triMax[t * 3 + k] = Math.max(pa, pb, pc);
       }
+      const gx = this.centroid[t * 3]!, gy = this.centroid[t * 3 + 1]!, gz = this.centroid[t * 3 + 2]!;
+      const far = (v: number) => (pos[v]! - gx) ** 2 + (pos[v + 1]! - gy) ** 2 + (pos[v + 2]! - gz) ** 2;
+      this.reach[t] = Math.sqrt(Math.max(far(a), far(b), far(c)));
     }
     const cap = Math.max(1, 2 * n);
     this.#bmin = new Float64Array(cap * 3);
@@ -243,6 +251,79 @@ export class Bvh {
         }
       } else {
         stack.push(this.#left[node]!, this.#right[node]!);
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Gathers into `into.list` (grown as needed) every triangle that may lie closer than r
+   * to (px, py, pz), and returns how many. A triangle is left out only when it provably
+   * lies further: the sphere round its centroid that holds it, or its plane, does.
+   */
+  collectNear(px: number, py: number, pz: number, r: number, into: { list: Int32Array }): number {
+    if (this.n === 0) return 0;
+    const r2 = r * r;
+    const lo = this.#bmin, hi = this.#bmax, left = this.#left, right = this.#right, first = this.#first, cnt = this.#count, order = this.#order;
+    const C = this.centroid, R = this.reach, N = this.normal;
+    const stack = this.#stack;
+    let list = into.list;
+    let top = 0, n = 0;
+    stack[top++] = 0;
+    while (top) {
+      const node = stack[--top]!;
+      const b = node * 3;
+      const dx = px < lo[b]! ? lo[b]! - px : px > hi[b]! ? px - hi[b]! : 0;
+      const dy = py < lo[b + 1]! ? lo[b + 1]! - py : py > hi[b + 1]! ? py - hi[b + 1]! : 0;
+      const dz = pz < lo[b + 2]! ? lo[b + 2]! - pz : pz > hi[b + 2]! ? pz - hi[b + 2]! : 0;
+      if (dx * dx + dy * dy + dz * dz >= r2) continue;
+      if (left[node]! >= 0) {
+        stack[top++] = left[node]!;
+        stack[top++] = right[node]!;
+        continue;
+      }
+      const e = first[node]! + cnt[node]!;
+      for (let i = first[node]!; i < e; i++) {
+        const t = order[i]!;
+        const t3 = t * 3;
+        const cx = px - C[t3]!, cy = py - C[t3 + 1]!, cz = pz - C[t3 + 2]!;
+        const out = r + R[t]! + 1e-9;
+        if (cx * cx + cy * cy + cz * cz >= out * out) continue;
+        if (Math.abs(cx * N[t3]! + cy * N[t3 + 1]! + cz * N[t3 + 2]!) >= r + 1e-9) continue;
+        if (n === list.length) {
+          const grown = new Int32Array(n * 2);
+          grown.set(list);
+          list = into.list = grown;
+        }
+        list[n++] = t;
+      }
+    }
+    return n;
+  }
+
+  /** anyWithin, the nearer child box searched first: the same answer, found sooner when it is yes. */
+  anyWithinNearestFirst(px: number, py: number, pz: number, r: number, keep: (t: number) => boolean, meets: (t: number, q: Float64Array, inFace: boolean, where: number) => boolean): boolean {
+    if (this.n === 0) return false;
+    const r2 = r * r;
+    const q = this.#q;
+    const p: V3 = [px, py, pz];
+    const stack = [0];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (this.#boxDistSq(node, p) >= r2) continue;
+      if (this.#left[node]! < 0) {
+        const s = this.#first[node]!, e = s + this.#count[node]!;
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i]!;
+          if (!keep(t)) continue;
+          const where = this.nearestOn(px, py, pz, t, q);
+          const dx = px - q[0]!, dy = py - q[1]!, dz = pz - q[2]!;
+          if (dx * dx + dy * dy + dz * dz < r2 && meets(t, q, where === IN_FACE, where)) return true;
+        }
+      } else {
+        const l = this.#left[node]!, rt = this.#right[node]!;
+        if (this.#boxDistSq(l, p) < this.#boxDistSq(rt, p)) stack.push(rt, l);
+        else stack.push(l, rt);
       }
     }
     return false;

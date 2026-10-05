@@ -21651,6 +21651,8 @@ var Bvh = class {
   normal;
   centroid;
   area;
+  /** Per triangle: the radius of the sphere round its centroid that holds it (its farthest corner). */
+  reach;
   // Flat nodes: bbox (6), left/first, right/count, leaf flag.
   #bmin;
   #bmax;
@@ -21664,6 +21666,8 @@ var Bvh = class {
   #triMax;
   /** Scratch for the nearest point found by distSq and anyWithin. */
   #q = new Float64Array(3);
+  /** Scratch stack for collectNear (the tree is split at medians, so it is about log2(n / 6) deep; one slot a level and one more). */
+  #stack = new Int32Array(256);
   constructor(pos, tri) {
     this.pos = pos;
     this.tri = tri;
@@ -21672,6 +21676,7 @@ var Bvh = class {
     this.normal = new Float64Array(n * 3);
     this.centroid = new Float64Array(n * 3);
     this.area = new Float64Array(n);
+    this.reach = new Float64Array(n);
     this.#triMin = new Float64Array(n * 3);
     this.#triMax = new Float64Array(n * 3);
     for (let t = 0; t < n; t++) {
@@ -21690,6 +21695,9 @@ var Bvh = class {
         this.#triMin[t * 3 + k] = Math.min(pa, pb, pc);
         this.#triMax[t * 3 + k] = Math.max(pa, pb, pc);
       }
+      const gx = this.centroid[t * 3], gy = this.centroid[t * 3 + 1], gz = this.centroid[t * 3 + 2];
+      const far = (v) => (pos[v] - gx) ** 2 + (pos[v + 1] - gy) ** 2 + (pos[v + 2] - gz) ** 2;
+      this.reach[t] = Math.sqrt(Math.max(far(a), far(b), far(c)));
     }
     const cap = Math.max(1, 2 * n);
     this.#bmin = new Float64Array(cap * 3);
@@ -21883,6 +21891,77 @@ var Bvh = class {
     }
     return false;
   }
+  /**
+   * Gathers into `into.list` (grown as needed) every triangle that may lie closer than r
+   * to (px, py, pz), and returns how many. A triangle is left out only when it provably
+   * lies further: the sphere round its centroid that holds it, or its plane, does.
+   */
+  collectNear(px, py, pz, r, into) {
+    if (this.n === 0) return 0;
+    const r22 = r * r;
+    const lo = this.#bmin, hi = this.#bmax, left = this.#left, right = this.#right, first = this.#first, cnt = this.#count, order = this.#order;
+    const C = this.centroid, R = this.reach, N = this.normal;
+    const stack = this.#stack;
+    let list = into.list;
+    let top = 0, n = 0;
+    stack[top++] = 0;
+    while (top) {
+      const node2 = stack[--top];
+      const b = node2 * 3;
+      const dx = px < lo[b] ? lo[b] - px : px > hi[b] ? px - hi[b] : 0;
+      const dy = py < lo[b + 1] ? lo[b + 1] - py : py > hi[b + 1] ? py - hi[b + 1] : 0;
+      const dz = pz < lo[b + 2] ? lo[b + 2] - pz : pz > hi[b + 2] ? pz - hi[b + 2] : 0;
+      if (dx * dx + dy * dy + dz * dz >= r22) continue;
+      if (left[node2] >= 0) {
+        stack[top++] = left[node2];
+        stack[top++] = right[node2];
+        continue;
+      }
+      const e = first[node2] + cnt[node2];
+      for (let i = first[node2]; i < e; i++) {
+        const t = order[i];
+        const t3 = t * 3;
+        const cx = px - C[t3], cy = py - C[t3 + 1], cz = pz - C[t3 + 2];
+        const out = r + R[t] + 1e-9;
+        if (cx * cx + cy * cy + cz * cz >= out * out) continue;
+        if (Math.abs(cx * N[t3] + cy * N[t3 + 1] + cz * N[t3 + 2]) >= r + 1e-9) continue;
+        if (n === list.length) {
+          const grown = new Int32Array(n * 2);
+          grown.set(list);
+          list = into.list = grown;
+        }
+        list[n++] = t;
+      }
+    }
+    return n;
+  }
+  /** anyWithin, the nearer child box searched first: the same answer, found sooner when it is yes. */
+  anyWithinNearestFirst(px, py, pz, r, keep, meets) {
+    if (this.n === 0) return false;
+    const r22 = r * r;
+    const q = this.#q;
+    const p = [px, py, pz];
+    const stack = [0];
+    while (stack.length) {
+      const node2 = stack.pop();
+      if (this.#boxDistSq(node2, p) >= r22) continue;
+      if (this.#left[node2] < 0) {
+        const s = this.#first[node2], e = s + this.#count[node2];
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i];
+          if (!keep(t)) continue;
+          const where = this.nearestOn(px, py, pz, t, q);
+          const dx = px - q[0], dy = py - q[1], dz = pz - q[2];
+          if (dx * dx + dy * dy + dz * dz < r22 && meets(t, q, where === IN_FACE, where)) return true;
+        }
+      } else {
+        const l = this.#left[node2], rt = this.#right[node2];
+        if (this.#boxDistSq(l, p) < this.#boxDistSq(rt, p)) stack.push(rt, l);
+        else stack.push(l, rt);
+      }
+    }
+    return false;
+  }
   /** Calls fn for every triangle closer than r to (px, py, pz). */
   forEachWithin(px, py, pz, r, fn) {
     if (this.n === 0) return;
@@ -22063,7 +22142,7 @@ function clockAt(x, y) {
   if (h === 0) h = 12;
   return `${h}:${String(total % 60).padStart(2, "0")}`;
 }
-function runChecks(stl, decl, L2, reference) {
+function runChecks(stl, decl, L3, reference) {
   const t0 = performance.now();
   let mesh;
   try {
@@ -22094,24 +22173,24 @@ function runChecks(stl, decl, L2, reference) {
     volume = w.volume;
     return w.entry;
   });
-  const surface = surfaceDirections(bvh, L2.surfaceDeviation).normal;
+  const surface = surfaceDirections(bvh, L3.surfaceDeviation).normal;
   const samples = sampleThickness(bvh, surface);
-  guard("wall", "Wall thickness", mm(L2.wall), () => wallEntry(bvh, samples, L2, decl));
-  guard("detail", "Smallest detail", mm(L2.detail), () => detailEntry(bvh, samples, L2, decl));
-  if (decl.band) guard("band", "Ring band thickness", mm(L2.band), () => bandEntry(bvh, decl.band, L2));
+  guard("wall", "Wall thickness", mm(L3.wall), () => wallEntry(bvh, samples, L3, decl));
+  guard("detail", "Smallest detail", mm(L3.detail), () => detailEntry(bvh, samples, L3, decl));
+  if (decl.band) guard("band", "Ring band thickness", mm(L3.band), () => bandEntry(bvh, decl.band, L3));
   if (decl.prongs.length) {
-    guard("prong", "Prong thickness", mm(L2.prong), () => prongEntry(bvh, decl.prongs, L2));
-    if (decl.stone) guard("prong_grip", "Prongs grip the stone", `each reaches ${mm(L2.gripMin)} over the girdle`, () => gripEntry(bvh, decl, L2));
+    guard("prong", "Prong thickness", mm(L3.prong), () => prongEntry(bvh, decl.prongs, L3));
+    if (decl.stone) guard("prong_grip", "Prongs grip the stone", `each reaches ${mm(L3.gripMin)} over the girdle`, () => gripEntry(bvh, decl, L3));
   }
   if (decl.bezel && decl.stone) {
-    guard("bezel_wall", "Bezel wall thickness", mm(L2.wall), () => bezelWallEntry(bvh, samples, decl, L2));
-    guard("bezel_lip", "Bezel lip height", `${Math.round(L2.lipMinOfCrown * 100)}-${Math.round(L2.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L2));
+    guard("bezel_wall", "Bezel wall thickness", mm(L3.wall), () => bezelWallEntry(bvh, samples, decl, L3));
+    guard("bezel_lip", "Bezel lip height", `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L3));
   }
-  if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L2.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L2));
-  guard("gap", "Smallest gap", mm(L2.gap), () => gapEntry(bvh, surface, L2));
-  guard("surface_deviation", "Surface smoothness", mm(L2.surfaceDeviation), () => {
+  if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L3.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L3));
+  guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3));
+  guard("surface_deviation", "Surface smoothness", mm(L3.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
-    return surfaceEntry(bvh, L2, readBinaryStl(reference), decl);
+    return surfaceEntry(bvh, L3, readBinaryStl(reference), decl);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
@@ -22210,6 +22289,10 @@ function sampleThickness(bvh, S) {
   const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
   const fans = vertexFans(bvh);
   const near = new Float64Array(3);
+  const near0 = { list: new Int32Array(1024) };
+  let nearC = [0, 0, 0], nearR = -1, nNear = 0;
+  let nearData = new Float64Array(1024 * PACKED);
+  const balls = new BallCandidates();
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t] < 1e-10) continue;
     const n = [S[t * 3], S[t * 3 + 1], S[t * 3 + 2]];
@@ -22242,18 +22325,167 @@ function sampleThickness(bvh, S) {
       }
       return true;
     };
+    const unit = Math.abs(n[0] * n[0] + n[1] * n[1] + n[2] * n[2] - 1) < 1e-9;
+    const holds = (gx, gy, gz, gr) => unit && Math.hypot(gx - nearC[0], gy - nearC[1], gz - nearC[2]) + gr <= nearR;
+    let laid = false;
+    {
+      const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
+      if (holds(gx, gy, gz, gr)) {
+        balls.lay(nearData, nNear, p, n, hi);
+        laid = true;
+      }
+    }
     for (let i = 0; i < 16 && hi - lo > 5e-4; i++) {
       const r = (lo + hi) / 2;
       cx = p[0] - n[0] * r;
       cy = p[1] - n[1] * r;
       cz = p[2] - n[2] * r;
-      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds, metFromAcross)) hi = r;
+      const rr = r * (1 - 1e-6) - 1e-5;
+      let met;
+      if (laid) met = balls.any(bvh, r, cx, cy, cz, rr, bounds, metFromAcross);
+      else {
+        met = bvh.anyWithinNearestFirst(cx, cy, cz, rr, bounds, metFromAcross);
+        if (!met && unit) {
+          const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
+          if (!holds(gx, gy, gz, gr)) {
+            nearC = [gx, gy, gz];
+            nearR = gr + NEAR_MARGIN;
+            nNear = bvh.collectNear(gx, gy, gz, nearR, near0);
+            nearData = pack(bvh, S, near0.list, nNear, nearData);
+          }
+          balls.lay(nearData, nNear, p, n, hi);
+          laid = true;
+        }
+      }
+      if (met) hi = r;
       else lo = r;
     }
     out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
 }
+var BallCandidates = class {
+  tri = new Int32Array(256);
+  tau = new Float64Array(256);
+  alpha = new Float64Array(256);
+  beta = new Float64Array(256);
+  lastD = new Float64Array(256);
+  lastR = new Float64Array(256);
+  n = 0;
+  /** The candidates in order of tau, in BUCKETS: those of bucket b are [start[b], start[b + 1]), every tau in it at least floor[b]. */
+  start = new Int32Array(BUCKETS + 1);
+  floor = new Float64Array(BUCKETS);
+  #q = new Float64Array(3);
+  #tmp = { tri: new Int32Array(256), tau: new Float64Array(256), alpha: new Float64Array(256), beta: new Float64Array(256), b: new Int32Array(256) };
+  /** Lays out the first `count` triangles packed in `data` (pack) for the trials of the sample at p (unit direction nrm) whose radii are all below `top`. */
+  lay(data, count, p, nrm, top) {
+    const T = this.#tmp;
+    if (T.tri.length < count) {
+      const size = Math.max(count, T.tri.length * 2);
+      this.#tmp = { tri: new Int32Array(size), tau: new Float64Array(size), alpha: new Float64Array(size), beta: new Float64Array(size), b: new Int32Array(size) };
+      this.tri = new Int32Array(size);
+      this.tau = new Float64Array(size);
+      this.alpha = new Float64Array(size);
+      this.beta = new Float64Array(size);
+      this.lastD = new Float64Array(size);
+      this.lastR = new Float64Array(size);
+    }
+    const tmp = this.#tmp;
+    const never2 = top * (1 + 1e-9) + 1e-9;
+    const hx = p[0] - nrm[0] * top, hy = p[1] - nrm[1] * top, hz = p[2] - nrm[2] * top;
+    let k = 0, lo = Infinity;
+    for (let i = 0; i < count; i++) {
+      const o = i * PACKED;
+      const R = data[o + 3] + 1e-7;
+      const ex = data[o] - hx, ey = data[o + 1] - hy, ez = data[o + 2] - hz, reach = never2 + R;
+      if (ex * ex + ey * ey + ez * ez >= reach * reach) continue;
+      if (!(data[o + 4] * nrm[0] + data[o + 5] * nrm[1] + data[o + 6] * nrm[2] < -0.25)) continue;
+      const t = data[o + 10];
+      const dx = data[o] - p[0], dy = data[o + 1] - p[1], dz = data[o + 2] - p[2];
+      const a = nrm[0] * dx + nrm[1] * dy + nrm[2] * dz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      let tau;
+      if (R - a > 0) tau = (d2 - R * R) / (2 * (R - a));
+      else if (d2 < R * R) tau = -Infinity;
+      else continue;
+      if (tau >= never2) continue;
+      tmp.tri[k] = t;
+      tmp.tau[k] = tau;
+      tmp.alpha[k] = -(dx * data[o + 7] + dy * data[o + 8] + dz * data[o + 9]);
+      tmp.beta[k] = -(nrm[0] * data[o + 7] + nrm[1] * data[o + 8] + nrm[2] * data[o + 9]);
+      if (tau > -Infinity) lo = Math.min(lo, tau);
+      k++;
+    }
+    if (!(lo < top)) lo = top - 1;
+    const width = (top - lo) / BUCKETS;
+    const start = this.start, floor = this.floor;
+    start.fill(0);
+    for (let i = 0; i < k; i++) {
+      const tau = tmp.tau[i];
+      const b = tau <= lo ? 0 : Math.min(BUCKETS - 1, Math.floor((tau - lo) / width));
+      tmp.b[i] = b;
+      start[b + 1]++;
+    }
+    for (let b = 0; b < BUCKETS; b++) {
+      start[b + 1] = start[b + 1] + start[b];
+      floor[b] = b === 0 ? -Infinity : lo + (b - 1e-6) * width;
+    }
+    const at2 = start.slice(0, BUCKETS);
+    for (let i = 0; i < k; i++) {
+      const j = at2[tmp.b[i]]++;
+      this.tri[j] = tmp.tri[i];
+      this.tau[j] = tmp.tau[i];
+      this.alpha[j] = tmp.alpha[i];
+      this.beta[j] = tmp.beta[i];
+      this.lastD[j] = -1;
+    }
+    this.n = k;
+  }
+  /** anyWithin's answer for the ball of radius r (asked at radius rr < r) centred at (cx, cy, cz), from these triangles. */
+  any(bvh, r, cx, cy, cz, rr, keep, meets) {
+    const r22 = rr * rr, edge = r * (1 + 1e-9) + 1e-9, inner = rr + 1e-9;
+    const q = this.#q, tau = this.tau, alpha = this.alpha, beta = this.beta, tri = this.tri, lastD = this.lastD, lastR = this.lastR;
+    let b = 0;
+    while (b < BUCKETS && this.floor[b] < edge) b++;
+    const end = this.start[b];
+    for (let k = 0; k < end; k++) {
+      if (tau[k] >= edge) continue;
+      if (Math.abs(alpha[k] + beta[k] * r) >= edge) continue;
+      if (lastD[k] - Math.abs(r - lastR[k]) * (1 + 1e-9) >= inner) continue;
+      const t = tri[k];
+      if (!keep(t)) continue;
+      const where = bvh.nearestOn(cx, cy, cz, t, q);
+      const dx = cx - q[0], dy = cy - q[1], dz = cz - q[2];
+      const d2 = dx * dx + dy * dy + dz * dz;
+      lastD[k] = Math.sqrt(d2) * (1 - 1e-12);
+      lastR[k] = r;
+      if (d2 < r22 && meets(t, q, where === IN_FACE, where)) return true;
+    }
+    return false;
+  }
+};
+var BUCKETS = 32;
+var PACKED = 11;
+function pack(bvh, S, list, count, into) {
+  const out = into.length >= count * PACKED ? into : new Float64Array(Math.max(count * PACKED, into.length * 2));
+  const C = bvh.centroid, Rc = bvh.reach, N = bvh.normal;
+  for (let i = 0; i < count; i++) {
+    const t = list[i], t3 = t * 3, o = i * PACKED;
+    out[o] = C[t3];
+    out[o + 1] = C[t3 + 1];
+    out[o + 2] = C[t3 + 2];
+    out[o + 3] = Rc[t];
+    out[o + 4] = S[t3];
+    out[o + 5] = S[t3 + 1];
+    out[o + 6] = S[t3 + 2];
+    out[o + 7] = N[t3];
+    out[o + 8] = N[t3 + 1];
+    out[o + 9] = N[t3 + 2];
+    out[o + 10] = t;
+  }
+  return out;
+}
+var NEAR_MARGIN = 0.15;
 function vertexFans(bvh) {
   const T = bvh.tri;
   let nv = 0;
@@ -22325,28 +22557,28 @@ var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the writ
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
 }
-function wallEntry(bvh, samples, L2, decl) {
+function wallEntry(bvh, samples, L3, decl) {
   const m = minSample(samples, (s) => !onProngColumn(s.p, decl));
   if (!m) throw new Error("no thickness could be measured");
   return {
     id: "wall",
     name: "Wall thickness",
-    limit: mm(L2.wall),
-    result: m.thickness >= L2.wall ? "pass" : "fail",
+    limit: mm(L3.wall),
+    result: m.thickness >= L3.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
     where: whereOf(m.p, decl, "thinnest wall", m.centre),
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`
   };
 }
-function detailEntry(_bvh, samples, L2, decl) {
+function detailEntry(_bvh, samples, L3, decl) {
   const m = minSample(samples);
   if (!m) throw new Error("no thickness could be measured");
   return {
     id: "detail",
     name: "Smallest detail",
-    limit: mm(L2.detail),
-    result: m.thickness >= L2.detail ? "pass" : "fail",
+    limit: mm(L3.detail),
+    result: m.thickness >= L3.detail ? "pass" : "fail",
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
     where: whereOf(m.p, decl, "the thinnest feature", m.centre),
@@ -22367,7 +22599,7 @@ function sheetsAt(p, decl) {
   return near.sort((a, b) => a.d - b.d).map((x) => x.sh);
 }
 var ALONG = Math.SQRT1_2;
-function sheetEntry(bvh, S, sheets, L2) {
+function sheetEntry(bvh, S, sheets, L3) {
   const results = [];
   const any2 = () => true;
   for (const sh of sheets) {
@@ -22395,12 +22627,12 @@ function sheetEntry(bvh, S, sheets, L2) {
       where: { part: "sheet", feature: sh.label, point_mm: pt(w.p), description: `the sheet "${sh.label}", its thinnest place measured square to its surface` }
     });
   }
-  const failing = results.filter((r) => r.value < L2.wall);
+  const failing = results.filter((r) => r.value < L3.wall);
   const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
   return {
     id: "sheet",
     name: "Sheet thickness",
-    limit: `${mm(L2.wall)}, square to the surface`,
+    limit: `${mm(L3.wall)}, square to the surface`,
     result: failing.length ? "fail" : "pass",
     measured: `${mm(thinnest.value)} ("${thinnest.label}"); each, measured (declared): ${results.map((r) => `${r.label} ${r.value} (${r.nominal})`).join(", ")} mm`,
     value: thinnest.value,
@@ -22491,7 +22723,7 @@ function trianglesWhere(bvh, keep) {
   }
   return Uint32Array.from(out);
 }
-function bandEntry(bvh, band, L2) {
+function bandEntry(bvh, band, L3) {
   const { innerRadius: rIn, outerRadius: rOut, halfWidth: hw } = band;
   const cand = trianglesWhere(bvh, (lo, hi, rhoMax) => lo[1] <= hw && hi[1] >= -hw && rhoMax >= rIn);
   const region = { box: [rIn, rOut, -hw, hw], depth: (x, y) => Math.min(x - rIn, rOut - x, y + hw, hw - y) };
@@ -22508,15 +22740,15 @@ function bandEntry(bvh, band, L2) {
   return {
     id: "band",
     name: "Ring band thickness",
-    limit: mm(L2.band),
-    result: worst.d >= L2.band ? "pass" : "fail",
+    limit: mm(L3.band),
+    result: worst.d >= L3.band ? "pass" : "fail",
     measured: mm(worst.d),
     value: r3(worst.d),
     where: { part: "band", feature: `${worst.deg}\xB0 round the band from the top`, point_mm: pt(worst.p), description: `the band's thinnest section, ${worst.deg}\xB0 round from the top` },
     method: "the band's cross-section every 5\xB0 all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band"
   };
 }
-function prongEntry(bvh, prongs, L2) {
+function prongEntry(bvh, prongs, L3) {
   const results = [];
   for (const pr of prongs) {
     let worst = null;
@@ -22549,12 +22781,12 @@ function prongEntry(bvh, prongs, L2) {
       }
     });
   }
-  const failing = results.filter((r) => r.value < L2.prong);
+  const failing = results.filter((r) => r.value < L3.prong);
   const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
   return {
     id: "prong",
     name: "Prong thickness",
-    limit: mm(L2.prong),
+    limit: mm(L3.prong),
     result: failing.length ? "fail" : "pass",
     measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(" of ")[0]} ${r.value}`).join(", ")} mm`,
     value: thinnest.value,
@@ -22563,7 +22795,7 @@ function prongEntry(bvh, prongs, L2) {
     method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
   };
 }
-function gripEntry(bvh, decl, L2) {
+function gripEntry(bvh, decl, L3) {
   const s = decl.stone;
   const results = [];
   const P = bvh.pos;
@@ -22581,12 +22813,12 @@ function gripEntry(bvh, decl, L2) {
     }
     results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at2), description: `${pr.label}, at ${pr.clock}` } });
   }
-  const failing = results.filter((r) => r.value < L2.gripMin);
+  const failing = results.filter((r) => r.value < L3.gripMin);
   const least = results.reduce((a, b) => b.value < a.value ? b : a);
   return {
     id: "prong_grip",
     name: "Prongs grip the stone",
-    limit: `each prong reaches at least ${mm(L2.gripMin)} in over the girdle`,
+    limit: `each prong reaches at least ${mm(L3.gripMin)} in over the girdle`,
     result: failing.length ? "fail" : "pass",
     measured: `${mm(least.value)} (${least.label})`,
     value: least.value,
@@ -22617,7 +22849,7 @@ function inPolygon(poly, x, y, grow = 0) {
   if (grow > 0) return signedInset(poly, x, y) > -grow;
   return signedInset(poly, x, y) >= 0;
 }
-function bezelWallEntry(_bvh, samples, decl, L2) {
+function bezelWallEntry(_bvh, samples, decl, L3) {
   const bz = decl.bezel, st = decl.stone;
   const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
   const m = minSample(samples, inBezel);
@@ -22625,15 +22857,15 @@ function bezelWallEntry(_bvh, samples, decl, L2) {
   return {
     id: "bezel_wall",
     name: "Bezel wall thickness",
-    limit: mm(L2.wall),
-    result: m.thickness >= L2.wall ? "pass" : "fail",
+    limit: mm(L3.wall),
+    result: m.thickness >= L3.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
     where: { part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
     method: MAXSPHERE + ", on the bezel rim around and above the girdle"
   };
 }
-function bezelLipEntry(bvh, decl, L2) {
+function bezelLipEntry(bvh, decl, L3) {
   const bz = decl.bezel, st = decl.stone;
   const P = bvh.pos;
   let top = -Infinity;
@@ -22648,11 +22880,11 @@ function bezelLipEntry(bvh, decl, L2) {
   }
   const lip = top - st.girdleTopZ;
   const share = lip / st.crownHeight;
-  const ok = share >= L2.lipMinOfCrown - 1e-6 && share <= L2.lipMaxOfCrown + 1e-6;
+  const ok = share >= L3.lipMinOfCrown - 1e-6 && share <= L3.lipMaxOfCrown + 1e-6;
   return {
     id: "bezel_lip",
     name: "Bezel lip height",
-    limit: `${Math.round(L2.lipMinOfCrown * 100)}-${Math.round(L2.lipMaxOfCrown * 100)} % of the crown (${mm(L2.lipMinOfCrown * st.crownHeight)} to ${mm(L2.lipMaxOfCrown * st.crownHeight)} for this stone)`,
+    limit: `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown (${mm(L3.lipMinOfCrown * st.crownHeight)} to ${mm(L3.lipMaxOfCrown * st.crownHeight)} for this stone)`,
     result: ok ? "pass" : "fail",
     measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
     value: r3(lip),
@@ -22660,10 +22892,10 @@ function bezelLipEntry(bvh, decl, L2) {
     method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
   };
 }
-function gapEntry(bvh, S, L2) {
+function gapEntry(bvh, S, L3) {
   const C = bvh.centroid;
   let best = null;
-  const reach = Math.max(2, L2.gap * 3);
+  const reach = Math.max(2, L3.gap * 3);
   for (let t = 0; t < bvh.n; t++) {
     const n = [S[t * 3], S[t * 3 + 1], S[t * 3 + 2]];
     const p = [C[t * 3] + n[0] * 1e-5, C[t * 3 + 1] + n[1] * 1e-5, C[t * 3 + 2] + n[2] * 1e-5];
@@ -22675,7 +22907,7 @@ function gapEntry(bvh, S, L2) {
     return {
       id: "gap",
       name: "Smallest gap",
-      limit: mm(L2.gap),
+      limit: mm(L3.gap),
       result: "pass",
       measured: `no gap narrower than ${mm(reach)} between facing surfaces`,
       where: null,
@@ -22685,32 +22917,46 @@ function gapEntry(bvh, S, L2) {
   return {
     id: "gap",
     name: "Smallest gap",
-    limit: mm(L2.gap),
-    result: best.d >= L2.gap ? "pass" : "fail",
+    limit: mm(L3.gap),
+    result: best.d >= L3.gap ? "pass" : "fail",
     measured: mm(best.d),
     value: r3(best.d),
     where: { part: "piece", point_mm: pt(best.p), description: "the narrowest gap between two facing surfaces" },
     method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
   };
 }
-function surfaceEntry(bvh, L2, ref, decl) {
-  const P = ref.positions;
+function surfaceEntry(bvh, L3, ref, decl) {
   let worst = { dev: 0, p: [0, 0, 0] };
-  const cap = Math.max(0.2, L2.surfaceDeviation * 20);
-  for (let i = 0; i < P.length; i += 3) {
-    const p = [P[i], P[i + 1], P[i + 2]];
-    const d = Math.sqrt(bvh.nearestDistSq(p, cap));
-    if (d > worst.dev) worst = { dev: d, p };
+  const cap = Math.max(0.2, L3.surfaceDeviation * 20);
+  const first = Math.min(cap, L3.surfaceDeviation * 2);
+  const q = [0, 0, 0];
+  const measure = (P) => {
+    for (let i = 0; i < P.length; i += 3) {
+      q[0] = P[i];
+      q[1] = P[i + 1];
+      q[2] = P[i + 2];
+      let d2 = bvh.nearestDistSq(q, first);
+      if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap);
+      const d = Math.sqrt(d2);
+      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]] };
+    }
+  };
+  measure(ref.positions);
+  const blends = decl.blends ?? [];
+  let onBlends = 0;
+  for (const b of blends) {
+    measure(b.points);
+    onBlends += b.points.length / 3;
   }
   return {
     id: "surface_deviation",
     name: "Surface smoothness",
-    limit: mm(L2.surfaceDeviation),
-    result: worst.dev <= L2.surfaceDeviation ? "pass" : "fail",
-    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference)`,
+    limit: mm(L3.surfaceDeviation),
+    result: worst.dev <= L3.surfaceDeviation ? "pass" : "fail",
+    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""})`,
     value: r3(worst.dev),
     where: whereOf(worst.p, decl, "the facets stand furthest from the curved surface"),
-    method: "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh"
+    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`
   };
 }
 
@@ -24245,90 +24491,10 @@ function readPiece(tree) {
   return view;
 }
 
-// src/library/ops.ts
+// src/library/field.ts
 var L = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
-var pts2 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]);
 var pts3 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
-function ccw(pts) {
-  let a = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i], q = pts[(i + 1) % pts.length];
-    a += p[0] * q[1] - q[0] * p[1];
-  }
-  return a < 0 ? [...pts].reverse() : pts;
-}
-var MIRROR_NORMAL = { xy: [0, 0, 1], yz: [1, 0, 0], xz: [0, 1, 0] };
-function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
-  const { Manifold, CrossSection } = k;
-  const p = n.params ?? {};
-  const inner = n.op === "translate" ? { ...ctx, m: compose(ctx.m, translation(L(p, "x"), L(p, "y"), L(p, "z"))) } : n.op === "rotate" ? { ...ctx, m: compose(ctx.m, rotation(D(p, "x"), D(p, "y"), D(p, "z"))) } : n.op === "mirror" ? { ...ctx, m: compose(ctx.m, reflection(MIRROR_NORMAL[p["plane"]])) } : ctx;
-  const kids = () => (n.children ?? []).map((ch) => buildOp(k, A, ch, tol, inner));
-  const all = () => {
-    const ms = kids();
-    return ms.length === 1 ? ms[0] : A.t(Manifold.union(ms));
-  };
-  switch (n.op) {
-    case "sphere": {
-      const r = L(p, "radius");
-      return A.t(Manifold.sphere(r, sphereSegments(r, tol)));
-    }
-    case "cylinder": {
-      const r = L(p, "radius");
-      return A.t(Manifold.cylinder(L(p, "height"), r, r, segmentsFor(r, tol, 16)));
-    }
-    case "box":
-      return A.t(Manifold.cube([L(p, "x"), L(p, "y"), L(p, "z")], true));
-    case "torus": {
-      const R = L(p, "major_radius"), r = L(p, "minor_radius");
-      if (r >= R) throw new CallError(`${n.id}.params.minor_radius`, "must be smaller than major_radius.");
-      const n2 = segmentsFor(r, tol, 16);
-      const ring = Array.from({ length: n2 }, (_, i) => [R + r * Math.cos(2 * Math.PI * i / n2), r * Math.sin(2 * Math.PI * i / n2)]);
-      return A.t(Manifold.revolve(A.t(new CrossSection([ring])), segmentsFor(R + r, tol, 32)));
-    }
-    case "extrude":
-      return A.t(Manifold.extrude(A.t(new CrossSection([ccw(pts2(p["points"]))])), L(p, "height")));
-    case "revolve": {
-      const prof = ccw(pts2(p["points"]));
-      const rMax = Math.max(...prof.map((q) => q[0]));
-      return A.t(Manifold.revolve(A.t(new CrossSection([prof])), segmentsFor(rMax, tol, 32), D(p, "degrees", 360)));
-    }
-    case "sweep": {
-      const r = L(p, "radius");
-      const path = pts3(p["path"]);
-      const seg = sphereSegments(r, tol);
-      const ball = (q, i) => A.t(A.t(A.t(Manifold.sphere(r, seg)).rotate([0, 0, 7.31 * i + 3.7])).translate(q));
-      const pieces = [];
-      const m = p["closed"] === true ? path.length : path.length - 1;
-      for (let i = 0; i < m; i++) pieces.push(A.t(Manifold.hull([ball(path[i], i), ball(path[(i + 1) % path.length], i)])));
-      return pieces.length === 1 ? pieces[0] : A.t(Manifold.union(pieces));
-    }
-    case "union":
-      return all();
-    case "difference": {
-      const [first, ...rest] = n.children ?? [];
-      const keep = buildOp(k, A, first, tol, inner);
-      if (!rest.length) return keep;
-      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m }));
-      return A.t(keep.subtract(A.t(Manifold.union(cutters))));
-    }
-    case "intersection": {
-      const ms = kids();
-      return ms.length === 1 ? ms[0] : A.t(Manifold.intersection(ms));
-    }
-    case "translate":
-      return A.t(all().translate([L(p, "x"), L(p, "y"), L(p, "z")]));
-    case "rotate":
-      return A.t(all().rotate([D(p, "x"), D(p, "y"), D(p, "z")]));
-    case "mirror":
-      return A.t(all().mirror(MIRROR_NORMAL[p["plane"]]));
-    case "smooth_union":
-      return smoothUnion(k, A, n, tol);
-    case "thicken":
-      return buildThicken(k, A, n, tol, ctx);
-  }
-  throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
-}
 function smin(a, b, k) {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - h * h * k / 4;
@@ -24352,78 +24518,372 @@ function rotInverse(xd, yd, zd) {
     return [x1, y3, z3];
   };
 }
-function sdfOf(n) {
+var SLACK = 1e-9;
+var Leaf = class {
+  constructor(f) {
+    this.f = f;
+  }
+  f;
+  value(x, y, z) {
+    return this.f(x, y, z);
+  }
+  within(cx, cy, cz) {
+    return { node: this, v: this.f(cx, cy, cz) };
+  }
+};
+var Capsule = class {
+  constructor(a, b, r) {
+    this.a = a;
+    this.b = b;
+    this.r = r;
+  }
+  a;
+  b;
+  r;
+  value(x, y, z) {
+    return capsule(x, y, z, this.a, this.b, this.r);
+  }
+  within(cx, cy, cz) {
+    return { node: this, v: capsule(cx, cy, cz, this.a, this.b, this.r) };
+  }
+};
+var MinOf = class _MinOf {
+  constructor(kids, map) {
+    this.kids = kids;
+    this.map = map;
+  }
+  kids;
+  map;
+  value(x, y, z) {
+    if (this.map) [x, y, z] = this.map(x, y, z);
+    let m = Infinity;
+    for (const k of this.kids) m = Math.min(m, k.value(x, y, z));
+    return m;
+  }
+  within(cx, cy, cz, rho) {
+    if (this.map) [cx, cy, cz] = this.map(cx, cy, cz);
+    const parts = this.kids.map((k) => k.within(cx, cy, cz, rho));
+    let v = Infinity;
+    for (const p of parts) v = Math.min(v, p.v);
+    const keep = parts.filter((p) => p.v - rho <= v + rho + SLACK);
+    const same = keep.length === parts.length && keep.every((p, i) => p.node === this.kids[i]);
+    return { node: same ? this : new _MinOf(keep.map((p) => p.node), this.map), v };
+  }
+};
+var SmoothMin = class _SmoothMin {
+  constructor(kids, k) {
+    this.kids = kids;
+    this.k = k;
+  }
+  kids;
+  k;
+  value(x, y, z) {
+    let m = Infinity;
+    for (const kid of this.kids) {
+      const f = kid.value(x, y, z);
+      m = m === Infinity ? f : smin(m, f, this.k);
+    }
+    return m;
+  }
+  within(cx, cy, cz, rho) {
+    const parts = this.kids.map((kid) => kid.within(cx, cy, cz, rho));
+    const k = this.k;
+    let keep = [];
+    let m = Infinity;
+    for (let i = 0; i < parts.length; i++) {
+      const vi = parts[i].v;
+      if (m === Infinity) {
+        keep = [i];
+        m = vi;
+        continue;
+      }
+      if (vi - rho >= m + rho + k + SLACK) {
+        m = smin(m, vi, k);
+        continue;
+      }
+      if (m - rho >= vi + rho + k + SLACK) keep = [i];
+      else keep.push(i);
+      m = smin(m, vi, k);
+    }
+    const same = keep.length === parts.length && keep.every((j, i) => j === i && parts[i].node === this.kids[i]);
+    return { node: same ? this : new _SmoothMin(keep.map((j) => parts[j].node), k), v: m };
+  }
+};
+function compile2(n) {
   const p = n.params ?? {};
-  const kids = (n.children ?? []).map(sdfOf);
-  const unionAll = (x, y, z) => kids.reduce((m, f) => Math.min(m, f(x, y, z)), Infinity);
+  const kids = () => (n.children ?? []).map(compile2);
   switch (n.op) {
     case "sphere": {
       const r = L(p, "radius");
-      return (x, y, z) => Math.hypot(x, y, z) - r;
+      return new Leaf((x, y, z) => Math.hypot(x, y, z) - r);
     }
     case "box": {
       const bx = L(p, "x") / 2, by = L(p, "y") / 2, bz = L(p, "z") / 2;
-      return (x, y, z) => {
+      return new Leaf((x, y, z) => {
         const qx = Math.abs(x) - bx, qy = Math.abs(y) - by, qz = Math.abs(z) - bz;
         return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
-      };
+      });
     }
     case "cylinder": {
       const r = L(p, "radius"), h = L(p, "height");
-      return (x, y, z) => {
+      return new Leaf((x, y, z) => {
         const dx = Math.hypot(x, y) - r, dz = Math.abs(z - h / 2) - h / 2;
         return Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dz), 0);
-      };
+      });
     }
     case "torus": {
       const R = L(p, "major_radius"), r = L(p, "minor_radius");
-      return (x, y, z) => Math.hypot(Math.hypot(x, y) - R, z) - r;
+      return new Leaf((x, y, z) => Math.hypot(Math.hypot(x, y) - R, z) - r);
     }
     case "sweep": {
       const r = L(p, "radius");
       const path = pts3(p["path"]);
       const m = p["closed"] === true ? path.length : path.length - 1;
-      return (x, y, z) => {
-        let d = Infinity;
-        for (let i = 0; i < m; i++) d = Math.min(d, capsule(x, y, z, path[i], path[(i + 1) % path.length], r));
-        return d;
-      };
+      const caps = [];
+      for (let i = 0; i < m; i++) caps.push(new Capsule(path[i], path[(i + 1) % path.length], r));
+      return new MinOf(caps, null);
     }
     case "translate": {
       const tx = L(p, "x"), ty = L(p, "y"), tz = L(p, "z");
-      return (x, y, z) => unionAll(x - tx, y - ty, z - tz);
+      return new MinOf(kids(), (x, y, z) => [x - tx, y - ty, z - tz]);
     }
-    case "rotate": {
-      const inv = rotInverse(D(p, "x"), D(p, "y"), D(p, "z"));
-      return (x, y, z) => {
-        const q = inv(x, y, z);
-        return unionAll(q[0], q[1], q[2]);
-      };
-    }
+    case "rotate":
+      return new MinOf(kids(), rotInverse(D(p, "x"), D(p, "y"), D(p, "z")));
     case "mirror": {
       const pl = p["plane"];
-      return (x, y, z) => unionAll(pl === "yz" ? -x : x, pl === "xz" ? -y : y, pl === "xy" ? -z : z);
+      return new MinOf(kids(), (x, y, z) => [pl === "yz" ? -x : x, pl === "xz" ? -y : y, pl === "xy" ? -z : z]);
     }
     case "union":
-      return unionAll;
-    case "smooth_union": {
-      const k = L(p, "radius");
-      return (x, y, z) => kids.reduce((m, f) => m === Infinity ? f(x, y, z) : smin(m, f(x, y, z), k), Infinity);
-    }
+      return new MinOf(kids(), null);
+    case "smooth_union":
+      return new SmoothMin(kids(), L(p, "radius"));
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op)}" cannot be blended.`);
 }
-function smoothUnion(k, A, n, tol) {
+function levelSetStep(min, max, edge) {
+  let step = 0;
+  for (let i = 0; i < 3; i++) {
+    const size = max[i] - min[i];
+    const n = Math.trunc(size / edge + 1);
+    step = Math.max(step, n > 1 ? size / (n - 1) : size);
+  }
+  return step;
+}
+var FINE_PER_COARSE = 8;
+var BlendField = class {
+  #root;
+  #o;
+  #fine;
+  #coarse;
+  #n;
+  #far;
+  #cells;
+  constructor(n, box, step) {
+    this.#root = compile2(n);
+    this.#far = 2 * step;
+    this.#fine = 2 * step;
+    this.#coarse = this.#fine * FINE_PER_COARSE;
+    this.#o = [box.min[0] - step, box.min[1] - step, box.min[2] - step];
+    this.#n = [0, 1, 2].map((i) => Math.max(1, Math.ceil((box.max[i] + step - this.#o[i]) / this.#coarse)));
+    this.#cells = new Array(this.#n[0] * this.#n[1] * this.#n[2]);
+  }
+  #cell(node2, cx, cy, cz, size) {
+    const rho = size * Math.sqrt(3) / 2;
+    const { node: pruned, v } = node2.within(cx, cy, cz, rho);
+    const stand = v - rho > this.#far ? v - rho : v + rho < -this.#far ? v + rho : NaN;
+    return { node: pruned, stand };
+  }
+  #find(x, y, z) {
+    const o = this.#o, C = this.#coarse;
+    const i = Math.floor((x - o[0]) / C), j = Math.floor((y - o[1]) / C), k = Math.floor((z - o[2]) / C);
+    if (i < 0 || j < 0 || k < 0 || i >= this.#n[0] || j >= this.#n[1] || k >= this.#n[2]) return null;
+    const ci = (i * this.#n[1] + j) * this.#n[2] + k;
+    let coarse = this.#cells[ci];
+    if (!coarse) {
+      coarse = this.#cell(this.#root, o[0] + (i + 0.5) * C, o[1] + (j + 0.5) * C, o[2] + (k + 0.5) * C, C);
+      this.#cells[ci] = coarse;
+    }
+    if (!Number.isNaN(coarse.stand)) return coarse;
+    const F = this.#fine;
+    const bx = o[0] + i * C, by = o[1] + j * C, bz = o[2] + k * C;
+    const fi = Math.max(0, Math.min(FINE_PER_COARSE - 1, Math.floor((x - bx) / F)));
+    const fj = Math.max(0, Math.min(FINE_PER_COARSE - 1, Math.floor((y - by) / F)));
+    const fk = Math.max(0, Math.min(FINE_PER_COARSE - 1, Math.floor((z - bz) / F)));
+    const fine = coarse.fine ??= new Array(FINE_PER_COARSE ** 3);
+    const fx = (fi * FINE_PER_COARSE + fj) * FINE_PER_COARSE + fk;
+    let cell = fine[fx];
+    if (!cell) {
+      cell = this.#cell(coarse.node, bx + (fi + 0.5) * F, by + (fj + 0.5) * F, bz + (fk + 0.5) * F, F);
+      fine[fx] = cell;
+    }
+    return cell;
+  }
+  /** What the level set reads: the exact value, or one of the right sign where only the sign is read. */
+  sample(x, y, z) {
+    const c = this.#find(x, y, z);
+    if (!c) return this.#root.value(x, y, z);
+    return Number.isNaN(c.stand) ? c.node.value(x, y, z) : c.stand;
+  }
+  /** The exact value, everywhere. */
+  value(x, y, z) {
+    const c = this.#find(x, y, z);
+    return c ? c.node.value(x, y, z) : this.#root.value(x, y, z);
+  }
+};
+var SURFACE_REACH_MM = 0.2;
+function projectOntoSurface(f, p, d, out, at2) {
+  const g = (s) => f(p[0] + s * d[0], p[1] + s * d[1], p[2] + s * d[2]);
+  const put = (s) => {
+    out[at2] = p[0] + s * d[0];
+    out[at2 + 1] = p[1] + s * d[1];
+    out[at2 + 2] = p[2] + s * d[2];
+  };
+  const g0 = g(0);
+  if (Math.abs(g0) <= 1e-9) return put(0);
+  const toward = -Math.sign(g0);
+  let a = 0, ga = g0, b = NaN, gb = NaN;
+  for (let step = 1.25 * Math.abs(g0); Number.isNaN(b); step *= 2) {
+    const s0 = Math.min(step, SURFACE_REACH_MM);
+    for (const s of [toward * s0, -toward * s0]) {
+      const gs = g(s);
+      if (gs > 0 !== g0 > 0 || gs === 0) {
+        b = s;
+        gb = gs;
+        break;
+      }
+    }
+    if (s0 >= SURFACE_REACH_MM) break;
+  }
+  if (Number.isNaN(b)) return put(toward * SURFACE_REACH_MM);
+  if (gb === 0) return put(b);
+  let kept = 0;
+  for (let it = 0; it < 100; it++) {
+    const s = (a * gb - b * ga) / (gb - ga);
+    const gs = g(s);
+    if (Math.abs(gs) <= 1e-9 || Math.abs(b - a) <= 1e-12) return put(s);
+    if (gs > 0 === gb > 0) {
+      b = s;
+      gb = gs;
+      if (kept === 1) ga /= 2;
+      kept = 1;
+    } else {
+      a = s;
+      ga = gs;
+      if (kept === -1) gb /= 2;
+      kept = -1;
+    }
+  }
+  put(Math.abs(ga) < Math.abs(gb) ? a : b);
+}
+
+// src/library/tolerances.ts
+var EXPORT_TOL = 45e-4;
+var PREVIEW_TOL = 0.03;
+var REFERENCE_TOL = 15e-4;
+
+// src/library/ops.ts
+var L2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
+var D2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
+var pts2 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]);
+var pts32 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
+function ccw(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return a < 0 ? [...pts].reverse() : pts;
+}
+var MIRROR_NORMAL = { xy: [0, 0, 1], yz: [1, 0, 0], xz: [0, 1, 0] };
+function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
+  const { Manifold, CrossSection } = k;
+  const p = n.params ?? {};
+  const inner = n.op === "translate" ? { ...ctx, m: compose(ctx.m, translation(L2(p, "x"), L2(p, "y"), L2(p, "z"))) } : n.op === "rotate" ? { ...ctx, m: compose(ctx.m, rotation(D2(p, "x"), D2(p, "y"), D2(p, "z"))) } : n.op === "mirror" ? { ...ctx, m: compose(ctx.m, reflection(MIRROR_NORMAL[p["plane"]])) } : ctx;
+  const kids = () => (n.children ?? []).map((ch) => buildOp(k, A, ch, tol, inner));
+  const all = () => {
+    const ms = kids();
+    return ms.length === 1 ? ms[0] : A.t(Manifold.union(ms));
+  };
+  switch (n.op) {
+    case "sphere": {
+      const r = L2(p, "radius");
+      return A.t(Manifold.sphere(r, sphereSegments(r, tol)));
+    }
+    case "cylinder": {
+      const r = L2(p, "radius");
+      return A.t(Manifold.cylinder(L2(p, "height"), r, r, segmentsFor(r, tol, 16)));
+    }
+    case "box":
+      return A.t(Manifold.cube([L2(p, "x"), L2(p, "y"), L2(p, "z")], true));
+    case "torus": {
+      const R = L2(p, "major_radius"), r = L2(p, "minor_radius");
+      if (r >= R) throw new CallError(`${n.id}.params.minor_radius`, "must be smaller than major_radius.");
+      const n2 = segmentsFor(r, tol, 16);
+      const ring = Array.from({ length: n2 }, (_, i) => [R + r * Math.cos(2 * Math.PI * i / n2), r * Math.sin(2 * Math.PI * i / n2)]);
+      return A.t(Manifold.revolve(A.t(new CrossSection([ring])), segmentsFor(R + r, tol, 32)));
+    }
+    case "extrude":
+      return A.t(Manifold.extrude(A.t(new CrossSection([ccw(pts2(p["points"]))])), L2(p, "height")));
+    case "revolve": {
+      const prof = ccw(pts2(p["points"]));
+      const rMax = Math.max(...prof.map((q) => q[0]));
+      return A.t(Manifold.revolve(A.t(new CrossSection([prof])), segmentsFor(rMax, tol, 32), D2(p, "degrees", 360)));
+    }
+    case "sweep": {
+      const r = L2(p, "radius");
+      const path = pts32(p["path"]);
+      const seg = sphereSegments(r, tol);
+      const ball = (q, i) => A.t(A.t(A.t(Manifold.sphere(r, seg)).rotate([0, 0, 7.31 * i + 3.7])).translate(q));
+      const pieces = [];
+      const m = p["closed"] === true ? path.length : path.length - 1;
+      for (let i = 0; i < m; i++) pieces.push(A.t(Manifold.hull([ball(path[i], i), ball(path[(i + 1) % path.length], i)])));
+      return pieces.length === 1 ? pieces[0] : A.t(Manifold.union(pieces));
+    }
+    case "union":
+      return all();
+    case "difference": {
+      const [first, ...rest] = n.children ?? [];
+      const keep = buildOp(k, A, first, tol, inner);
+      if (!rest.length) return keep;
+      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m, ...inner.blends ? { blends: inner.blends } : {}, ...inner.blendMeshes ? { blendMeshes: inner.blendMeshes } : {} }));
+      return A.t(keep.subtract(A.t(Manifold.union(cutters))));
+    }
+    case "intersection": {
+      const ms = kids();
+      return ms.length === 1 ? ms[0] : A.t(Manifold.intersection(ms));
+    }
+    case "translate":
+      return A.t(all().translate([L2(p, "x"), L2(p, "y"), L2(p, "z")]));
+    case "rotate":
+      return A.t(all().rotate([D2(p, "x"), D2(p, "y"), D2(p, "z")]));
+    case "mirror":
+      return A.t(all().mirror(MIRROR_NORMAL[p["plane"]]));
+    case "smooth_union":
+      return smoothUnion(k, A, n, tol, ctx);
+    case "thicken":
+      return buildThicken(k, A, n, tol, ctx);
+  }
+  throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
+}
+function smoothUnion(k, A, n, tol, ctx) {
   const { Manifold } = k;
   const p = n.params ?? {};
-  const blend = L(p, "radius");
-  const f = sdfOf(n);
+  const blend = L2(p, "radius");
+  const gtol = Math.max(tol, EXPORT_TOL);
+  const key = `${gtol} ${JSON.stringify(n)}`;
+  const kept = ctx.blendMeshes?.reuse ? ctx.blendMeshes.meshes.get(key) : void 0;
+  if (kept) return A.t(new Manifold(kept));
   const plain = A.t(Manifold.union((n.children ?? []).map((c) => buildOp(k, A, c, Math.max(tol, 0.05)))));
   const bb = plain.boundingBox();
   const g = blend + 0.3;
-  const edge = Math.min(0.25, Math.max(0.03, Math.sqrt(8 * Math.max(blend, 0.2) * tol)));
-  const out = Manifold.levelSet((q) => -f(q[0], q[1], q[2]), { min: [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g], max: [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g] }, edge, 0, tol / 2);
-  return A.t(out);
+  const edge = Math.min(0.25, Math.max(0.03, Math.sqrt(8 * Math.max(blend, 0.2) * gtol)));
+  const min = [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g];
+  const max = [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g];
+  const field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
+  const out = A.t(Manifold.levelSet((q) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2));
+  if (ctx.blendMeshes && !ctx.blendMeshes.reuse) ctx.blendMeshes.meshes.set(key, out.getMesh());
+  ctx.blends?.push({ label: n.id, originalID: out.originalID(), m: ctx.m, field });
+  return out;
 }
 
 // src/library/stones.ts
@@ -24436,8 +24896,8 @@ function roundOutline(r, segments) {
   }
   return out;
 }
-function emeraldOutline(L2, W, corner) {
-  const x = L2 / 2, y = W / 2, c = corner;
+function emeraldOutline(L3, W, corner) {
+  const x = L3 / 2, y = W / 2, c = corner;
   return [
     [x, -y + c],
     [x, y - c],
@@ -24483,11 +24943,11 @@ function stoneShape(spec, tol) {
       }
     };
   }
-  const L2 = spec.lengthMm, W = spec.widthMm;
+  const L3 = spec.lengthMm, W = spec.widthMm;
   const corner = 0.15 * W;
-  const base = emeraldOutline(L2, W, corner);
+  const base = emeraldOutline(L3, W, corner);
   const outline = rotateToOrientation(base, spec.orientation);
-  const grownGirdle = (c) => rotateToOrientation(emeraldOutline(L2 + 2 * c, W + 2 * c, corner + c * 0.4142), spec.orientation);
+  const grownGirdle = (c) => rotateToOrientation(emeraldOutline(L3 + 2 * c, W + 2 * c, corner + c * 0.4142), spec.orientation);
   return {
     outline,
     girdle,
@@ -24503,9 +24963,9 @@ function stoneShape(spec, tol) {
         pts.push([x, y, girdle + c * 0.5]);
       }
       const inset = W * (1 - 0.65) / 2;
-      const table = emeraldOutline(L2 - 2 * inset + 2 * c, W - 2 * inset + 2 * c, corner * 0.65);
+      const table = emeraldOutline(L3 - 2 * inset + 2 * c, W - 2 * inset + 2 * c, corner * 0.65);
       for (const [x, y] of rotateToOrientation(table, spec.orientation)) pts.push([x, y, girdle + crown + c]);
-      const keel = (L2 - W) / 2;
+      const keel = (L3 - W) / 2;
       for (const [x, y] of rotateToOrientation(
         [
           [keel + 0.05, 0.05],
@@ -24535,9 +24995,6 @@ function outsideConvex(poly, x, y) {
 }
 
 // src/library/build.ts
-var EXPORT_TOL = 45e-4;
-var PREVIEW_TOL = 0.03;
-var REFERENCE_TOL = 15e-4;
 var Arena = class {
   #items = [];
   t(x) {
@@ -24749,7 +25206,9 @@ async function buildPiece(tree, opts) {
   }
 }
 function polygonsToMesh(m) {
-  const mesh = m.getMesh();
+  return meshOut(m.getMesh());
+}
+function meshOut(mesh) {
   const np = mesh.numProp;
   const nv = mesh.vertProperties.length / np;
   const positions = new Float32Array(nv * 3);
@@ -24761,6 +25220,7 @@ function polygonsToMesh(m) {
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
 function buildWith(k, A, tree, opts) {
+  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error("a build that declares blend surfaces builds its own level sets");
   const { Manifold, CrossSection } = k;
   const tol = opts.tol;
   const v = readPiece(tree);
@@ -24847,8 +25307,9 @@ function buildWith(k, A, tree, opts) {
     metal = A.t(A.t(head.subtract(finger)).add(band));
   }
   const sheets = [];
+  const blends = [];
   for (const extra of v.extras) {
-    const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets }));
+    const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets, blends, ...opts.blendMeshes ? { blendMeshes: opts.blendMeshes } : {} }));
     const bb2 = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb2.min], max: [...bb2.max] });
     metal = A.t(metal.add(shape));
@@ -24864,9 +25325,11 @@ function buildWith(k, A, tree, opts) {
   const status = metal.status();
   if (status !== "NoError") throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
+  const mesh = metal.getMesh();
+  if (opts.blendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale2);
   return {
     view: v,
-    metal: polygonsToMesh(metal),
+    metal: meshOut(mesh),
     ...stoneSolid ? { stone: polygonsToMesh(scale2 !== 1 ? A.t(stoneSolid.scale(scale2)) : stoneSolid) } : {},
     decl,
     volumeMm3: metal.volume(),
@@ -24881,6 +25344,71 @@ function atFilePrecision(A, m) {
     })
   );
   return A.t(snapped.simplify());
+}
+function blendSurface(mesh, blends, scale2) {
+  const np = mesh.numProp, V = mesh.vertProperties, T = mesh.triVerts;
+  const nv = V.length / np;
+  const out = [];
+  for (const b of blends) {
+    const tris = [];
+    for (let r = 0; r < mesh.runOriginalID.length; r++) {
+      if (mesh.runOriginalID[r] !== b.originalID) continue;
+      for (let t = mesh.runIndex[r] / 3; t < mesh.runIndex[r + 1] / 3; t++) tris.push(t);
+    }
+    if (!tris.length) continue;
+    const m = b.m;
+    const toLocal = (x, y, z) => {
+      const dx = x / scale2 - m[3], dy = y / scale2 - m[7], dz = z / scale2 - m[11];
+      return [m[0] * dx + m[4] * dy + m[8] * dz, m[1] * dx + m[5] * dy + m[9] * dz, m[2] * dx + m[6] * dy + m[10] * dz];
+    };
+    const dirLocal = (x, y, z) => [m[0] * x + m[4] * y + m[8] * z, m[1] * x + m[5] * y + m[9] * z, m[2] * x + m[6] * y + m[10] * z];
+    const f = (x, y, z) => b.field.value(x, y, z);
+    const seenVert = new Uint8Array(nv);
+    const seenEdge = /* @__PURE__ */ new Set();
+    const pts = new Float32Array(3 * 7 * tris.length);
+    let n = 0;
+    const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
+    const on = new Float64Array(3);
+    const add = (x, y, z, nrm) => {
+      projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
+      const q0 = on[0], q1 = on[1], q2 = on[2];
+      pts[n * 3] = (m[0] * q0 + m[1] * q1 + m[2] * q2 + m[3]) * scale2;
+      pts[n * 3 + 1] = (m[4] * q0 + m[5] * q1 + m[6] * q2 + m[7]) * scale2;
+      pts[n * 3 + 2] = (m[8] * q0 + m[9] * q1 + m[10] * q2 + m[11]) * scale2;
+      n++;
+    };
+    for (const t of tris) {
+      const ia = T[t * 3], ib = T[t * 3 + 1], ic = T[t * 3 + 2];
+      const a = at2(ia), bb = at2(ib), c = at2(ic);
+      const ux = bb[0] - a[0], uy = bb[1] - a[1], uz = bb[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz);
+      if (!(l > 0)) continue;
+      const nrm = dirLocal(nx / l, ny / l, nz / l);
+      for (const i of [ia, ib, ic]) {
+        if (seenVert[i]) continue;
+        seenVert[i] = 1;
+        const p = at2(i);
+        add(p[0], p[1], p[2], nrm);
+      }
+      for (const [i, j] of [
+        [ia, ib],
+        [ib, ic],
+        [ic, ia]
+      ]) {
+        const lo = Math.min(i, j), hi = Math.max(i, j);
+        const key = lo * nv + hi;
+        if (seenEdge.has(key)) continue;
+        seenEdge.add(key);
+        const p = at2(lo), q = at2(hi);
+        add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
+      }
+      add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
+    }
+    out.push({ label: b.label, points: pts.slice(0, n * 3) });
+  }
+  return out;
 }
 function crossingsX(poly, halfWidth) {
   const xs = [];
@@ -25108,7 +25636,7 @@ function renderPanel(items, view, focusAboveZ) {
   }
   const depth = new Float32Array(W * W).fill(-Infinity);
   const L1 = norm([-0.45 * cam.right[0] + 0.7 * cam.up[0] + 0.6 * cam.eye[0], -0.45 * cam.right[1] + 0.7 * cam.up[1] + 0.6 * cam.eye[1], -0.45 * cam.right[2] + 0.7 * cam.up[2] + 0.6 * cam.eye[2]]);
-  const L2 = norm([0.7 * cam.right[0] - 0.2 * cam.up[0] + 0.5 * cam.eye[0], 0.7 * cam.right[1] - 0.2 * cam.up[1] + 0.5 * cam.eye[1], 0.7 * cam.right[2] - 0.2 * cam.up[2] + 0.5 * cam.eye[2]]);
+  const L22 = norm([0.7 * cam.right[0] - 0.2 * cam.up[0] + 0.5 * cam.eye[0], 0.7 * cam.right[1] - 0.2 * cam.up[1] + 0.5 * cam.eye[1], 0.7 * cam.right[2] - 0.2 * cam.up[2] + 0.5 * cam.eye[2]]);
   const H = norm([L1[0] + cam.eye[0], L1[1] + cam.eye[1], L1[2] + cam.eye[2]]);
   for (const it of items) {
     const p = it.positions, tri = it.triangles;
@@ -25126,7 +25654,7 @@ function renderPanel(items, view, focusAboveZ) {
       const facing = n[0] * cam.eye[0] + n[1] * cam.eye[1] + n[2] * cam.eye[2];
       if (facing <= 0) continue;
       const d1 = Math.max(0, n[0] * L1[0] + n[1] * L1[1] + n[2] * L1[2]);
-      const d2 = Math.max(0, n[0] * L2[0] + n[1] * L2[1] + n[2] * L2[2]);
+      const d2 = Math.max(0, n[0] * L22[0] + n[1] * L22[1] + n[2] * L22[2]);
       const sp = Math.pow(Math.max(0, n[0] * H[0] + n[1] * H[1] + n[2] * H[2]), it.kind === "metal" ? 36 : 60);
       const k = it.kind === "metal" ? [0.4 + 0.55 * d1 + 0.22 * d2, 0.6 * sp] : [0.55 + 0.35 * d1 + 0.1 * d2, 0.5 * sp];
       const col = [0, 1, 2].map((ch) => Math.min(255, Math.round(it.color[ch] * k[0] + 255 * k[1])));
@@ -25427,11 +25955,12 @@ async function checkPiece(tree, mode) {
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
   try {
-    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true });
+    const meshes = /* @__PURE__ */ new Map();
+    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false } });
     tBuild = performance.now() - t0;
     const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : "off";
     stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${v.metal} mm shrinkage ${shrink}`);
-    const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true });
+    const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
     const refStl = writeBinaryStl(ref.metal, "flo2-cad reference");
     tBuild = performance.now() - t0;
     const run = runChecks(stl, built.decl, limitsFor(metal), refStl);

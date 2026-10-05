@@ -26,7 +26,7 @@
 // A check that cannot run is a FAIL (owner, round 1, Q6): any exception inside
 // a check becomes result "could_not_run", which blocks the export.
 
-import { Bvh, CORNER, EDGE } from './bvh.js';
+import { Bvh, CORNER, EDGE, IN_FACE } from './bvh.js';
 import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
@@ -302,6 +302,10 @@ function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
   const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
   const fans = vertexFans(bvh);
   const near = new Float64Array(3);
+  const near0 = { list: new Int32Array(1024) };
+  let nearC: V3 = [0, 0, 0], nearR = -1, nNear = 0;
+  let nearData: Float64Array = new Float64Array(1024 * PACKED);
+  const balls = new BallCandidates();
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t]! < 1e-10) continue;
     const n: V3 = [S[t * 3]!, S[t * 3 + 1]!, S[t * 3 + 2]!];
@@ -341,18 +345,207 @@ function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
       }
       return true;
     };
+    // Every ball tried is tangent to the surface at p, on the same side, so each lies inside
+    // any larger one tried before it: every ball still to be tried lies inside the ball of
+    // radius hi, the bracket's top, and only triangles in that ball which face back can
+    // bound one. Those are laid out once (BallCandidates) and every trial asks exactly
+    // anyWithin's question of them alone. Neighbouring triangles come in turn (the kernel
+    // sorts them by place), so the tree is walked for a ball a little larger than the one
+    // needed, facing any way, and the next samples whose balls lie inside it take their
+    // triangles from that list. A sample whose first ball the list does not hold answers
+    // its trials from the tree, nearest boxes first, until one ball fits (a large ball
+    // meets metal at once), and then walks for the ball of radius hi then.
+    // Answering every trial from the tree had walked every face near the ball, about 11
+    // times a sample: 75 s of the check on an openwork ring of 143,234 triangles
+    // (fact:check-time-is-the-blend-field-and-the-wall-ball). The answers are the same.
+    // (Every bound here takes the direction to be a unit vector, as the surface's are; one
+    // that is not is answered from the tree alone.)
+    const unit = Math.abs(n[0] * n[0] + n[1] * n[1] + n[2] * n[2] - 1) < 1e-9;
+    const holds = (gx: number, gy: number, gz: number, gr: number) => unit && Math.hypot(gx - nearC[0], gy - nearC[1], gz - nearC[2]) + gr <= nearR;
+    let laid = false;
+    {
+      const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
+      if (holds(gx, gy, gz, gr)) {
+        balls.lay(nearData, nNear, p, n, hi);
+        laid = true;
+      }
+    }
     for (let i = 0; i < 16 && hi - lo > 0.0005; i++) {
       const r = (lo + hi) / 2;
       cx = p[0] - n[0] * r;
       cy = p[1] - n[1] * r;
       cz = p[2] - n[2] * r;
-      if (bvh.anyWithin([cx, cy, cz], r * (1 - 1e-6) - 1e-5, bounds, metFromAcross)) hi = r;
+      const rr = r * (1 - 1e-6) - 1e-5;
+      let met: boolean;
+      if (laid) met = balls.any(bvh, r, cx, cy, cz, rr, bounds, metFromAcross);
+      else {
+        met = bvh.anyWithinNearestFirst(cx, cy, cz, rr, bounds, metFromAcross);
+        if (!met && unit) {
+          const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
+          if (!holds(gx, gy, gz, gr)) {
+            nearC = [gx, gy, gz];
+            nearR = gr + NEAR_MARGIN;
+            nNear = bvh.collectNear(gx, gy, gz, nearR, near0);
+            nearData = pack(bvh, S, near0.list, nNear, nearData);
+          }
+          balls.lay(nearData, nNear, p, n, hi);
+          laid = true;
+        }
+      }
+      if (met) hi = r;
       else lo = r;
     }
     out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
 }
+
+/**
+ * The triangles that may bound one sample's balls, laid out for its trials. A ball tried
+ * has its centre at p - r n; a triangle's holding sphere (centroid g, radius R) reaches
+ * that ball only once r passes tau = (|g - p|^2 - R^2) / (2 (R - n.(g - p))), and its
+ * plane lies |alpha + beta r| from the centre; and a triangle met at distance d from the
+ * centre of an earlier trial at radius r0 lies at least d - |r - r0| from this one's
+ * (the centre moves |r - r0|). Each test rules a triangle out only when it lies provably
+ * further than the trial's radius (with a margin far above rounding); what remains is
+ * asked anyWithin's own question.
+ */
+class BallCandidates {
+  tri = new Int32Array(256);
+  tau = new Float64Array(256);
+  alpha = new Float64Array(256);
+  beta = new Float64Array(256);
+  lastD = new Float64Array(256);
+  lastR = new Float64Array(256);
+  n = 0;
+  /** The candidates in order of tau, in BUCKETS: those of bucket b are [start[b], start[b + 1]), every tau in it at least floor[b]. */
+  start = new Int32Array(BUCKETS + 1);
+  floor = new Float64Array(BUCKETS);
+  #q = new Float64Array(3);
+  #tmp = { tri: new Int32Array(256), tau: new Float64Array(256), alpha: new Float64Array(256), beta: new Float64Array(256), b: new Int32Array(256) };
+
+  /** Lays out the first `count` triangles packed in `data` (pack) for the trials of the sample at p (unit direction nrm) whose radii are all below `top`. */
+  lay(data: Float64Array, count: number, p: V3, nrm: V3, top: number): void {
+    const T = this.#tmp;
+    if (T.tri.length < count) {
+      const size = Math.max(count, T.tri.length * 2);
+      this.#tmp = { tri: new Int32Array(size), tau: new Float64Array(size), alpha: new Float64Array(size), beta: new Float64Array(size), b: new Int32Array(size) };
+      this.tri = new Int32Array(size);
+      this.tau = new Float64Array(size);
+      this.alpha = new Float64Array(size);
+      this.beta = new Float64Array(size);
+      this.lastD = new Float64Array(size);
+      this.lastR = new Float64Array(size);
+    }
+    const tmp = this.#tmp;
+    const never = top * (1 + 1e-9) + 1e-9;
+    // The centre of the largest ball still to be tried: a triangle whose holding sphere lies
+    // wholly outside that ball cannot reach any of them.
+    const hx = p[0] - nrm[0] * top, hy = p[1] - nrm[1] * top, hz = p[2] - nrm[2] * top;
+    let k = 0, lo = Infinity;
+    for (let i = 0; i < count; i++) {
+      const o = i * PACKED;
+      const R = data[o + 3]! + 1e-7;
+      const ex = data[o]! - hx, ey = data[o + 1]! - hy, ez = data[o + 2]! - hz, reach = never + R;
+      if (ex * ex + ey * ey + ez * ez >= reach * reach) continue;
+      // Only a triangle facing back (the wall check's "opposing") can bound a ball.
+      if (!(data[o + 4]! * nrm[0] + data[o + 5]! * nrm[1] + data[o + 6]! * nrm[2] < -0.25)) continue;
+      const t = data[o + 10]!;
+      const dx = data[o]! - p[0], dy = data[o + 1]! - p[1], dz = data[o + 2]! - p[2];
+      const a = nrm[0] * dx + nrm[1] * dy + nrm[2] * dz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      let tau: number;
+      if (R - a > 0) tau = (d2 - R * R) / (2 * (R - a));
+      else if (d2 < R * R) tau = -Infinity;
+      else continue; // its holding sphere never reaches a ball tangent at p
+      if (tau >= never) continue; // nor one of the radii still to be tried
+      tmp.tri[k] = t;
+      tmp.tau[k] = tau;
+      // (p - n r - g).N = -(d.N) - r (n.N)
+      tmp.alpha[k] = -(dx * data[o + 7]! + dy * data[o + 8]! + dz * data[o + 9]!);
+      tmp.beta[k] = -(nrm[0] * data[o + 7]! + nrm[1] * data[o + 8]! + nrm[2] * data[o + 9]!);
+      if (tau > -Infinity) lo = Math.min(lo, tau);
+      k++;
+    }
+    // Counting sort into buckets of tau between its least (finite) value and `top`.
+    if (!(lo < top)) lo = top - 1;
+    const width = (top - lo) / BUCKETS;
+    const start = this.start, floor = this.floor;
+    start.fill(0);
+    for (let i = 0; i < k; i++) {
+      const tau = tmp.tau[i]!;
+      const b = tau <= lo ? 0 : Math.min(BUCKETS - 1, Math.floor((tau - lo) / width));
+      tmp.b[i] = b;
+      start[b + 1]!++;
+    }
+    for (let b = 0; b < BUCKETS; b++) {
+      start[b + 1] = start[b + 1]! + start[b]!;
+      // A shade low, so rounding in the bucket's index never leaves a tau below its floor.
+      floor[b] = b === 0 ? -Infinity : lo + (b - 1e-6) * width;
+    }
+    const at = start.slice(0, BUCKETS);
+    for (let i = 0; i < k; i++) {
+      const j = at[tmp.b[i]!]!++;
+      this.tri[j] = tmp.tri[i]!;
+      this.tau[j] = tmp.tau[i]!;
+      this.alpha[j] = tmp.alpha[i]!;
+      this.beta[j] = tmp.beta[i]!;
+      this.lastD[j] = -1;
+    }
+    this.n = k;
+  }
+
+  /** anyWithin's answer for the ball of radius r (asked at radius rr < r) centred at (cx, cy, cz), from these triangles. */
+  any(bvh: Bvh, r: number, cx: number, cy: number, cz: number, rr: number, keep: (t: number) => boolean, meets: (t: number, q: Float64Array, inFace: boolean, where: number) => boolean): boolean {
+    const r2 = rr * rr, edge = r * (1 + 1e-9) + 1e-9, inner = rr + 1e-9;
+    const q = this.#q, tau = this.tau, alpha = this.alpha, beta = this.beta, tri = this.tri, lastD = this.lastD, lastR = this.lastR;
+    // Only buckets whose least tau is below the edge can hold a triangle the ball reaches.
+    let b = 0;
+    while (b < BUCKETS && this.floor[b]! < edge) b++;
+    const end = this.start[b]!;
+    for (let k = 0; k < end; k++) {
+      if (tau[k]! >= edge) continue;
+      if (Math.abs(alpha[k]! + beta[k]! * r) >= edge) continue;
+      if (lastD[k]! - Math.abs(r - lastR[k]!) * (1 + 1e-9) >= inner) continue;
+      const t = tri[k]!;
+      if (!keep(t)) continue;
+      const where = bvh.nearestOn(cx, cy, cz, t, q);
+      const dx = cx - q[0]!, dy = cy - q[1]!, dz = cz - q[2]!;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      lastD[k] = Math.sqrt(d2) * (1 - 1e-12);
+      lastR[k] = r;
+      if (d2 < r2 && meets(t, q, where === IN_FACE, where)) return true;
+    }
+    return false;
+  }
+}
+
+const BUCKETS = 32;
+
+/** Per gathered triangle, side by side for lay: centroid (3), holding radius, surface direction (3), plane normal (3), its index. */
+const PACKED = 11;
+
+function pack(bvh: Bvh, S: Float64Array, list: Int32Array, count: number, into: Float64Array): Float64Array {
+  const out = into.length >= count * PACKED ? into : new Float64Array(Math.max(count * PACKED, into.length * 2));
+  const C = bvh.centroid, Rc = bvh.reach, N = bvh.normal;
+  for (let i = 0; i < count; i++) {
+    const t = list[i]!, t3 = t * 3, o = i * PACKED;
+    out[o] = C[t3]!;
+    out[o + 1] = C[t3 + 1]!;
+    out[o + 2] = C[t3 + 2]!;
+    out[o + 3] = Rc[t]!;
+    out[o + 4] = S[t3]!;
+    out[o + 5] = S[t3 + 1]!;
+    out[o + 6] = S[t3 + 2]!;
+    out[o + 7] = N[t3]!;
+    out[o + 8] = N[t3 + 1]!;
+    out[o + 9] = N[t3 + 2]!;
+    out[o + 10] = t;
+  }
+  return out;
+}
+/** How much larger than a sample's ball the walked one is, for the samples after it. */
+const NEAR_MARGIN = 0.15;
 
 /** The triangles round each vertex: those of vertex v are tris[start[v] .. start[v + 1]). */
 function vertexFans(bvh: Bvh): { start: Int32Array; tris: Int32Array } {
@@ -908,24 +1101,49 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
  * reference, built at 0.0015 mm) to the written mesh. Vertices of the reference
  * lie on the intended surface within its own tolerance, so this is the chord
  * deviation the printer would reproduce, measured, not estimated.
+ *
+ * A smooth blend's intended surface is its distance field's zero level, and its
+ * facets already have their corners on it; the library declares points on that
+ * surface over every facet the file has from the blend (FeatureDecl.blends), and
+ * they are measured the same way. (A second level set 1.7 times finer had been the
+ * blend's reference: 5 times the samples and, for one openwork ring, 687 MiB of
+ * grid, more than flo2's slot; fact:check-time-is-the-blend-field-and-the-wall-ball.)
+ *
+ * Each distance is looked for first within twice the limit, where nearly every point
+ * lies, and only past that out to the cap: the same distance as one search to the
+ * cap, found without visiting everything within 0.2 mm of every point.
  */
 function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReadMesh, decl: FeatureDecl): CheckEntry {
-  const P = ref.positions;
   let worst = { dev: 0, p: [0, 0, 0] as V3 };
   const cap = Math.max(0.2, L.surfaceDeviation * 20);
-  for (let i = 0; i < P.length; i += 3) {
-    const p: V3 = [P[i]!, P[i + 1]!, P[i + 2]!];
-    const d = Math.sqrt(bvh.nearestDistSq(p, cap));
-    if (d > worst.dev) worst = { dev: d, p };
+  const first = Math.min(cap, L.surfaceDeviation * 2);
+  const q: V3 = [0, 0, 0];
+  const measure = (P: ArrayLike<number>) => {
+    for (let i = 0; i < P.length; i += 3) {
+      q[0] = P[i]!;
+      q[1] = P[i + 1]!;
+      q[2] = P[i + 2]!;
+      let d2 = bvh.nearestDistSq(q, first);
+      if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap);
+      const d = Math.sqrt(d2);
+      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]] };
+    }
+  };
+  measure(ref.positions);
+  const blends = decl.blends ?? [];
+  let onBlends = 0;
+  for (const b of blends) {
+    measure(b.points);
+    onBlends += b.points.length / 3;
   }
   return {
     id: 'surface_deviation',
     name: 'Surface smoothness',
     limit: mm(L.surfaceDeviation),
     result: worst.dev <= L.surfaceDeviation ? 'pass' : 'fail',
-    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference)`,
+    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''})`,
     value: r3(worst.dev),
     where: whereOf(worst.p, decl, 'the facets stand furthest from the curved surface'),
-    method: 'the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh',
+    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`,
   };
 }

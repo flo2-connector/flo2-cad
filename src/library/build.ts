@@ -11,19 +11,17 @@
 // even where a surface curves both ways) and coarser for a preview, which may be
 // coarser (owner, round 2, Q2).
 
-import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
-import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
+import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Mesh, type Vec2, type Vec3 } from '../kernel/manifold.js';
+import type { BandDecl, BezelDecl, BlendDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
 import type { PieceTree, PieceView, StoneView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
+import { projectOntoSurface } from './field.js';
 import { buildOp } from './ops.js';
-import { IDENTITY } from './thicken.js';
+import { IDENTITY, type BlendMeshes, type BlendRecord } from './thicken.js';
 import { stoneShape, type StoneSpec } from './stones.js';
+import { EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL } from './tolerances.js';
 
-/** Per direction: a doubly curved facet (a torus, a domed band) adds both directions' chords, so each is half the 0.01 mm limit, less a margin. */
-export const EXPORT_TOL = 0.0045;
-export const PREVIEW_TOL = 0.03;
-/** The surface check's reference: the same piece, far more finely tessellated. */
-export const REFERENCE_TOL = 0.0015;
+export { EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL };
 
 export interface MeshOut {
   positions: Float32Array;
@@ -367,7 +365,20 @@ export function pieceDims(v: PieceView): PieceDims {
 
 // --------------------------------------------------------------------- build
 
-export async function buildPiece(tree: PieceTree, opts: { tol: number; applyShrinkage: boolean }): Promise<Built> {
+export interface BuildOptions {
+  tol: number;
+  applyShrinkage: boolean;
+  /** Declare points on each smooth blend's own surface over every facet the mesh has from it, for the surface check (blendSurface). */
+  blendSurface?: boolean;
+  /**
+   * Keep each blend's level set (reuse false), or take the kept one instead of building it
+   * again (reuse true): the surface check's reference build takes the export build's, since
+   * a blend's grid does not get finer for the reference (ops.ts, smoothUnion).
+   */
+  blendMeshes?: BlendMeshes;
+}
+
+export async function buildPiece(tree: PieceTree, opts: BuildOptions): Promise<Built> {
   const k = await kernel();
   const A = new Arena();
   try {
@@ -378,7 +389,10 @@ export async function buildPiece(tree: PieceTree, opts: { tol: number; applyShri
 }
 
 export function polygonsToMesh(m: Manifold): MeshOut {
-  const mesh = m.getMesh();
+  return meshOut(m.getMesh());
+}
+
+function meshOut(mesh: Mesh): MeshOut {
   const np = mesh.numProp;
   const nv = mesh.vertProperties.length / np;
   const positions = new Float32Array(nv * 3);
@@ -390,7 +404,9 @@ export function polygonsToMesh(m: Manifold): MeshOut {
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
 
-function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; applyShrinkage: boolean }): Built {
+function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Built {
+  // A kept level set carries no field to put points on its surface with.
+  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error('a build that declares blend surfaces builds its own level sets');
   const { Manifold, CrossSection } = k;
   const tol = opts.tol;
   const v = readPiece(tree);
@@ -491,8 +507,9 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   // bounds, so the checker can name the added shape a thin place is in. A thickened sheet
   // among them also declares itself (its nominal thickness and middle surface).
   const sheets: SheetDecl[] = [];
+  const blends: BlendRecord[] = [];
   for (const extra of v.extras) {
-    const shape = A.t(buildOp(k, A, extra as TreeNode, tol, { m: IDENTITY, sheets }));
+    const shape = A.t(buildOp(k, A, extra as TreeNode, tol, { m: IDENTITY, sheets, blends, ...(opts.blendMeshes ? { blendMeshes: opts.blendMeshes } : {}) }));
     const bb = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 });
     metal = A.t(metal.add(shape));
@@ -509,9 +526,11 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   const status = metal.status();
   if (status !== 'NoError') throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
+  const mesh = metal.getMesh();
+  if (opts.blendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale);
   return {
     view: v,
-    metal: polygonsToMesh(metal),
+    metal: meshOut(mesh),
     ...(stoneSolid ? { stone: polygonsToMesh(scale !== 1 ? A.t(stoneSolid.scale(scale)) : stoneSolid) } : {}),
     decl,
     volumeMm3: metal.volume(),
@@ -549,6 +568,86 @@ export function atFilePrecision(A: Arena, m: Manifold): Manifold {
   );
   // At the kernel's own tolerance, so nothing but what the rounding closed up is collapsed.
   return A.t(snapped.simplify());
+}
+
+// ------------------------------------------------------ a blend's own surface
+
+/**
+ * Points on each smooth blend's OWN surface (its distance field's zero level), over
+ * every facet of the finished mesh that came from the blend's level set: each facet's
+ * corners, the midpoints of its edges and its centroid, each moved along the facet's
+ * normal onto the surface (field.ts, projectOntoSurface). A facet's chord error on a
+ * smooth surface is a quadratic that vanishes at its corners; its largest along an
+ * edge is at the edge's midpoint, and over the facet these points catch at least
+ * 93.9 % of its largest (computed over every curvature, convex or saddle). These are
+ * what the surface check measures the written facets against, in place of a second,
+ * finer level set (ops.ts, smoothUnion). In the written file's coordinates.
+ */
+function blendSurface(mesh: Mesh, blends: BlendRecord[], scale: number): BlendDecl[] {
+  const np = mesh.numProp, V = mesh.vertProperties, T = mesh.triVerts;
+  const nv = V.length / np;
+  const out: BlendDecl[] = [];
+  for (const b of blends) {
+    const tris: number[] = [];
+    for (let r = 0; r < mesh.runOriginalID.length; r++) {
+      if (mesh.runOriginalID[r] !== b.originalID) continue;
+      for (let t = mesh.runIndex[r]! / 3; t < mesh.runIndex[r + 1]! / 3; t++) tris.push(t);
+    }
+    if (!tris.length) continue;
+    // The blend's frame: the piece's point P is m(p) * scale, m rigid, so p = m^-1(P / scale).
+    const m = b.m;
+    const toLocal = (x: number, y: number, z: number): Vec3 => {
+      const dx = x / scale - m[3]!, dy = y / scale - m[7]!, dz = z / scale - m[11]!;
+      return [m[0]! * dx + m[4]! * dy + m[8]! * dz, m[1]! * dx + m[5]! * dy + m[9]! * dz, m[2]! * dx + m[6]! * dy + m[10]! * dz];
+    };
+    const dirLocal = (x: number, y: number, z: number): Vec3 => [m[0]! * x + m[4]! * y + m[8]! * z, m[1]! * x + m[5]! * y + m[9]! * z, m[2]! * x + m[6]! * y + m[10]! * z];
+    const f = (x: number, y: number, z: number) => b.field.value(x, y, z);
+    const seenVert = new Uint8Array(nv);
+    const seenEdge = new Set<number>();
+    const pts = new Float32Array(3 * 7 * tris.length);
+    let n = 0;
+    const at = (i: number): Vec3 => [V[i * np]!, V[i * np + 1]!, V[i * np + 2]!];
+    const on = new Float64Array(3);
+    const add = (x: number, y: number, z: number, nrm: Vec3) => {
+      projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
+      const q0 = on[0]!, q1 = on[1]!, q2 = on[2]!;
+      pts[n * 3] = (m[0]! * q0 + m[1]! * q1 + m[2]! * q2 + m[3]!) * scale;
+      pts[n * 3 + 1] = (m[4]! * q0 + m[5]! * q1 + m[6]! * q2 + m[7]!) * scale;
+      pts[n * 3 + 2] = (m[8]! * q0 + m[9]! * q1 + m[10]! * q2 + m[11]!) * scale;
+      n++;
+    };
+    for (const t of tris) {
+      const ia = T[t * 3]!, ib = T[t * 3 + 1]!, ic = T[t * 3 + 2]!;
+      const a = at(ia), bb = at(ib), c = at(ic);
+      const ux = bb[0] - a[0], uy = bb[1] - a[1], uz = bb[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz);
+      if (!(l > 0)) continue;
+      const nrm = dirLocal(nx / l, ny / l, nz / l);
+      for (const i of [ia, ib, ic]) {
+        if (seenVert[i]) continue;
+        seenVert[i] = 1;
+        const p = at(i);
+        add(p[0], p[1], p[2], nrm);
+      }
+      for (const [i, j] of [
+        [ia, ib],
+        [ib, ic],
+        [ic, ia],
+      ] as const) {
+        const lo = Math.min(i, j), hi = Math.max(i, j);
+        const key = lo * nv + hi;
+        if (seenEdge.has(key)) continue;
+        seenEdge.add(key);
+        const p = at(lo), q = at(hi);
+        add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
+      }
+      add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
+    }
+    out.push({ label: b.label, points: pts.slice(0, n * 3) });
+  }
+  return out;
 }
 
 function circlePts(r: number, n: number, cx: number, cy: number): Vec2[] {
