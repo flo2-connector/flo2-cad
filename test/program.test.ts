@@ -110,10 +110,11 @@ describe('a cabochon in a bezel, from a program alone', () => {
     assert.deepEqual(failing(r), []);
     assert.equal(r.report['export'], 'released');
     assert.ok(r.stl && r.threeMf);
-    // The bezel declared itself: its wall and lip were checked, against the cabochon's crown.
+    // The bezel declared itself: its wall and lip were checked, the lip against the cabochon's dome, by the cabochon's rule.
     assert.ok(r.entries.some((e) => e.id === 'bezel_wall' && e.result === 'pass'));
     const lip = r.entries.find((e) => e.id === 'bezel_lip')!;
-    assert.match(lip.measured!, /60 % of the 2\.6 mm crown/);
+    assert.match(lip.measured!, /60 % of the 2\.6 mm dome/);
+    assert.match(lip.limit, /at least a third of the cabochon's 2\.6 mm dome/);
     // The cabochon is drawn, never cast: above its flat seat the casting file is empty.
     assert.equal(insideStl(r.stl, [0, 0, 11.0]), false);
     assert.deepEqual((r.report['stone'] as { in_casting_file: boolean; shape: string }), { ...(r.report['stone'] as object), in_casting_file: false, shape: 'custom' });

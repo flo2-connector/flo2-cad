@@ -173,7 +173,7 @@ describe('a piece written as a program, over MCP (cap:the-agent-writes-a-piece-a
     assert.deepEqual(Object.keys(files(started)).sort(), ['cadfile:///moon.preview.png', 'cadfile:///moon.tree.json']);
     const piece = JSON.parse(bytes(started, 'cadfile:///moon.tree.json').toString('utf8'));
     assert.deepEqual(piece, { format: 'flo2-cad.program/1', name: 'moon', revision: 1, metal: 'sterling_silver_925', shrinkage: 'off', units: 'mm', program: fixture.program });
-    assert.match(texts(started), /a full bezel .* holding one 8\.00 × 8\.00 mm stone of its own shape \("moonstone"\)/);
+    assert.match(texts(started), /a full bezel .* holding one 8\.00 × 8\.00 mm cabochon \("moonstone"\)/);
     const exported = await call('export_for_casting', {});
     assert.equal(exported.isError, false);
     assert.deepEqual(Object.keys(files(exported)), ['cadfile:///moon.stl', 'cadfile:///moon.3mf', 'cadfile:///moon.check.json']);

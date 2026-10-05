@@ -143,6 +143,7 @@ export const PRELUDE = String.raw`(function (bridge) {
     ringShank: (o) => call('ringShank', [o]),
     roundStone: (o) => call('roundStone', [o]),
     emeraldStone: (o) => call('emeraldStone', [o]),
+    cabochon: (o) => call('cabochon', [o]),
     stone: (s, o) => call('stone', [s, o]),
     prongHead: (o) => call('prongHead', [o]),
     bezel: (o) => call('bezel', [o]),
