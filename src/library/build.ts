@@ -18,7 +18,7 @@ import { readPiece } from '../piece/tree.js';
 import { projectOntoSurface } from './field.js';
 import { buildOp } from './ops.js';
 import { IDENTITY, type BlendMeshes, type BlendRecord } from './thicken.js';
-import { stoneShape, type StoneSpec } from './stones.js';
+import { stoneShape, type StoneShapeInfo, type StoneSpec } from './stones.js';
 import { EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL } from './tolerances.js';
 
 export { EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL };
@@ -190,6 +190,31 @@ export function prongPlaces(stone: StoneSpec, outline: P2[], count: number): { a
   return places.map(({ at, out }) => ({ at, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
 
+/**
+ * Where each prong stands round a stone of its own shape (a program's): evenly round it as
+ * on a round, each where the line out from the stone's middle crosses its girdle outline,
+ * standing out square to that edge.
+ */
+export function prongPlacesAround(outline: P2[], count: number): { at: P2; out: P2 }[] {
+  const n = outline.length;
+  return Array.from({ length: count }, (_, i) => {
+    const a = (((i + 0.5) * 360) / count) * (Math.PI / 180);
+    const dir: P2 = [Math.sin(a), Math.cos(a)];
+    let best: { s: number; out: P2 } = { s: 0, out: dir };
+    for (let j = 0; j < n; j++) {
+      const p = outline[j]!, q = outline[(j + 1) % n]!;
+      const ex = q[0] - p[0], ey = q[1] - p[1];
+      const det = dir[0] * -ey - dir[1] * -ex;
+      if (Math.abs(det) < 1e-12) continue;
+      // dir * s = p + e * u, solved for s and u.
+      const s = (p[0] * -ey - p[1] * -ex) / det;
+      const u = (dir[0] * p[1] - dir[1] * p[0]) / det;
+      if (s > best.s && u >= -1e-9 && u <= 1 + 1e-9) best = { s, out: edgeNormal(p, q) };
+    }
+    return { at: [dir[0] * best.s, dir[1] * best.s] as P2, out: best.out };
+  });
+}
+
 // --------------------------------------------------------------- dimensions
 //
 // Every dimension a check or a decision rests on (will this stone fit its seat, how
@@ -226,7 +251,8 @@ export interface ProngDims {
 
 export interface HeadDims {
   kind: 'prong_head' | 'bezel';
-  shape: 'round' | 'emerald';
+  /** A program's own stone (a cabochon) is 'custom', reported as its length and width seen from above. */
+  shape: 'round' | 'emerald' | 'custom';
   stone: Across & { depthMm: number; girdleMm: number; crownMm: number; pavilionMm: number };
   /** Heights above the finger's axis: the stone's point, its girdle's bottom and top, and its table. */
   culetZ: number;
@@ -259,6 +285,7 @@ export interface PieceDims {
 }
 
 function stoneSpec(sv: StoneView): StoneSpec {
+  if (sv.shape === 'custom') throw new Error('engine bug: a stone of its own shape has no round or emerald-cut spec');
   return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
 }
 
@@ -287,18 +314,21 @@ export function narrowestSection(p: P2, r: number, outside: (x: number, y: numbe
   return Math.max(0, 2 * best.v);
 }
 
-/** The dimensions the build makes a piece to. Pure numbers: no geometry is built. */
-export function pieceDims(v: PieceView): PieceDims {
+/**
+ * The dimensions the build makes a piece to. Pure numbers: no geometry is built. `custom`
+ * is the shape of a stone a program made itself (a cabochon), in place of the round or
+ * emerald cut the view names; its prongs stand evenly round it, as a round's do.
+ */
+export function pieceDims(v: PieceView, custom?: StoneShapeInfo): PieceDims {
   const rIn = v.innerDiameterMm / 2;
   const t = v.bandThicknessMm;
   const rOut = rIn + t;
   const dims: PieceDims = { band: { innerDiameterMm: v.innerDiameterMm, outerDiameterMm: 2 * rOut, widthMm: v.bandWidthMm, thicknessMm: t } };
   if (!v.head) return dims;
   const sv = v.head.stone;
-  const spec = stoneSpec(sv);
   // Its proportions, its exact seat edge and (from the outline) where the prongs stand do
   // not depend on how finely the outline is drawn, so any tolerance serves here.
-  const shape = stoneShape(spec, PREVIEW_TOL);
+  const shape = custom ?? stoneShape(stoneSpec(sv), PREVIEW_TOL);
   const culetZ = rOut + v.head.culetClearanceMm;
   const zGb = culetZ + shape.pavilion;
   const zGt = zGb + shape.girdle;
@@ -328,7 +358,8 @@ export function pieceDims(v: PieceView): PieceDims {
     // prong so each foot sits wholly inside it.
     const rail = { offMm: hv.nominalProngMm / 2 - hv.gripMm, widthMm: Math.max(hv.nominalProngMm, 1.2) + 0.3, heightMm: Math.max(hv.nominalProngMm, 1.2) + 0.2 };
     head.rail = rail;
-    const prongs = prongPlaces(spec, shape.outline, hv.prongCount).map((pl, i) => {
+    const places = custom ? prongPlacesAround(shape.outline, hv.prongCount) : prongPlaces(stoneSpec(sv), shape.outline, hv.prongCount);
+    const prongs = places.map((pl, i) => {
       const tk = hv.prongThicknessMm[i]!;
       // Each prong stands so its inner edge reaches the grip in over the girdle.
       const off = tk / 2 - hv.gripMm;
@@ -404,103 +435,139 @@ function meshOut(mesh: Mesh): MeshOut {
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
 
-function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Built {
-  // A kept level set carries no field to put points on its surface with.
-  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error('a build that declares blend surfaces builds its own level sets');
+/** The band, its cross-section revolved around the finger (the Y axis), and what it declares to the checker. */
+export function buildBand(k: Kernel, A: Arena, dims: PieceDims, profileName: string, tol: number): { band: Manifold; decl: BandDecl } {
   const { Manifold, CrossSection } = k;
-  const tol = opts.tol;
-  const v = readPiece(tree);
-  const dims = pieceDims(v);
   const rIn = dims.band.innerDiameterMm / 2;
   const t = dims.band.thicknessMm;
   const rOut = dims.band.outerDiameterMm / 2;
   const w = dims.band.widthMm;
-
-  // The band: its cross-section revolved around the finger.
-  const profile = bandProfile(v.profile, rIn, t, w, tol);
+  const profile = bandProfile(profileName, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
+  return { band, decl: { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 } };
+}
+
+/** What a head declares to the checker: the stone it holds, and its prongs or its bezel. */
+export interface HeadDecl {
+  stone: StoneDecl;
+  prongs: ProngDecl[];
+  bezel?: BezelDecl;
+}
+
+/**
+ * A head (a prong head or a full bezel) round its stone, as the piece's dimensions
+ * (pieceDims) place it: on top of the band when there is one, or on the XY plane when
+ * the band is only notional (a program's head on its own: inner diameter and thickness 0).
+ * `shape` is the stone's shape (stones.ts, or one a program made). With `onBand`, the
+ * head is trimmed clear of the finger hole, as a ring's head always is.
+ */
+export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, tol: number, shape: StoneShapeInfo, onBand: boolean): { head: Manifold; stone: Manifold; decl: HeadDecl } {
+  const { Manifold, CrossSection } = k;
+  if (!v.head || !dims.head) throw new Error('engine bug: a head was asked for a piece with none');
+  const rIn = dims.band.innerDiameterMm / 2;
+  const rOut = dims.band.outerDiameterMm / 2;
+  const w = dims.band.widthMm;
+  const hd = dims.head;
+  const sv = v.head.stone;
+  const zGb = hd.girdleBottomZ;
+  const zGt = hd.girdleTopZ;
+  const zTable = hd.tableZ;
+  const decl: HeadDecl = { stone: { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm }, prongs: [] };
+  const stone = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
+  const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
+
+  let head: Manifold;
+  if (v.head.kind === 'prong_head' && hd.prongs && hd.rail) {
+    // The rail, its middle on the band's surface where it crosses the band. Built as one
+    // extruded ring, so no two shapes share a face.
+    const railW = hd.rail.widthMm;
+    const railH = hd.rail.heightMm;
+    const railOff = hd.rail.offMm;
+    const girdleCs = A.t(new CrossSection([shape.outline]));
+    const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
+    const railOuter = A.t(girdleCs.offset(railOff + railW / 2, 'Round', 2, ringSeg));
+    const railInner = A.t(girdleCs.offset(railOff - railW / 2, 'Round', 2, ringSeg));
+    const railCs = A.t(railOuter.subtract(railInner));
+    const railMid = A.t(girdleCs.offset(railOff, 'Round', 2, ringSeg)).toPolygons()[0] as P2[];
+    const xCross = Math.max(...crossingsX(railMid, w / 2));
+    const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
+    const parts: Manifold[] = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
+    hd.prongs.forEach((pd) => {
+      const tk = pd.thicknessMm;
+      const [cx, cy] = pd.axis;
+      // One solid of revolution: a round column from inside the rail up to the table's
+      // height, with a domed tip (Stuller: the dome's base flush with the table).
+      const r = tk / 2;
+      const colH = zTable - zRail;
+      const arc = (u: number): Vec2 => [r * Math.cos(u), colH + r * Math.sin(u)];
+      const prof: Vec2[] = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
+      const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
+      parts.push(A.t(col.translate([cx, cy, zRail])));
+      const prong: ProngDecl = {
+        label: pd.label,
+        clock: pd.clock,
+        axis: [cx, cy],
+        nominalDiameter: tk,
+        sectionFromZ: zRail + railH / 2 + 0.1,
+        sectionToZ: zTable - 0.02,
+      };
+      decl.prongs.push(prong);
+    });
+    head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
+  } else if (v.head.kind === 'bezel' && hd.bezel) {
+    const c = hd.seat.clearanceMm;
+    const zTop = hd.bezel.topZ;
+    const girdleCs = A.t(new CrossSection([shape.outline]));
+    const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
+    const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, 'Round', 2, seg));
+    const innerCs = A.t(girdleCs.offset(c, 'Round', 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
+    const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
+    const holeCs = A.t(girdleCs.offset(-ledge, 'Round', 2, seg));
+    const outerPts = outerCs.toPolygons()[0] as P2[];
+    const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
+    const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
+    const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
+    const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
+    const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
+    head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
+    decl.bezel = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
+  } else {
+    throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
+  }
+  if (onBand) {
+    // Trim the head clear of the finger hole.
+    const nBand = segmentsFor(rOut, tol, 48);
+    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
+    head = A.t(head.subtract(finger));
+  }
+  return { head, stone, decl };
+}
+
+function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Built {
+  // A kept level set carries no field to put points on its surface with.
+  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error('a build that declares blend surfaces builds its own level sets');
+  const tol = opts.tol;
+  const v = readPiece(tree);
+  const dims = pieceDims(v);
+
+  const b = buildBand(k, A, dims, v.profile, tol);
+  const band = b.band;
   const decl: FeatureDecl = { prongs: [], scale: 1 };
-  const bandDecl: BandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
-  decl.band = bandDecl;
+  decl.band = b.decl;
 
   let metal: Manifold = band;
   let stoneSolid: Manifold | undefined;
 
   if (v.head && dims.head) {
-    const hd = dims.head;
     const sv = v.head.stone;
-    const shape = stoneShape(stoneSpec(sv), tol);
-    const zGb = hd.girdleBottomZ;
-    const zGt = hd.girdleTopZ;
-    const zTable = hd.tableZ;
-    const stoneDecl: StoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm };
-    decl.stone = stoneDecl;
-    stoneSolid = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-    const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
-
-    let head: Manifold;
-    if (v.head.kind === 'prong_head' && hd.prongs && hd.rail) {
-      // The rail, its middle on the band's surface where it crosses the band. Built as one
-      // extruded ring, so no two shapes share a face.
-      const railW = hd.rail.widthMm;
-      const railH = hd.rail.heightMm;
-      const railOff = hd.rail.offMm;
-      const girdleCs = A.t(new CrossSection([shape.outline]));
-      const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
-      const railOuter = A.t(girdleCs.offset(railOff + railW / 2, 'Round', 2, ringSeg));
-      const railInner = A.t(girdleCs.offset(railOff - railW / 2, 'Round', 2, ringSeg));
-      const railCs = A.t(railOuter.subtract(railInner));
-      const railMid = A.t(girdleCs.offset(railOff, 'Round', 2, ringSeg)).toPolygons()[0] as P2[];
-      const xCross = Math.max(...crossingsX(railMid, w / 2));
-      const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
-      const parts: Manifold[] = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
-      hd.prongs.forEach((pd) => {
-        const tk = pd.thicknessMm;
-        const [cx, cy] = pd.axis;
-        // One solid of revolution: a round column from inside the rail up to the table's
-        // height, with a domed tip (Stuller: the dome's base flush with the table).
-        const r = tk / 2;
-        const colH = zTable - zRail;
-        const arc = (u: number): Vec2 => [r * Math.cos(u), colH + r * Math.sin(u)];
-        const prof: Vec2[] = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
-        const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
-        parts.push(A.t(col.translate([cx, cy, zRail])));
-        const prong: ProngDecl = {
-          label: pd.label,
-          clock: pd.clock,
-          axis: [cx, cy],
-          nominalDiameter: tk,
-          sectionFromZ: zRail + railH / 2 + 0.1,
-          sectionToZ: zTable - 0.02,
-        };
-        decl.prongs.push(prong);
-      });
-      head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
-    } else if (v.head.kind === 'bezel' && hd.bezel) {
-      const c = hd.seat.clearanceMm;
-      const zTop = hd.bezel.topZ;
-      const girdleCs = A.t(new CrossSection([shape.outline]));
-      const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
-      const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, 'Round', 2, seg));
-      const innerCs = A.t(girdleCs.offset(c, 'Round', 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
-      const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
-      const holeCs = A.t(girdleCs.offset(-ledge, 'Round', 2, seg));
-      const outerPts = outerCs.toPolygons()[0] as P2[];
-      const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
-      const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
-      const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
-      const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
-      const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
-      head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
-      const bezelDecl: BezelDecl = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
-      decl.bezel = bezelDecl;
-    } else {
-      throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
-    }
-    // Trim the head clear of the finger hole, then join it to the band.
-    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
-    metal = A.t(A.t(head.subtract(finger)).add(band));
+    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true);
+    decl.stone = h.decl.stone;
+    decl.prongs.push(...h.decl.prongs);
+    if (h.decl.bezel) decl.bezel = h.decl.bezel;
+    stoneSolid = h.stone;
+    // Join the head, trimmed clear of the finger hole, to the band.
+    metal = A.t(h.head.add(band));
   }
 
   // Any operations the agent added beside the band and head, each declared by its id and
@@ -517,6 +584,26 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
   if (sheets.length) decl.sheets = sheets;
 
   const scale = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
+  const done = finishMetal(A, metal, decl, blends, scale, !!opts.blendSurface);
+  return {
+    view: v,
+    metal: done.mesh,
+    ...(stoneSolid ? { stone: polygonsToMesh(scale !== 1 ? A.t(stoneSolid.scale(scale)) : stoneSolid) } : {}),
+    decl,
+    volumeMm3: done.volumeMm3,
+    bbox: done.bbox,
+    dims,
+  };
+}
+
+/**
+ * The last steps of every build, a tree's or a program's: the shrinkage allowance (the
+ * solid and its declarations scaled alike), every vertex at the casting file's float32,
+ * the kernel's own soundness, and, when asked, points on each smooth blend's own surface.
+ * Changes `decl` in place.
+ */
+export function finishMetal(A: Arena, solid: Manifold, decl: FeatureDecl, blends: BlendRecord[], scale: number, withBlendSurface: boolean): { mesh: MeshOut; volumeMm3: number; bbox: { min: Vec3; max: Vec3 } } {
+  let metal = solid;
   if (scale !== 1) {
     metal = A.t(metal.scale(scale));
     scaleDecl(decl, scale);
@@ -527,16 +614,8 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
   if (status !== 'NoError') throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
   const mesh = metal.getMesh();
-  if (opts.blendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale);
-  return {
-    view: v,
-    metal: meshOut(mesh),
-    ...(stoneSolid ? { stone: polygonsToMesh(scale !== 1 ? A.t(stoneSolid.scale(scale)) : stoneSolid) } : {}),
-    decl,
-    volumeMm3: metal.volume(),
-    bbox: { min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 },
-    dims,
-  };
+  if (withBlendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale);
+  return { mesh: meshOut(mesh), volumeMm3: metal.volume(), bbox: { min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 } };
 }
 
 // ------------------------------------------------- the casting files' precision
@@ -673,7 +752,7 @@ function crossingsX(poly: P2[], halfWidth: number): number[] {
   return xs.length ? xs : [0];
 }
 
-function scaleDecl(d: FeatureDecl, s: number): void {
+export function scaleDecl(d: FeatureDecl, s: number): void {
   if (d.band) {
     d.band.innerRadius *= s;
     d.band.outerRadius *= s;

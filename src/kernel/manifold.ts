@@ -20,12 +20,21 @@ export type { CrossSection, Manifold, Mesh, Vec2, Vec3 } from '../../vendor/mani
 
 export const KERNEL_DIR_NAME = 'manifold-3d-3.5.4';
 
+/** Whether a file is there. A place this process may not read (a program's evaluation child runs under Node's permission model, src/program/run.ts) is not. */
+function readable(p: string): boolean {
+  try {
+    return existsSync(p);
+  } catch {
+    return false;
+  }
+}
+
 /** The vendored kernel's folder, found by walking up from this file (it differs between the tsc build and the bundle). */
 export function kernelDir(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     const candidate = join(dir, 'vendor', KERNEL_DIR_NAME);
-    if (existsSync(join(candidate, 'manifold.js'))) return candidate;
+    if (readable(join(candidate, 'manifold.js'))) return candidate;
     dir = dirname(dir);
   }
   throw new Error(`the geometry kernel (vendor/${KERNEL_DIR_NAME}/manifold.js) was not found next to the engine`);

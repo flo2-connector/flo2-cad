@@ -1,14 +1,17 @@
 #!/usr/bin/env node
-// Runs check_piece on one tree inside the engine's image, confined as flo2's slot confines
-// it (one CPU, no network, a read-only root, a memory cap with no swap), and fails unless
-// the reply comes within flo2's door (cap:the-casting-check-finishes-in-time-for-any-piece).
-//   node scripts/slot-check.mjs <image> <tree.json> [door_s=60] [memory=1g]
+// Runs check_piece on one piece file inside the engine's image, confined as flo2's slot
+// confines it (one CPU, no network, a read-only root, a memory cap with no swap), and fails
+// unless the reply comes within flo2's door (cap:the-casting-check-finishes-in-time-for-any-piece).
+// The file is a tree or a program piece; a program is evaluated in its own child process
+// inside the container, so this also proves that process starts and runs there.
+//   node scripts/slot-check.mjs <image> <tree.json> [door_s=60] [memory=1g] [must-pass]
+// With "must-pass", the answer must also be that every casting check passes.
 // No dependencies: CI runs it beside the image, before any npm install.
 
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-const [image, treePath, doorArg = '60', memory = '1g'] = process.argv.slice(2);
+const [image, treePath, doorArg = '60', memory = '1g', expect] = process.argv.slice(2);
 if (!image || !treePath) {
   console.error('usage: node scripts/slot-check.mjs <image> <tree.json> [door_s] [memory]');
   process.exit(2);
@@ -40,6 +43,7 @@ child.stdout.on('data', (d) => {
       const s = (performance.now() - t0) / 1000;
       const text = m.result?.content?.find((c) => c.type === 'text')?.text ?? '';
       if (m.result?.isError || m.error) finish(1, `check_piece failed after ${s.toFixed(1)} s: ${(m.error?.message ?? text).slice(0, 300)}`);
+      else if (expect === 'must-pass' && !/Every casting check passes/.test(text)) finish(1, `check_piece on ${tree.name} answered in ${s.toFixed(1)} s, but not with a pass: ${text.slice(0, 400)}`);
       else finish(s <= door ? 0 : 1, `check_piece on ${tree.name} answered in ${s.toFixed(1)} s (door ${door} s, ${memory}, 1 CPU)`);
     }
   }

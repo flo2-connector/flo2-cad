@@ -68,6 +68,15 @@ export interface CheckEntry {
   method: string;
 }
 
+/**
+ * The finer reference's vertices, which are all the surface check reads of it: a tree's
+ * come as STL bytes and are read by the checker's own parser; a program's come from its
+ * evaluation as float32 positions (src/program/run.ts).
+ */
+export interface ReferencePoints {
+  positions: ArrayLike<number>;
+}
+
 export interface CheckRunResult {
   entries: CheckEntry[];
   mesh: { triangles: number; vertices: number; shells: number; volumeMm3: number };
@@ -94,7 +103,7 @@ export function clockAt(x: number, y: number): string {
  * measures how far the true surface stands off the written facets
  * (ver:surface-deviation-check).
  */
-export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, reference?: Uint8Array): CheckRunResult {
+export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, reference?: Uint8Array | ReferencePoints): CheckRunResult {
   const t0 = performance.now();
   let mesh: ReadMesh;
   try {
@@ -145,7 +154,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
   guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
   guard('surface_deviation', 'Surface smoothness', mm(L.surfaceDeviation), () => {
     if (!reference) throw new Error('no finer reference tessellation was supplied');
-    return surfaceEntry(bvh, L, readBinaryStl(reference), decl);
+    return surfaceEntry(bvh, L, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
@@ -1125,7 +1134,7 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
  * lies, and only past that out to the cap: the same distance as one search to the
  * cap, found without visiting everything within 0.2 mm of every point.
  */
-function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReadMesh, decl: FeatureDecl): CheckEntry {
+function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: FeatureDecl): CheckEntry {
   let worst: { dev: number; p: V3; blend?: string } = { dev: 0, p: [0, 0, 0] };
   const cap = Math.max(0.2, L.surfaceDeviation * 20);
   const first = Math.min(cap, L.surfaceDeviation * 2);

@@ -178,6 +178,13 @@ export interface OpContext {
   blends?: BlendRecord[];
   /** Blends' level sets kept from one build for another of the same piece (build.ts, BuildOptions.blendMeshes). */
   blendMeshes?: BlendMeshes;
+  /**
+   * How far from the origin a program may still move what is built here, after building
+   * it (a tree places every node before building it, so it gives none). A sheet's float32
+   * allowance covers that reach too (floatAllowance), so a sheet moved later is still
+   * built at least its stated thickness.
+   */
+  moveReachMm?: number;
 }
 
 /** Level sets by blend: `reuse` false keeps each one built, true takes one kept instead of building it again. */
@@ -392,9 +399,9 @@ export function convexSag(s: Pick<SheetSpec, 'surface' | 'radius' | 'axis' | 'th
  */
 export const FLOAT_ALLOWANCE = 2 ** -22;
 
-/** The float32 allowance for a sheet no point of which lies further than `reach` from its own origin, placed by `m` (rotations, mirrors and moves, which keep lengths). */
-function floatAllowance(reach: number, m: Affine): number {
-  return FLOAT_ALLOWANCE * (Math.hypot(m[3]!, m[7]!, m[11]!) + reach);
+/** The float32 allowance for a sheet no point of which lies further than `reach` from its own origin, placed by `m` (rotations, mirrors and moves, which keep lengths) and then moved up to `later` mm more. */
+function floatAllowance(reach: number, m: Affine, later = 0): number {
+  return FLOAT_ALLOWANCE * (Math.hypot(m[3]!, m[7]!, m[11]!) + later + reach);
 }
 
 /** Each contour divided into pieces no longer than `step` (the kernel keeps the points it is given). */
@@ -431,7 +438,7 @@ export function buildThicken(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx?
   const far = Math.max(...[bb.min[0], bb.max[0]].flatMap((x) => [bb.min[1], bb.max[1]].map((y) => Math.hypot(x, y))));
   let solid: Manifold;
   if (s.surface === 'flat') {
-    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY);
+    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY, ctx?.moveReachMm);
     solid = A.t(A.t(Manifold.extrude(cs, t + 2 * eps)).translate([0, 0, -(t / 2 + eps)]));
   } else {
     const map = surfaceMap(s);
@@ -449,7 +456,7 @@ export function buildThicken(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx?
     // The two faces, at least the stated thickness apart square to the surface (AT LEAST THE STATED THICKNESS, above):
     // the outer (convex) face out by its facets' sagitta, and both off the metal by the float32 allowance.
     const sag = convexSag(s, xs, ys);
-    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY);
+    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY, ctx?.moveReachMm);
     const zb = -(t / 2 + sag + eps), zt = t / 2 + eps;
     const slab = A.t(A.t(gridSlab(k, xs, ys, zb, zt)).warpBatch(warp));
     // The cutter reaches m past each face. Its own faces lie outside the sheet, and are

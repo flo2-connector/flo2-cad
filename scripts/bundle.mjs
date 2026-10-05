@@ -4,6 +4,9 @@
 // or the Docker image. The kernel is NOT bundled: it stays as the unmodified
 // vendor/manifold-3d-3.5.4/ files, loaded at run time.
 //
+// Beside it, dist/program-child.js: the short-lived process a piece written as a
+// program is evaluated in, confined (src/program/run.ts starts it).
+//
 // dist/main.js is committed (a plugin is installed from the repo, with no build
 // step), and CI rebuilds it and fails if the committed file differs.
 // dist/THIRD-PARTY-NOTICES.txt carries the licence of every bundled package.
@@ -17,8 +20,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 mkdirSync(join(root, 'dist'), { recursive: true });
 
 const result = await build({
-  entryPoints: [join(root, 'src/main.ts')],
-  outfile: join(root, 'dist/main.js'),
+  entryPoints: { main: join(root, 'src/main.ts'), 'program-child': join(root, 'src/program/child.ts') },
+  outdir: join(root, 'dist'),
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -43,10 +46,10 @@ for (const input of Object.keys(result.metafile.inputs)) {
   pkgs.set(name, { version: pj.version, license: pj.license, text: lic ? readFileSync(lic, 'utf8').trim() : `(${pj.license}; no licence file in the package)` });
 }
 const notices = [
-  'dist/main.js bundles the following packages. Their licences follow.',
+  'dist/main.js and dist/program-child.js bundle the following packages. Their licences follow.',
   'The geometry kernel, manifold-3d 3.5.4 (Apache-2.0), is not bundled: see vendor/manifold-3d-3.5.4/LICENSE.',
   '',
   ...[...pkgs.entries()].sort(([a], [b]) => a.localeCompare(b)).flatMap(([name, p]) => [`=== ${name} ${p.version} (${p.license}) ===`, p.text, '']),
 ].join('\n');
 writeFileSync(join(root, 'dist/THIRD-PARTY-NOTICES.txt'), notices);
-console.log(`dist/main.js bundled ${pkgs.size} packages: ${[...pkgs.keys()].sort().join(', ')}`);
+console.log(`dist/main.js and dist/program-child.js bundled ${pkgs.size} packages: ${[...pkgs.keys()].sort().join(', ')}`);

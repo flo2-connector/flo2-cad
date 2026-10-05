@@ -21,6 +21,7 @@ export const INSTRUCTIONS = [
   'Size a stone from its MEASURED dimensions on its grading report, never from a carat chart; until then its size is a placeholder.',
   'export_for_casting releases the STL and 3MF only when every casting check passes on the written file; if it refuses, tell the person what to thicken and where, and offer the change. Platinum goes to a specialist caster.',
   'Each reply that changes the piece returns its tree; pass it back as "tree" to pick the piece up in a new conversation.',
+  'For a shape the templates and operations do not make (a cabochon, a lion\'s face, a ship), write the piece as a short JavaScript program and pass it as "program" to start_piece or change_piece; describe_piece lists what a program can call. It runs confined, and is checked and exported like any piece.',
 ].join(' ');
 
 /** One server per connection: the session (the open piece) belongs to that connection. */

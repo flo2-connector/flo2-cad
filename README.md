@@ -25,14 +25,19 @@ The spec is the flo2-hosted design "Agent CAD engine" (`38eca9450f850bf7`). Buil
   east-west, on a plain round band. Its stone size is a placeholder (a typical 2.00 ct, 8.5 × 6.0 × 4.1 mm) until
   her stone's measurements are given. The replies and the picture both say so.
 
+**Third increment, general CAD (in progress):** the agent can write a piece as a short JavaScript **program** over
+the kernel and the jewelry library, which the engine runs confined and keeps as the piece's file. See
+[A piece written as a program](#a-piece-written-as-a-program). How a program is confined is PROPOSED in the design
+(`dec:idea-how-a-program-is-confined`) and waits for the owner's word.
+
 ## Tools
 
 The seam with flo2 is fixed, so this list is final for the increment. Any change to it is a change to both repos.
 
 | Tool | Class | Arguments | Returns |
 |---|---|---|---|
-| `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview` | summary (with the seat and the head's outside size), the tree as text, `<name>.preview.png`, `<name>.tree.json` |
-| `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `preview?` | what changed, the summary, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
+| `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview`. Or, instead of a template: `program` (with `name`, `metal`, `shrinkage`) | summary (with the seat and the head's outside size), the tree as text, `<name>.preview.png`, `<name>.tree.json` |
+| `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `program?` (the whole piece as a program; a template piece goes on as one), `preview?` | what changed, the summary, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
 | `preview_piece` | read | `tree?`, `views?` (1 to 4 of `three_quarter`, `front`, `side`, `top`, `setting_closeup`) | `<name>.preview.png` |
 | `check_piece` | read | `tree?` | pass or fail for each limit, what to thicken and where, `<name>.check.json` |
 | `export_for_casting` | write | `tree?` | if every check passes: `<name>.stl`, `<name>.3mf` and `<name>.check.json`. If not: `<name>.check.json` and what to thicken and where (`isError: false`) |
@@ -87,7 +92,8 @@ by the independent checker on the written file.
 
 **Units and errors:**
 
-- A length is a string with its unit, like `"1.4 mm"`.
+- A length is a string with its unit, like `"1.4 mm"`. In a program, a bare number is a length in mm (an angle in
+  degrees), as its file states (`"units": "mm"`); a string there still carries its unit.
 - A bare number, inches or any other unit is a malformed call. It comes back with `isError: true`, and the message
   names the field path and the conversion, for example `set.stone_diameter: "0.25 in" … 0.25 in × 25.4 = 6.35 mm`.
 
@@ -102,6 +108,108 @@ by the independent checker on the written file.
 
 Moving from the v1 SDK changed nothing in the tool list, its schemas or the replies. A test lists the same six tools
 in both eras.
+
+## A piece written as a program
+
+For any shape the templates and operations do not make (a cabochon, a signet's crest, a ship's hull), the agent
+writes the piece as a short JavaScript program (`dec:idea-how-flo2-cad-becomes-general-enough-to-model-anything`,
+option A, settled 2026-10-05). Nothing is added to the engine per shape.
+
+**The interface.** One new argument, `program`, on `start_piece` (instead of `template`) and on `change_piece` (the
+next version, or a template piece going on as a program). There is no new tool: flo2's door allowlists tool names
+and passes arguments through, so the same six names serve both kinds of piece. The program is kept as the piece's
+file, `<name>.tree.json`, which flo2 already versions and passes back as `tree`; it is told apart by its format:
+
+```json
+{"format": "flo2-cad.program/1", "name": "moon", "revision": 1, "metal": "sterling_silver_925",
+ "shrinkage": "off", "units": "mm", "program": "const band = ringShank({ ... }); ... return union(band, setting);"}
+```
+
+`preview_piece`, `check_piece`, `export_for_casting` and `describe_piece` take it as they take a tree. `set` on a
+program piece takes only `name`, `metal` and `shrinkage`; everything else is in the program. `describe_piece` of a
+template piece shows it written as a program (the same piece, by the same calls), and lists what a program can call.
+
+**What a program calls** (`src/program/library.ts`; `describe_piece` prints the full list):
+
+- the **library**, today's parts as functions: `ringShank`, `roundStone`, `emeraldStone`, `stone` (a stone of the
+  program's own shape), `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). Each takes
+  `start_piece`'s settings and defaults, checked by the tree's own checks, is sized by `pieceDims` and built by
+  `buildBand` and `buildHead`, so a program-built ring is the template ring (a test holds every reading equal). Each
+  returns its solid with the checker declarations it makes (band, seat, prongs, bezel rim, sheets), and reads back
+  its dimensions as `.dims`;
+- the **kernel**: `sphere`, `cylinder`, `box`, `torus`, `sweep` (built by the tree's own `buildOp`); 2D `circle`,
+  `rect`, `polygon` with `.offset`; `extrude`, `revolve`, `hull`, `hullPoints`; `union`, `difference`,
+  `intersection`, `smoothUnion`; on a solid `.translate`, `.rotate`, `.mirror`, `.scale`, `.named`, `.bounds`,
+  `.volume`, `.slice`, `.project`, `.trim`; and `segments(r)`, a circle's segment count at the build's tolerance.
+
+A declaration follows its solid through a move only if the checker can still measure it: a band only turns about Y,
+a setting moves anywhere and turns only about Z. Anything else, and `scale` or `hull` of a solid holding a part, is
+refused, naming the part. A piece holds one band and one stone setting from the library, as a tree does.
+
+**A cabochon in a bezel**, from a program alone (`test/fixtures/cabochon-in-bezel.tree.json`; it passes every
+check in silver and exports):
+
+```js
+const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });
+const r = 4, h = 2.6, n = Math.ceil(segments(r) / 4);
+const profile = [[0, 0]];
+for (let i = 0; i <= n; i++) {
+  const a = (i / n) * Math.PI / 2;
+  profile.push([r * Math.cos(a), h * Math.sin(a)]);
+}
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+return union(band, bezel({ stone: moonstone, on: band, wall: 1.0 }));
+```
+
+**Limits.** Each evaluation gets **20 s** and **512 MiB** by default; `FLO2_CAD_PROGRAM_SECONDS` and
+`FLO2_CAD_PROGRAM_MEMORY_MIB` change them for a host's slot. A check runs the program twice in one evaluation (the
+casting file's tolerance and the finer reference), so the limit covers both. Hitting one is a plain refusal: "the
+program ran past its time limit (20 s)", "the program used more than its memory limit (512 MiB)", or the line and
+message that failed ("program: line 3: rotate([20, 0, 0]): would tip the stone setting off upright ...").
+
+### How a program is confined
+
+PROPOSED (`dec:idea-how-a-program-is-confined`), built to the recommendation, waiting for the owner's word:
+
+1. **A separate, short-lived process per evaluation** (`dist/program-child.js`, started by `src/program/run.ts`):
+   - a **wall-clock limit**, enforced inside by V8's own watchdog on the program's context and outside by SIGKILL;
+   - a **memory limit**: the V8 heap capped (`--max-old-space-size`, half the limit), the kernel's WebAssembly heap
+     capped (its growth refused past the limit less 128 MiB), and the process's resident memory read from `/proc`
+     every 20 ms and SIGKILLed past the limit; on Linux it is also first for the OOM killer (`oom_score_adj` 1000),
+     so a container at its cap loses the child, not the engine;
+   - an **empty environment**, and **Node's permission model**: it may read only the engine's own files and the
+     kernel, and may write nothing, start no process or worker, and load no native addon. Code generation from
+     strings is off.
+2. **Inside it, a fresh V8 context** with only the language's built-ins and the library's globals: no `require`,
+   `import`, `process`, file system, network or timers, and no code from strings. The program holds **handles**: every
+   solid and every declaration stays in the engine's table, and the program's calls cross as a name and JSON text, so
+   no object, function or error of the engine's realm ever reaches it. A declaration can come only from a library
+   call.
+3. **Only a mesh and declarations come back**: vertices and triangles, the declarations the library made, the parts'
+   dimensions, and for a picture the stones. The engine rebuilds each field itself, refuses anything out of range,
+   and before a check confirms that every declaration has metal where it says (a point inside the band all the way
+   round, inside each prong's column, inside the bezel wall, on a sheet).
+4. **The checker and the exporter run in the engine's process**, on that mesh: the STL is written there, read back
+   by the independent checker, and released only if every check passes on those bytes. Nothing a program does can
+   touch the check.
+5. **On flo2.io** the helper's container (no network, a memory cap, one CPU, a read-only root) stays the security
+   boundary around all of it.
+
+Tests (`test/program.test.ts`) hold each of these: an endless loop, an endless promise chain and memory bombs in
+JavaScript, in typed arrays and in the kernel are stopped and refused plainly; `require`, `process`, `fetch`, timers,
+`import()`, `eval` and every constructor chain out of the context fail; no function of the engine's appears on the
+program's stack; a program that rewrites its own `Math`, `JSON`, `Array` and `Object` gets the same readings.
+
+**The residual risk, plainly.** `node:vm` is not a security boundary on its own, and Node's permission model is a
+seat belt, not a sandbox (and in Node 24 does not restrict the network). A program that escaped the context through
+an unknown V8 or Node flaw would run as the child, with its permissions, and could write any answer. The engine still
+measures the mesh it sends in full (a hole, a second shell, or a wall or detail under 0.35 mm is refused whatever is
+declared), but a forged declaration could weaken a jewelry-specific check: a prong declared over thick metal beside a
+thin fin would excuse that fin from the 0.8 mm wall check within the prong's column; a stone's outline drawn larger
+would make prongs seem to reach further; a reference sent equal to the file would pass the surface check. On flo2.io
+the container bounds what an escape reaches; on a laptop, the child runs as the person, and the network is open to
+it. Where there is no `/proc` (macOS, Windows) the resident-memory watch is off: the heap and kernel caps and the time
+limit still hold, but memory a program takes in typed arrays is bounded only by the time limit.
 
 ## What "casting-ready" means here
 
@@ -171,6 +279,18 @@ Holding the blend's facets to its own surface (the Surface row above) costs abou
 box the same day, c678b62 took 33.5 s in process (550 MiB), 37.1 s at 768 MiB and 42.9 s at 384 MiB.
 `test/check-time.test.ts` holds it to 45 s at one CPU and 1 GiB; CI's image job holds it to flo2's 60 s door.
 
+**A piece written as a program.** Measured 2026-10-05 on this box, with the cabochon in a bezel
+(`test/fixtures/cabochon-in-bezel.tree.json`):
+
+| What | Time | Peak memory of the evaluation child |
+|---|---|---|
+| Starting the child and the kernel (`return sphere(1)`) | 0.13-0.18 s | 57 MiB |
+| Preview evaluation | 0.33 s | 76 MiB |
+| `check_piece`, in process: the evaluation (the casting file and its finer reference) then the checks | 2.0 s (0.8 s evaluating) | 117 MiB |
+| `check_piece` in Docker `--cpus 1 --memory 768m --memory-swap 768m --network none --read-only` | 3.5 s | |
+
+The program-built solitaire is the template's mesh: the same triangle count, volume and readings.
+
 ## Run it
 
 ```sh
@@ -202,7 +322,9 @@ from the repo needs no build step:
 - **Checker.** `src/checker/` never imports the kernel, the library or the exporter, and a test holds that. It reads
   the written STL with its own parser.
 - **Bundle.** The MCP SDK v2 and zod are bundled into `dist/main.js`. Their licences are in
-  `dist/THIRD-PARTY-NOTICES.txt`.
+  `dist/THIRD-PARTY-NOTICES.txt`. `dist/program-child.js` beside it is the process a program is evaluated in; it
+  bundles only the engine's own library and kernel loader. No sandbox library is added: the confinement is Node's own
+  (`node:vm`, `node:child_process`, the permission model).
 - **No native dependencies.** The PNG preview comes from a software rasterizer. The 3MF zip is written with
   `node:zlib`.
 
@@ -231,6 +353,11 @@ npm run measure
   the watertight check, `fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05`; the cause and the fix
   are in "Both casting files hold the same vertices" above.)
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
+- **Programs** (in progress): one band and one stone setting from the library per piece, as the checker measures
+  one of each; a band stays round the Y axis and a setting upright. The bezel lip check is the faceted stone's
+  (50-75 % of the crown), so a lower bezel over a cabochon is refused. A stone of the program's own shape is read at
+  each build's fineness: its girdle is where its slices are widest, which a curve drawn with `segments()` keeps the
+  same at every tolerance.
 - **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
   its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face
   curving back, so it reads the rim thinner than it is (measured: 99.8 % of the thickness at 5 times, 84-94 % at 4
