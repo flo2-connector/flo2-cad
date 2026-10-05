@@ -100,10 +100,11 @@
 
 import { CallError } from '../errors.js';
 import type { SheetDecl, P3 } from '../checker/features.js';
-import { segmentsFor, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
+import { segmentsFor, type Kernel, type Manifold, type Mesh, type Vec2, type Vec3 } from '../kernel/manifold.js';
 import type { TreeNode } from '../piece/tree.js';
 import { lengthMm } from '../units.js';
 import type { Arena } from './build.js';
+import type { BlendField } from './field.js';
 
 export const SURFACES = ['flat', 'sphere', 'cylinder'] as const;
 export type Surface = (typeof SURFACES)[number];
@@ -173,6 +174,24 @@ function applyDirection(m: Affine, d: P3): P3 {
 export interface OpContext {
   m: Affine;
   sheets?: SheetDecl[];
+  /** Each smooth blend the build makes, so the piece can declare points on its own surface (build.ts, blendSurface). */
+  blends?: BlendRecord[];
+  /** Blends' level sets kept from one build for another of the same piece (build.ts, BuildOptions.blendMeshes). */
+  blendMeshes?: BlendMeshes;
+}
+
+/** Level sets by blend: `reuse` false keeps each one built, true takes one kept instead of building it again. */
+export interface BlendMeshes {
+  meshes: Map<string, Mesh>;
+  reuse: boolean;
+}
+
+/** A smooth blend as built: its level set's mesh id, where it sits in the piece, and its field. */
+export interface BlendRecord {
+  label: string;
+  originalID: number;
+  m: Affine;
+  field: BlendField;
 }
 
 // ------------------------------------------------------------------- the surface

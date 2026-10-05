@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ManifoldToplevel } from '../../vendor/manifold-3d-3.5.4/manifold.js';
 
 export type Kernel = ManifoldToplevel;
-export type { CrossSection, Manifold, Vec2, Vec3 } from '../../vendor/manifold-3d-3.5.4/manifold.js';
+export type { CrossSection, Manifold, Mesh, Vec2, Vec3 } from '../../vendor/manifold-3d-3.5.4/manifold.js';
 
 export const KERNEL_DIR_NAME = 'manifold-3d-3.5.4';
 

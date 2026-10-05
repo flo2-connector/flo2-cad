@@ -65,6 +65,20 @@ export interface SheetDecl {
   normals: P3[];
 }
 
+/**
+ * A smooth blend (the tree's smooth_union) declares points on its OWN surface, its
+ * distance field's zero level, over every facet the file has from it: each facet's
+ * corners, edge midpoints and centroid, moved onto the surface along the facet's
+ * normal. The surface check measures how far the written facets stand off them, as
+ * it does the finer reference's vertices.
+ */
+export interface BlendDecl {
+  /** The smooth_union node's id. */
+  label: string;
+  /** x, y, z of each point in turn, in the written file's coordinates (float32, as the file and the reference hold them). */
+  points: Float32Array;
+}
+
 export interface AddedDecl {
   /** The id of a shape the tree adds beside the library's parts (a child of the root), as the piece's summary names it. */
   id: string;
@@ -80,6 +94,8 @@ export interface FeatureDecl {
   bezel?: BezelDecl;
   /** Sheets from thicken operations, if any. */
   sheets?: SheetDecl[];
+  /** Smooth blends, if any, with points on their own surfaces. */
+  blends?: BlendDecl[];
   /** The shapes the tree adds beside the band and head, each by its id. */
   added?: AddedDecl[];
   /** The uniform scale applied for shrinkage (1 when off). */

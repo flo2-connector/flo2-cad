@@ -53,3 +53,5 @@ jobs:
           for t in start_piece change_piece preview_piece check_piece export_for_casting describe_piece; do
             grep -q "\"name\":\"$t\"" out.jsonl || { echo "missing $t"; cat out.jsonl; exit 1; }
           done
+      - name: A wire-and-blend ring is checked within flo2's 60 s door, confined like flo2's slot
+        run: node scripts/slot-check.mjs flo2-cad:ci test/fixtures/moonstone-openwork-ring.tree.json 60 1g
