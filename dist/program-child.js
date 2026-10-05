@@ -3376,6 +3376,22 @@ function writeFrame(header, blobs) {
 function fail(kind, message, line, logs) {
   return writeFrame({ ok: false, kind, message, line, logs }, []);
 }
+function ready() {
+  return new Promise((resolve) => process.stdout.write(Buffer.alloc(4), () => resolve()));
+}
+function programContext() {
+  return vm.createContext(vm.constants.DONT_CONTEXTIFY, { name: "flo2-cad program", codeGeneration: { strings: false, wasm: false }, microtaskMode: "afterEvaluate" });
+}
+function compileProgram(source, ctx) {
+  try {
+    return { program: vm.compileFunction(`'use strict'; ${source}`, [], { parsingContext: ctx, filename: PROGRAM_FILENAME }) };
+  } catch (e) {
+    const stack = String(e?.stack ?? "");
+    const line = /program\.js:(\d+)/.exec(stack)?.[1];
+    const what = /^(SyntaxError: .*)$/m.exec(stack)?.[1] ?? String(e?.message ?? e);
+    return { line: line ? Number(line) : null, message: `the program does not parse: ${what}` };
+  }
+}
 function blobber(blobs) {
   return (a) => {
     blobs.push(Buffer.from(a.buffer, a.byteOffset, a.byteLength));
@@ -3386,10 +3402,13 @@ function meshOut2(m, blob, positionsOnly = false) {
   return positionsOnly ? { positions: blob(m.positions) } : { positions: blob(m.positions), triangles: blob(m.triangles) };
 }
 async function main() {
-  const t0 = performance.now();
   const req = JSON.parse(await readStdin());
+  const parsed = compileProgram(req.source, programContext());
+  if (!("program" in parsed)) return fail("program", parsed.message, parsed.line, []);
   capWasm(req.wasm_cap_bytes);
   const k = await kernel();
+  await ready();
+  const t0 = performance.now();
   const A = new Arena();
   const kept = /* @__PURE__ */ new Map();
   const blobs = [];
@@ -3401,20 +3420,13 @@ async function main() {
     if (remaining <= 0) return fail("time", "the program ran past its time limit", null, logs);
     const blendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
     const lib = new ProgramLibrary(k, A, run.tol, blendMeshes);
-    const ctx = vm.createContext(vm.constants.DONT_CONTEXTIFY, { name: "flo2-cad program", codeGeneration: { strings: false, wasm: false }, microtaskMode: "afterEvaluate" });
+    const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx);
     const runner = setup((name, args) => lib.call(name, args));
-    let program;
-    try {
-      program = vm.compileFunction(`'use strict'; ${req.source}`, [], { parsingContext: ctx, filename: PROGRAM_FILENAME });
-    } catch (e) {
-      const stack = String(e?.stack ?? "");
-      const line = /program\.js:(\d+)/.exec(stack)?.[1];
-      const what = /^(SyntaxError: .*)$/m.exec(stack)?.[1] ?? String(e?.message ?? e);
-      return fail("program", `the program does not parse: ${what}`, line ? Number(line) : null, logs);
-    }
+    const compiled = compileProgram(req.source, ctx);
+    if (!("program" in compiled)) return fail("program", compiled.message, compiled.line, logs);
     ctx["__flo2_run"] = runner;
-    ctx["__flo2_program"] = program;
+    ctx["__flo2_program"] = compiled.program;
     let out;
     const started = performance.now();
     try {

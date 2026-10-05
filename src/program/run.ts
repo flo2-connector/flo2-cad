@@ -5,7 +5,11 @@
 // Every evaluation is a SEPARATE, short-lived child process (child.ts), started here:
 //   · TIME: a wall-clock limit, enforced twice: inside the child by V8's own watchdog on
 //     the program's context (a clean "ran past its time limit"), and here by SIGKILL a
-//     moment after it, whatever the child is doing.
+//     moment after it, whatever the child is doing. Both clocks start when the child says
+//     READY (its kernel loaded, its program parsed), not when it is spawned: starting Node
+//     and the kernel is the engine's time, and has its own bound (STARTUP_SECONDS), past
+//     which the evaluation is the ENGINE's failure, never "the program ran too long". A
+//     program that does not parse is refused before READY, so never as slow.
 //   · MEMORY: the child's V8 heap is capped (--max-old-space-size), the kernel's
 //     WebAssembly heap is capped (child.ts, capWasm), and its resident memory is read from
 //     /proc every 20 ms and the child is SIGKILLed past the limit. On Linux the child is
@@ -27,7 +31,7 @@
 // On flo2.io the helper's container (no network, a memory cap, one CPU, a read-only root)
 // stays the security boundary around all of it.
 
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,14 +41,22 @@ import { readRun, type RunOut } from './verify.js';
 
 export const DEFAULT_SECONDS = 20;
 export const DEFAULT_MEMORY_MIB = 512;
+/**
+ * How long the engine may take to START an evaluation (Node, the engine's modules and the
+ * kernel loaded, the program parsed) before the program's clock starts. Measured 2026-10-05:
+ * 0.15 s on an Intel N95, the same on one CPU, 1.1 s on one CPU shared eight ways.
+ */
+export const STARTUP_SECONDS = 10;
 /** The most a child may write back: far more than any piece's meshes (an openwork ring's export and reference come to about 6 MB). */
 export const MAX_OUTPUT_BYTES = 256 * 2 ** 20;
 
 export interface ProgramLimits {
-  /** Wall-clock seconds one evaluation (every run of one request together) may take. */
+  /** Wall-clock seconds one evaluation (every run of one request together) may take, from the moment its child is ready. */
   seconds: number;
   /** The child's resident memory limit, in MiB. */
   memoryMiB: number;
+  /** Seconds the engine may take to START an evaluation, before the program's clock starts (default STARTUP_SECONDS). The engine's own bound, not the program's. */
+  startupSeconds?: number;
 }
 
 /** The limits, from FLO2_CAD_PROGRAM_SECONDS and FLO2_CAD_PROGRAM_MEMORY_MIB when set (a host sizes them to its slot), else the defaults. */
@@ -115,8 +127,13 @@ function rssOf(pid: number): number | null {
   }
 }
 
+/** For tests only: a look at the child the moment it is started (test/program.test.ts stalls its start-up with it). */
+export interface RunHooks {
+  started?: (child: ChildProcess) => void;
+}
+
 /** Evaluates a program, once per run, in one confined child. Resolves with what came back, verified; rejects with ProgramFailed. */
-export async function runProgram(source: string, runs: ChildRun[], limits: ProgramLimits = programLimits()): Promise<ProgramRun> {
+export async function runProgram(source: string, runs: ChildRun[], limits: ProgramLimits = programLimits(), hooks: RunHooks = {}): Promise<ProgramRun> {
   const t0 = performance.now();
   const { entry, read } = childEntry();
   const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
@@ -125,6 +142,7 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
   const args = [`--max-old-space-size=${heapMiB}`, '--disallow-code-generation-from-strings', '--permission', ...read.map((p) => `--allow-fs-read=${p}`), entry];
   const child = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe'], env: {}, windowsHide: true });
   const pid = child.pid;
+  hooks.started?.(child);
   if (pid !== undefined) {
     try {
       writeFileSync(`/proc/${pid}/oom_score_adj`, '1000');
@@ -145,7 +163,18 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
       stopped = f;
       child.kill('SIGKILL');
     };
-    const hard = setTimeout(() => stop(new ProgramFailed('time', null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1000 + 1500);
+    // Until the child says READY, only the engine's start-up bound runs; then the program's backstop.
+    const startupSeconds = limits.startupSeconds ?? STARTUP_SECONDS;
+    const startup = setTimeout(
+      () => stop(new ProgramFailed('engine', null, `the engine could not start the program's evaluation within ${startupSeconds} s (the machine is too busy); none of the program ran, so try again`)),
+      startupSeconds * 1000,
+    );
+    let hard: ReturnType<typeof setTimeout> | undefined;
+    let head = Buffer.alloc(0);
+    const ready = () => {
+      clearTimeout(startup);
+      hard = setTimeout(() => stop(new ProgramFailed('time', null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1000 + 1500);
+    };
     const watch = setInterval(() => {
       if (pid === undefined) return;
       const rss = rssOf(pid);
@@ -154,6 +183,11 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
       if (rss > limitBytes) stop(new ProgramFailed('memory', null, `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
     }, 20);
     child.stdout.on('data', (c: Buffer) => {
+      // The first frame's length: 0 is READY.
+      if (head.length < 4) {
+        head = Buffer.concat([head, c.subarray(0, 4 - head.length)]);
+        if (head.length === 4 && head.readUInt32LE(0) === 0) ready();
+      }
       outBytes += c.length;
       if (outBytes > MAX_OUTPUT_BYTES) stop(new ProgramFailed('output', null, `the program's piece came to more than ${MAX_OUTPUT_BYTES / 2 ** 20} MiB of mesh; make it simpler`));
       else out.push(c);
@@ -167,12 +201,14 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
     child.stdin.end(JSON.stringify(request));
     child.on('error', (e) => stop(new ProgramFailed('engine', null, `the program could not be started: ${e.message}`)));
     child.on('close', (code, signal) => {
+      clearTimeout(startup);
       clearTimeout(hard);
       clearInterval(watch);
       const ms = performance.now() - t0;
       const peakMiB = peak === null ? null : Math.round((peak as number) / 2 ** 20);
       if (stopped) return reject(stopped);
-      const buf = Buffer.concat(out);
+      const all = Buffer.concat(out);
+      const buf = all.length >= 4 && all.readUInt32LE(0) === 0 ? all.subarray(4) : all;
       if (buf.length < 4) {
         if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(new ProgramFailed('memory', null, `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
         if (signal === 'SIGKILL') return reject(new ProgramFailed('memory', null, `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));

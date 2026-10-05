@@ -163,7 +163,10 @@ return union(band, bezel({ stone: moonstone, on: band, wall: 1.0 }));
 
 **Limits.** Each evaluation gets **20 s** and **512 MiB** by default; `FLO2_CAD_PROGRAM_SECONDS` and
 `FLO2_CAD_PROGRAM_MEMORY_MIB` change them for a host's slot. A check runs the program twice in one evaluation (the
-casting file's tolerance and the finer reference), so the limit covers both. Hitting one is a plain refusal: "the
+casting file's tolerance and the finer reference), so the limit covers both. The clock starts when the evaluation's
+process is ready (Node and the kernel loaded, about 0.15 s), not when it is started, and a program that does not parse
+is refused before then, so a busy machine's slow start is never counted as the program's; the start has its own
+bound (10 s), past which the engine says it could not start. Hitting a limit is a plain refusal: "the
 program ran past its time limit (20 s)", "the program used more than its memory limit (512 MiB)", or the line and
 message that failed ("program: line 3: rotate([20, 0, 0]): would tip the stone setting off upright ...").
 
