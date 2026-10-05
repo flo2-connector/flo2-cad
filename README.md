@@ -227,7 +227,7 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Sheets (`thicken`) | ≥ 0.8 mm, the wall minimum | square to the surface: from each point the sheet declares on its middle surface, a ray each way along the normal to the first face, where both faces face along the rays (the sheet's own) |
 | Details | ≥ 0.35 mm | thinnest feature anywhere, measured as the walls are |
 | Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces, along the surface's direction as for the walls |
-| Surface | ≤ 0.01 mm off the intended shape | distance from a 0.0015 mm reference tessellation to the written facets; for a `smooth_union`, whose intended surface is its distance field's zero level, from points on that surface at the corners, edge midpoints and centroid of every facet the file has from it |
+| Surface | ≤ 0.01 mm off the intended shape | distance from a 0.0015 mm reference tessellation to the written facets; for a `smooth_union`, whose intended surface is its distance field's zero level, from points on that surface at the corners, edge midpoints and centroid of every facet the file has from it. The build holds a blend's facets to that surface, its creases (a wire's bend, a box's edge) included: a level set alone cut across them |
 
 How each metal is handled:
 
@@ -269,11 +269,14 @@ image.
 
 | Where | Time | Peak memory |
 |---|---|---|
-| One CPU (taskset), in process | 36 s | 534 MiB (VmHWM) |
-| Docker `--cpus 1 --memory 1g --memory-swap 1g` | 37.5 s | 385 MiB (sampled) |
-| Docker `--cpus 1 --memory 384m --memory-swap 384m`, flo2's cad slot | 43.7 s | 363 MiB (sampled) |
+| One CPU (taskset), in process | 36 s | 553 MiB (VmHWM) |
+| Docker `--cpus 1 --memory 1g --memory-swap 1g` | 40.1 s | within 1 GiB |
+| Docker `--cpus 1 --memory 768m --memory-swap 768m`, flo2's cad slot | 40.6 s | within 768 MiB |
+| Docker `--cpus 1 --memory 384m --memory-swap 384m`, flo2's cad slot until 2026-10-05 | 46.3 s | within 384 MiB |
 
 Before 2026-10-05 the same check took 352 s at one CPU and peaked at 1.37 GB, and flo2's slot killed it for memory.
+Holding the blend's facets to its own surface (the Surface row above) costs about 2.5 to 3.5 s of that: on the same
+box the same day, c678b62 took 33.5 s in process (550 MiB), 37.1 s at 768 MiB and 42.9 s at 384 MiB.
 `test/check-time.test.ts` holds it to 45 s at one CPU and 1 GiB; CI's image job holds it to flo2's 60 s door.
 
 **A piece written as a program.** Measured 2026-10-05 on this box, with the cabochon in a bezel

@@ -647,6 +647,18 @@ function whereOf(p: V3, decl: FeatureDecl, what: string, centre?: V3): Where {
   return { ...where, description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
 }
 
+/**
+ * A place on a smooth blend's own surface, named by the blend. It is one of the points the
+ * blend declares on its surface, so which part it lies on is known, not guessed from the
+ * region round it: named by region, the moonstone ring's rail under its bezel's open back
+ * was called "the bezel", and the bezel was suspected of an engine fault it did not have
+ * (fact:a-blends-level-set-chamfers-the-creases-of-its-own-field-2026-10-05).
+ */
+function onBlend(p: V3, label: string, what: string): Where {
+  const clock = clockAt(p[0], p[1]);
+  return { part: 'blend', feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
+}
+
 const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 
 /** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
@@ -1123,11 +1135,11 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
  * cap, found without visiting everything within 0.2 mm of every point.
  */
 function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: FeatureDecl): CheckEntry {
-  let worst = { dev: 0, p: [0, 0, 0] as V3 };
+  let worst: { dev: number; p: V3; blend?: string } = { dev: 0, p: [0, 0, 0] };
   const cap = Math.max(0.2, L.surfaceDeviation * 20);
   const first = Math.min(cap, L.surfaceDeviation * 2);
   const q: V3 = [0, 0, 0];
-  const measure = (P: ArrayLike<number>) => {
+  const measure = (P: ArrayLike<number>, blend?: string) => {
     for (let i = 0; i < P.length; i += 3) {
       q[0] = P[i]!;
       q[1] = P[i + 1]!;
@@ -1135,14 +1147,14 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
       let d2 = bvh.nearestDistSq(q, first);
       if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap);
       const d = Math.sqrt(d2);
-      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]] };
+      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]], ...(blend !== undefined ? { blend } : {}) };
     }
   };
   measure(ref.positions);
   const blends = decl.blends ?? [];
   let onBlends = 0;
   for (const b of blends) {
-    measure(b.points);
+    measure(b.points, b.label);
     onBlends += b.points.length / 3;
   }
   return {
@@ -1152,7 +1164,7 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
     result: worst.dev <= L.surfaceDeviation ? 'pass' : 'fail',
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''})`,
     value: r3(worst.dev),
-    where: whereOf(worst.p, decl, 'the facets stand furthest from the curved surface'),
+    where: worst.blend !== undefined ? onBlend(worst.p, worst.blend, 'the facets stand furthest from the curved surface') : whereOf(worst.p, decl, 'the facets stand furthest from the curved surface'),
     method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`,
   };
 }

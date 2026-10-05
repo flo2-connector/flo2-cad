@@ -17,7 +17,7 @@ import { CallError } from '../errors.js';
 import type { TreeNode } from '../piece/tree.js';
 import { angleDeg, lengthMm } from '../units.js';
 import type { Arena } from './build.js';
-import { BlendField, levelSetStep } from './field.js';
+import { BlendField, holdToSurface, levelSetStep } from './field.js';
 import { EXPORT_TOL } from './tolerances.js';
 import { buildThicken, compose, IDENTITY, reflection, rotation, translation, type OpContext } from './thicken.js';
 
@@ -126,12 +126,16 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpCo
 
 /**
  * A smooth blend: the level set of its distance field (field.ts), on a grid set by the
- * casting tolerance. A finer tolerance (the surface check's reference build) does NOT
- * make the grid finer: the blend's facets are already ON its surface, and the check
- * measures how far the true surface stands off them from points it declares on that
- * surface over every facet the file has from the blend (build.ts, blendSurface). A
- * second level set 1.7 times finer had cost 5 times the samples and, by Manifold's
- * own sizing, 687 MiB of grid for one openwork ring: more than flo2's whole slot
+ * casting tolerance, then held to the field's surface: every facet that stands off it by
+ * more than the tolerance (across a crease of the field, or sagging on a tight fillet) is
+ * split, its new corners on the surface, until none does (field.ts, holdToSurface;
+ * fact:a-blends-level-set-chamfers-the-creases-of-its-own-field-2026-10-05). A finer
+ * tolerance (the surface check's reference build) does NOT make the grid finer: the
+ * blend's facets are already held to its surface, and the check measures how far the
+ * true surface stands off them from points it declares on that surface over every
+ * facet the file has from the blend (build.ts, blendSurface). A second level set 1.7
+ * times finer had cost 5 times the samples and, by Manifold's own sizing, 687 MiB of
+ * grid for one openwork ring: more than flo2's whole slot
  * (fact:check-time-is-the-blend-field-and-the-wall-ball).
  */
 function smoothUnion(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpContext): Manifold {
@@ -151,8 +155,38 @@ function smoothUnion(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpConte
   const min: Vec3 = [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g];
   const max: Vec3 = [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g];
   const field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
-  const out = A.t(Manifold.levelSet((q: Vec3) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2));
+  const raw = Manifold.levelSet((q: Vec3) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
+  const out = A.t(heldToSurface(k, raw, field, gtol));
   if (ctx.blendMeshes && !ctx.blendMeshes.reuse) ctx.blendMeshes.meshes.set(key, out.getMesh());
   ctx.blends?.push({ label: n.id, originalID: out.originalID(), m: ctx.m, field });
+  return out;
+}
+
+/**
+ * The level set with every facet held within `tol` of the blend's own surface (field.ts,
+ * holdToSurface). It takes `raw` and returns a solid the caller owns; the kernel's copies made
+ * on the way are freed at once, so the slot's memory holds one blend at a time.
+ */
+function heldToSurface(k: Kernel, raw: Manifold, field: BlendField, tol: number): Manifold {
+  const mesh = raw.getMesh();
+  const held = holdToSurface(mesh.vertProperties, mesh.numProp, mesh.triVerts, (x, y, z) => field.value(x, y, z), tol);
+  if (!held) return raw;
+  const rawTolerance = raw.tolerance();
+  raw.delete();
+  const made = new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: held.positions, triVerts: held.triVerts }));
+  // Every split is matched on both sides of its edge, so this cannot happen unless the refinement is wrong.
+  if (made.status() !== 'NoError') {
+    const status = made.status();
+    made.delete();
+    throw new Error(`engine bug: a smooth blend held to its surface is not a closed solid (${status})`);
+  }
+  // A solid made from a mesh is no original of its own, so build.ts (blendSurface) could not
+  // find the blend's facets by its id; and it takes its float32 corners' tolerance (1.4e-6 mm
+  // on the moonstone's rails), at which the casting file's simplify (build.ts,
+  // atFilePrecision) would collapse 800 triangles the level set's own tolerance keeps.
+  const original = made.asOriginal();
+  made.delete();
+  const out = original.setTolerance(rawTolerance);
+  original.delete();
   return out;
 }

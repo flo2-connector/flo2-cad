@@ -22553,6 +22553,10 @@ function whereOf(p, decl, what, centre) {
   const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
   return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
 }
+function onBlend(p, label, what) {
+  const clock = clockAt(p[0], p[1]);
+  return { part: "blend", feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
+}
 var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
@@ -22930,7 +22934,7 @@ function surfaceEntry(bvh, L3, ref, decl) {
   const cap = Math.max(0.2, L3.surfaceDeviation * 20);
   const first = Math.min(cap, L3.surfaceDeviation * 2);
   const q = [0, 0, 0];
-  const measure = (P) => {
+  const measure = (P, blend) => {
     for (let i = 0; i < P.length; i += 3) {
       q[0] = P[i];
       q[1] = P[i + 1];
@@ -22938,14 +22942,14 @@ function surfaceEntry(bvh, L3, ref, decl) {
       let d2 = bvh.nearestDistSq(q, first);
       if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap);
       const d = Math.sqrt(d2);
-      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]] };
+      if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]], ...blend !== void 0 ? { blend } : {} };
     }
   };
   measure(ref.positions);
   const blends = decl.blends ?? [];
   let onBlends = 0;
   for (const b of blends) {
-    measure(b.points);
+    measure(b.points, b.label);
     onBlends += b.points.length / 3;
   }
   return {
@@ -22955,7 +22959,7 @@ function surfaceEntry(bvh, L3, ref, decl) {
     result: worst.dev <= L3.surfaceDeviation ? "pass" : "fail",
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""})`,
     value: r3(worst.dev),
-    where: whereOf(worst.p, decl, "the facets stand furthest from the curved surface"),
+    where: worst.blend !== void 0 ? onBlend(worst.p, worst.blend, "the facets stand furthest from the curved surface") : whereOf(worst.p, decl, "the facets stand furthest from the curved surface"),
     method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`
   };
 }
@@ -24790,6 +24794,328 @@ function projectOntoSurface(f, p, d, out, at2) {
   }
   put(Math.abs(ga) < Math.abs(gb) ? a : b);
 }
+var HOLD_PASSES = 40;
+var HOLD_GENERATIONS = 6;
+var HOLD_TURNED_COS = -0.25;
+var GRAD_STEP = 1e-6;
+var GRAD_FLOOR = 1 / 16;
+var CREASE_COS = Math.cos(10 * Math.PI / 180);
+var PAIR = 2 ** 26;
+function gradient(f, x, y, z) {
+  const h = GRAD_STEP;
+  const g = [f(x + h, y, z) - f(x - h, y, z), f(x, y + h, z) - f(x, y - h, z), f(x, y, z + h) - f(x, y, z - h)];
+  const l = Math.hypot(g[0], g[1], g[2]);
+  return l > 0 ? [g[0] / l, g[1] / l, g[2] / l] : [0, 0, 0];
+}
+function meetOfPlanes(n, at2, p) {
+  const G2 = n.map((u) => n.map((v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]));
+  const r = n.map((u, i) => u[0] * (p[0] - at2[i][0]) + u[1] * (p[1] - at2[i][1]) + u[2] * (p[2] - at2[i][2]));
+  const l = solveSmall(G2, r);
+  if (!l) return null;
+  const x = [p[0], p[1], p[2]];
+  for (let i = 0; i < n.length; i++) for (let c = 0; c < 3; c++) x[c] = x[c] - l[i] * n[i][c];
+  return x;
+}
+function solveSmall(A, b) {
+  const k = b.length;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < k; c++) {
+    let piv = c;
+    for (let i = c + 1; i < k; i++) if (Math.abs(M[i][c]) > Math.abs(M[piv][c])) piv = i;
+    if (Math.abs(M[piv][c]) < 0.03) return null;
+    [M[c], M[piv]] = [M[piv], M[c]];
+    for (let i = 0; i < k; i++) {
+      if (i === c) continue;
+      const q = M[i][c] / M[c][c];
+      for (let j = c; j <= k; j++) M[i][j] = M[i][j] - q * M[c][j];
+    }
+  }
+  return M.map((row, i) => row[k] / row[i]);
+}
+function segmentThrough(p, q, a, b, c) {
+  const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
+  const e1x = b[0] - a[0], e1y = b[1] - a[1], e1z = b[2] - a[2];
+  const e2x = c[0] - a[0], e2y = c[1] - a[1], e2z = c[2] - a[2];
+  const hx = dy * e2z - dz * e2y, hy = dz * e2x - dx * e2z, hz = dx * e2y - dy * e2x;
+  const det = e1x * hx + e1y * hy + e1z * hz;
+  if (Math.abs(det) < 1e-18) return false;
+  const inv = 1 / det;
+  const sx = p[0] - a[0], sy = p[1] - a[1], sz = p[2] - a[2];
+  const u = (sx * hx + sy * hy + sz * hz) * inv;
+  if (u <= 1e-9 || u >= 1 - 1e-9) return false;
+  const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+  const v = (dx * qx + dy * qy + dz * qz) * inv;
+  if (v <= 1e-9 || u + v >= 1 - 1e-9) return false;
+  const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+  return t > 1e-7 && t < 1 - 1e-7;
+}
+var HASH_CELL = 0.1;
+function holdToSurface(V, numProp, triVerts, f, tol) {
+  const nv0 = V.length / numProp;
+  if (nv0 >= PAIR / 4) throw new Error(`a blend's level set has ${nv0} vertices, more than its refinement indexes`);
+  const P = new Array(nv0 * 3);
+  for (let i = 0; i < nv0; i++) {
+    P[i * 3] = V[i * numProp];
+    P[i * 3 + 1] = V[i * numProp + 1];
+    P[i * 3 + 2] = V[i * numProp + 2];
+  }
+  const gen = new Array(nv0).fill(0);
+  const T = Array.from(triVerts);
+  const alive = new Array(T.length / 3).fill(1);
+  const born = new Array(T.length / 3).fill(0);
+  const pair = (a, b) => a < b ? a * PAIR + b : b * PAIR + a;
+  const at2 = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+  const dist2 = (a, b) => (P[b * 3] - P[a * 3]) ** 2 + (P[b * 3 + 1] - P[a * 3 + 1]) ** 2 + (P[b * 3 + 2] - P[a * 3 + 2]) ** 2;
+  const normal = (a, b, c) => {
+    const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2];
+    const vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    return l > 0 ? [nx / l, ny / l, nz / l] : [0, 0, 0];
+  };
+  const probe = new Float64Array(3);
+  const slope = new Array(nv0).fill(NaN);
+  const slopeAt = (i) => {
+    let g = slope[i];
+    if (Number.isNaN(g)) {
+      const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2], h = GRAD_STEP;
+      g = Math.hypot(f(x + h, y, z) - f(x - h, y, z), f(x, y + h, z) - f(x, y - h, z), f(x, y, z + h) - f(x, y, z - h)) / (2 * h);
+      slope[i] = g;
+    }
+    return g;
+  };
+  const standOffNear = (x, y, z, v, ca, cb, cc) => {
+    const a = Math.abs(v);
+    if (a > tol || a < tol * GRAD_FLOOR) return a;
+    const g = Math.min(1, slopeAt(ca), slopeAt(cb), cc >= 0 ? slopeAt(cc) : 1);
+    const first = a / Math.max(g, a / SURFACE_REACH_MM);
+    if (first <= tol) return first;
+    const h = GRAD_STEP;
+    const gx = f(x + h, y, z) - f(x - h, y, z), gy = f(x, y + h, z) - f(x, y - h, z), gz = f(x, y, z + h) - f(x, y, z - h);
+    const gl = Math.hypot(gx, gy, gz);
+    if (!(gl > 0)) return first;
+    projectOntoSurface(f, [x, y, z], [gx / gl, gy / gl, gz / gl], probe, 0);
+    const along = Math.hypot(probe[0] - x, probe[1] - y, probe[2] - z);
+    return Math.max(a, Math.min(first, along));
+  };
+  const edgeOff = (a, b) => {
+    const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
+    const dx = P[b * 3] - ax, dy = P[b * 3 + 1] - ay, dz = P[b * 3 + 2] - az;
+    let w = -1, at3 = 0.5, bv = 0;
+    for (let i = 1; i <= 3; i++) {
+      const s = i / 4, v = f(ax + dx * s, ay + dy * s, az + dz * s);
+      if (Math.abs(v) > w) w = Math.abs(v), at3 = s, bv = v;
+    }
+    return standOffNear(ax + dx * at3, ay + dy * at3, az + dz * at3, bv, a, b, -1);
+  };
+  const turned = (a, b, c, from) => {
+    const n = normal(a, b, c);
+    if (n[0] === 0 && n[1] === 0 && n[2] === 0) return true;
+    if (n[0] * from[0] + n[1] * from[1] + n[2] * from[2] > 0) return false;
+    const g = gradient(f, (P[a * 3] + P[b * 3] + P[c * 3]) / 3, (P[a * 3 + 1] + P[b * 3 + 1] + P[c * 3 + 1]) / 3, (P[a * 3 + 2] + P[b * 3 + 2] + P[c * 3 + 2]) / 3);
+    return n[0] * g[0] + n[1] * g[1] + n[2] * g[2] <= HOLD_TURNED_COS;
+  };
+  const cells = /* @__PURE__ */ new Map();
+  const region = /* @__PURE__ */ new Set();
+  const cellOf = (x) => Math.floor(x / HASH_CELL) + 1024;
+  const keyOf = (i, j, k) => (i * 2048 + j) * 2048 + k;
+  const eachCell = (t, fn) => {
+    const a = T[t * 3] * 3, b = T[t * 3 + 1] * 3, c = T[t * 3 + 2] * 3;
+    const i0 = cellOf(Math.min(P[a], P[b], P[c])), i1 = cellOf(Math.max(P[a], P[b], P[c]));
+    const j0 = cellOf(Math.min(P[a + 1], P[b + 1], P[c + 1])), j1 = cellOf(Math.max(P[a + 1], P[b + 1], P[c + 1]));
+    const k0 = cellOf(Math.min(P[a + 2], P[b + 2], P[c + 2])), k1 = cellOf(Math.max(P[a + 2], P[b + 2], P[c + 2]));
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) fn(keyOf(i, j, k));
+  };
+  const put = (key, t) => {
+    const list = cells.get(key);
+    if (list) list.push(t);
+    else cells.set(key, [t]);
+  };
+  const index = (t) => eachCell(t, (key) => region.has(key) && put(key, t));
+  const ensure = (keys) => {
+    const fresh = /* @__PURE__ */ new Set();
+    for (const key of keys) if (!region.has(key)) fresh.add(key);
+    if (!fresh.size) return;
+    for (const key of fresh) region.add(key);
+    const nt = T.length / 3;
+    for (let t = 0; t < nt; t++) if (alive[t]) eachCell(t, (key) => fresh.has(key) && put(key, t));
+  };
+  const crosses = (a, b, c) => {
+    const A = at2(a), B = at2(b), C = at2(c);
+    const seen = /* @__PURE__ */ new Set();
+    let hit = false;
+    const lo = [0, 1, 2].map((k) => cellOf(Math.min(A[k], B[k], C[k])));
+    const hi = [0, 1, 2].map((k) => cellOf(Math.max(A[k], B[k], C[k])));
+    const want = [];
+    for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let k = lo[2]; k <= hi[2]; k++) if (!region.has(keyOf(i, j, k))) want.push(keyOf(i, j, k));
+    if (want.length) ensure(want);
+    for (let i = lo[0]; i <= hi[0] && !hit; i++)
+      for (let j = lo[1]; j <= hi[1] && !hit; j++)
+        for (let k = lo[2]; k <= hi[2] && !hit; k++) {
+          for (const u of cells.get((i * 2048 + j) * 2048 + k) ?? []) {
+            if (!alive[u] || seen.has(u)) continue;
+            seen.add(u);
+            const x = T[u * 3], y = T[u * 3 + 1], z = T[u * 3 + 2];
+            if (x === a || x === b || x === c || y === a || y === b || y === c || z === a || z === b || z === c) continue;
+            const X = at2(x), Y = at2(y), Z = at2(z);
+            if (segmentThrough(A, B, X, Y, Z) || segmentThrough(B, C, X, Y, Z) || segmentThrough(C, A, X, Y, Z) || segmentThrough(X, Y, A, B, C) || segmentThrough(Y, Z, A, B, C) || segmentThrough(Z, X, A, B, C)) {
+              hit = true;
+              break;
+            }
+          }
+        }
+    return hit;
+  };
+  const stuck = /* @__PURE__ */ new Set();
+  let deferred = /* @__PURE__ */ new Set();
+  const vborn = new Array(nv0).fill(-1);
+  const out = new Float64Array(3);
+  let split2 = 0, notFound = 0, leaned = 0, crossed = 0, deep = 0, passes = 0;
+  for (; passes < HOLD_PASSES; passes++) {
+    const nt = T.length / 3;
+    const marked = /* @__PURE__ */ new Map();
+    const measured = /* @__PURE__ */ new Set();
+    for (let t = 0; t < nt; t++) {
+      if (!alive[t] || born[t] !== passes) continue;
+      for (let e = 0; e < 3; e++) {
+        const a = T[t * 3 + e], b = T[t * 3 + (e + 1) % 3];
+        const k = pair(a, b);
+        if (stuck.has(k)) continue;
+        if (passes === 0) {
+          if (a > b) continue;
+        } else {
+          if (vborn[a] !== passes - 1 && vborn[b] !== passes - 1 && !deferred.has(k)) continue;
+          if (measured.has(k)) continue;
+          measured.add(k);
+        }
+        if (Math.max(gen[a], gen[b]) >= HOLD_GENERATIONS) {
+          stuck.add(k);
+          deep++;
+          continue;
+        }
+        const w = edgeOff(a, b);
+        if (w > tol) marked.set(k, w);
+      }
+    }
+    for (let t = 0; t < nt; t++) {
+      if (!alive[t] || born[t] !== passes) continue;
+      const a = T[t * 3], b = T[t * 3 + 1], c = T[t * 3 + 2];
+      if (marked.has(pair(a, b)) || marked.has(pair(b, c)) || marked.has(pair(c, a))) continue;
+      const cx = (P[a * 3] + P[b * 3] + P[c * 3]) / 3, cy = (P[a * 3 + 1] + P[b * 3 + 1] + P[c * 3 + 1]) / 3, cz = (P[a * 3 + 2] + P[b * 3 + 2] + P[c * 3 + 2]) / 3;
+      const w = standOffNear(cx, cy, cz, f(cx, cy, cz), a, b, c);
+      if (w <= tol) continue;
+      let k = -1, longest = -1;
+      for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+        const kk = pair(p, q), l = dist2(p, q);
+        if (!stuck.has(kk) && Math.max(gen[p], gen[q]) < HOLD_GENERATIONS && l > longest) k = kk, longest = l;
+      }
+      if (k >= 0) marked.set(k, w);
+    }
+    if (!marked.size) break;
+    const near = /* @__PURE__ */ new Set();
+    for (const k of marked.keys()) {
+      const a = Math.floor(k / PAIR), b = k - a * PAIR;
+      const r = 2 + Math.ceil(Math.sqrt(dist2(a, b)) / HASH_CELL);
+      const ci = cellOf((P[a * 3] + P[b * 3]) / 2), cj = cellOf((P[a * 3 + 1] + P[b * 3 + 1]) / 2), ck = cellOf((P[a * 3 + 2] + P[b * 3 + 2]) / 2);
+      for (let i = ci - r; i <= ci + r; i++) for (let j = cj - r; j <= cj + r; j++) for (let kk = ck - r; kk <= ck + r; kk++) near.add(keyOf(i, j, kk));
+    }
+    ensure(near);
+    const besideOf = (a, b) => {
+      const list = [];
+      const key = keyOf(cellOf((P[a * 3] + P[b * 3]) / 2), cellOf((P[a * 3 + 1] + P[b * 3 + 1]) / 2), cellOf((P[a * 3 + 2] + P[b * 3 + 2]) / 2));
+      for (const t of cells.get(key) ?? []) {
+        if (!alive[t]) continue;
+        for (let e = 0; e < 3; e++) {
+          const p = T[t * 3 + e], q = T[t * 3 + (e + 1) % 3];
+          if (p === a && q === b || p === b && q === a) list.push([t, p, q, T[t * 3 + (e + 2) % 3]]);
+        }
+      }
+      return list;
+    };
+    let made = 0;
+    const waiting = /* @__PURE__ */ new Set();
+    for (const [k, w] of [...marked].sort((x, y) => y[1] - x[1])) {
+      const ka = Math.floor(k / PAIR);
+      const side = besideOf(ka, k - ka * PAIR);
+      if (side.length !== 2 || side.some(([t]) => born[t] === passes + 1)) {
+        waiting.add(k);
+        continue;
+      }
+      const [, a, b] = side[0];
+      const mid = [(P[a * 3] + P[b * 3]) / 2, (P[a * 3 + 1] + P[b * 3 + 1]) / 2, (P[a * 3 + 2] + P[b * 3 + 2]) / 2];
+      const len2 = Math.sqrt(dist2(a, b));
+      const limit = Math.min(len2, 8 * w);
+      const from = side.map(([t]) => normal(T[t * 3], T[t * 3 + 1], T[t * 3 + 2]));
+      const mean = [0, 0, 0];
+      for (const n of from) mean[0] += n[0], mean[1] += n[1], mean[2] += n[2];
+      let on = false, found = false, turnedOver = false;
+      const tryFrom = (start, d) => {
+        if (on || !start || Math.hypot(start[0] - mid[0], start[1] - mid[1], start[2] - mid[2]) > limit) return;
+        const dl = Math.hypot(d[0], d[1], d[2]);
+        if (!(dl > 1e-9)) return;
+        projectOntoSurface(f, start, [d[0] / dl, d[1] / dl, d[2] / dl], out, 0);
+        for (let i = 0; i < 3; i++) out[i] = Math.fround(out[i]);
+        if (Math.abs(f(out[0], out[1], out[2])) > 1e-5 || Math.hypot(out[0] - mid[0], out[1] - mid[1], out[2] - mid[2]) > limit) return;
+        found = true;
+        const da = Math.hypot(out[0] - P[a * 3], out[1] - P[a * 3 + 1], out[2] - P[a * 3 + 2]);
+        const db = Math.hypot(out[0] - P[b * 3], out[1] - P[b * 3 + 1], out[2] - P[b * 3 + 2]);
+        if (da < 0.1 * len2 || db < 0.1 * len2) return;
+        const m2 = P.length / 3;
+        P.push(out[0], out[1], out[2]);
+        if (side.some(([, p, q, r], i) => turned(p, m2, r, from[i]) || turned(m2, q, r, from[i]))) turnedOver = true;
+        else {
+          for (const [t] of side) alive[t] = 0;
+          on = !side.some(([, p, q, r]) => crosses(p, m2, r) || crosses(m2, q, r));
+          for (const [t] of side) alive[t] = 1;
+          if (!on) turnedOver = false;
+        }
+        P.length = m2 * 3;
+      };
+      const na = gradient(f, P[a * 3], P[a * 3 + 1], P[a * 3 + 2]), nb = gradient(f, P[b * 3], P[b * 3 + 1], P[b * 3 + 2]);
+      let crossing = false;
+      const attempt = (start, d) => {
+        const before = found;
+        tryFrom(start, d);
+        if (!on && found && !before && !turnedOver) crossing = true;
+      };
+      if (na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2] < CREASE_COS) {
+        attempt(meetOfPlanes([na, nb], [at2(a), at2(b)], mid), mean);
+        for (const [, , , r] of side) attempt(meetOfPlanes([na, nb, gradient(f, P[r * 3], P[r * 3 + 1], P[r * 3 + 2])], [at2(a), at2(b), at2(r)], mid), mean);
+      }
+      attempt(mid, mean);
+      attempt(mid, gradient(f, mid[0], mid[1], mid[2]));
+      if (!on) {
+        if (!found) notFound++;
+        else if (crossing) crossed++;
+        else leaned++;
+        stuck.add(k);
+        continue;
+      }
+      const m = P.length / 3;
+      P.push(out[0], out[1], out[2]);
+      gen[m] = Math.max(gen[a], gen[b]) + 1;
+      slope[m] = NaN;
+      vborn[m] = passes;
+      for (const [t, p, q, r] of side) {
+        alive[t] = 0;
+        const u = T.length / 3;
+        T.push(p, m, r, m, q, r);
+        alive.push(1, 1);
+        born.push(passes + 1, passes + 1);
+        index(u);
+        index(u + 1);
+      }
+      made++;
+    }
+    split2 += made;
+    if (!made) break;
+    deferred = waiting;
+  }
+  if (!split2) return null;
+  const tv = [];
+  for (let t = 0; t < T.length / 3; t++) if (alive[t]) tv.push(T[t * 3], T[t * 3 + 1], T[t * 3 + 2]);
+  return { positions: Float32Array.from(P), triVerts: Uint32Array.from(tv), split: split2, passes, kept: notFound + leaned + crossed + deep, notFound, leaned, crossed, deep };
+}
 
 // src/library/tolerances.ts
 var EXPORT_TOL = 45e-4;
@@ -24895,9 +25221,28 @@ function smoothUnion(k, A, n, tol, ctx) {
   const min = [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g];
   const max = [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g];
   const field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
-  const out = A.t(Manifold.levelSet((q) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2));
+  const raw = Manifold.levelSet((q) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
+  const out = A.t(heldToSurface(k, raw, field, gtol));
   if (ctx.blendMeshes && !ctx.blendMeshes.reuse) ctx.blendMeshes.meshes.set(key, out.getMesh());
   ctx.blends?.push({ label: n.id, originalID: out.originalID(), m: ctx.m, field });
+  return out;
+}
+function heldToSurface(k, raw, field, tol) {
+  const mesh = raw.getMesh();
+  const held = holdToSurface(mesh.vertProperties, mesh.numProp, mesh.triVerts, (x, y, z) => field.value(x, y, z), tol);
+  if (!held) return raw;
+  const rawTolerance = raw.tolerance();
+  raw.delete();
+  const made = new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: held.positions, triVerts: held.triVerts }));
+  if (made.status() !== "NoError") {
+    const status = made.status();
+    made.delete();
+    throw new Error(`engine bug: a smooth blend held to its surface is not a closed solid (${status})`);
+  }
+  const original = made.asOriginal();
+  made.delete();
+  const out = original.setTolerance(rawTolerance);
+  original.delete();
   return out;
 }
 
