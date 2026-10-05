@@ -91,7 +91,7 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Check | Limit | Measured how, on the STL as written |
 |---|---|---|
 | One watertight solid | manifold edges, no self-intersections, faces outward, exactly one shell | own STL parser, edge pairing, shells, signed volume, triangle crossing tests |
-| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle's centroid, along the surface's direction there: a triangle's own normal, except that a sliver too narrow to have a direction takes it from the surface it was cut from. Only metal's far side stops the sphere: a surface facing more than 105° away, met from more than 105° away, so a crease the sphere reaches from the side does not. A thin place is named by the part holding the sphere's centre: the band only inside its own section, otherwise the added shape by its id |
+| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle's centroid, along the surface's direction there: a triangle's own normal, except that a sliver too narrow to have a direction takes it from the surface it was cut from. Only metal's far side stops the sphere: a surface facing more than 105° away, met square-on and from more than 105° away, so a crease the sphere reaches from the side, or through a face it has passed, does not. A thin place is named by the part holding the sphere's centre: the band only inside its own section, otherwise the added shape by its id |
 | Ring band | ≥ 1.0 mm | largest circle in the band's own section, every 5° all the way round: the whole piece is cut, then clipped to the band's inner and outer radius and width, so a head or an added shape is never counted as band |
 | Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section (the whole piece cut, clipped to a disc round the prong's axis), every 0.1 mm (0.02 mm near the narrowest) |
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
@@ -181,8 +181,10 @@ npm run measure
 - **Prongs** are judged by their narrowest section, as `con:minimum-prong-thickness` says. The inscribed-sphere wall
   check leaves prong columns to that rule, because near a seat notch's sharp edge the sphere reads thinner than the
   section. That reading is the notch's real shape, not its triangles: its two flanks face each other at 105-109°, just
-  past the 105° that marks a wall's far side, and it reads 0.71 mm and 0.65 mm at two tessellations, with or without
-  the sliver rule.
+  past the 105° that marks a wall's far side, and it read 0.71 mm and 0.65 mm at two tessellations, with or without
+  the sliver rule. Since the sphere must meet a crease square-on, it reads 0.96 mm and 0.89 mm there (0.85-0.99 mm
+  over five tessellations), still thinner than the 1.17 mm section, so the exclusion stays: where a curved far side
+  crosses the 105° line, the reading still moves with the tessellation.
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
 - **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
   its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face

@@ -9,9 +9,10 @@
 //  · thickness and gaps follow the surface's direction: a sliver too narrow to
 //    have one of its own takes it from the surface it was cut from (surface.ts;
 //    fact:wall-check-reads-sliver-facets-as-zero-thickness);
-//  · a thickness ball is stopped only by metal's far side met from across, never by
-//    a crease or corner it reaches from the side (sampleThickness, below;
-//    fact:wall-check-reads-overhang-beside-band-edge);
+//  · a thickness ball is stopped only by metal's far side, met square-on and from
+//    across, never by a crease or corner it reaches from the side or through a face
+//    (sampleThickness, below; fact:wall-check-reads-overhang-beside-band-edge,
+//    fact:wall-ball-stopped-at-a-crease-it-reached-through-a-face);
 //  · a section is the whole mesh cut by a plane, clipped afterwards to the part
 //    the declaration names (sections, below; fact:band-check-measures-added-shapes-as-band).
 // And a thin place is named by the part whose metal holds it: the band only inside
@@ -25,7 +26,7 @@
 // A check that cannot run is a FAIL (owner, round 1, Q6): any exception inside
 // a check becomes result "could_not_run", which blocks the export.
 
-import { Bvh } from './bvh.js';
+import { Bvh, CORNER, EDGE } from './bvh.js';
 import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
@@ -277,10 +278,30 @@ interface Sample {
  * faces 134° away, and 1.56 mm of metal read 0.80 mm
  * (fact:wall-check-reads-overhang-beside-band-edge). Metal's real far side is met
  * from across, so a thin wall or a thin overhang reads as thin as it is.
+ *
+ * And that direction is the surface's there only if the ball meets the edge or corner
+ * SQUARE-ON: the point must be the nearest to the ball's centre of every triangle that
+ * meets at it, as a face's foot is the nearest point of that face. If one of them lies
+ * nearer, the ball passed through that face to reach the point, from outside the metal
+ * there; any face it passed and did not stop at is one the 105° test ignores, a convex
+ * edge's neighbour. On a solitaire with a 1.2 mm ball added beside its head, a ball on
+ * the rail's top 0.01 mm from the rail's outer edge grew straight down, out through the
+ * rail's outer wall (rightly ignored, 0.01 mm from its centre), and was stopped 0.36 mm
+ * down at the crease where the added ball's underside meets that wall: met from
+ * straight across, but through the wall. The rail and band under it are 2.79 mm, and
+ * the piece was refused at 0.73 mm, a reading that wandered 0.61-0.73 mm with the
+ * tessellation (fact:wall-ball-stopped-at-a-crease-it-reached-through-a-face). The two
+ * conditions are the two halves of one test, the 105° line applied to the surface where
+ * the ball meets it: square-on says the direction is the surface's there, across says it
+ * faces back. Neither alone is enough: a crease met square-on from the side (a pedestal
+ * overhanging the band) needs the second, a crease met from across through a face the
+ * first.
  */
 function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
   const out: Sample[] = [];
   const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
+  const fans = vertexFans(bvh);
+  const near = new Float64Array(3);
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t]! < 1e-10) continue;
     const n: V3 = [S[t * 3]!, S[t * 3 + 1]!, S[t * 3 + 2]!];
@@ -293,18 +314,32 @@ function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
     let cx = 0, cy = 0, cz = 0;
     // A surface bounds the ball only if the ball's centre lies behind it, inside the metal:
     // a ball that has slipped out past a side face must not be stopped from outside.
-    // And only where the ball meets it from across: at an edge or a corner of the
-    // triangle, the direction from the centre to that point must face back too.
+    // And only where the ball meets it square-on and from across: at an edge or a corner
+    // of the triangle, no other triangle meeting at that point may lie nearer the centre,
+    // and the direction from the centre to the point must face back too.
     const bounds = (u: number) => {
       if (!opposing(u)) return false;
       const v = T[u * 3]! * 3;
       return (cx - P[v]!) * S[u * 3]! + (cy - P[v + 1]!) * S[u * 3 + 1]! + (cz - P[v + 2]!) * S[u * 3 + 2]! < 1e-7;
     };
-    const metFromAcross = (_u: number, q: Float64Array, inFace: boolean) => {
+    const metFromAcross = (u: number, q: Float64Array, inFace: boolean, where: number) => {
       if (inFace) return true;
       const dx = q[0]! - cx, dy = q[1]! - cy, dz = q[2]! - cz;
-      const l = Math.hypot(dx, dy, dz);
-      return l === 0 || (dx * n[0] + dy * n[1] + dz * n[2]) / l < -0.25;
+      const l2 = dx * dx + dy * dy + dz * dz;
+      if (l2 === 0) return true;
+      if ((dx * n[0] + dy * n[1] + dz * n[2]) / Math.sqrt(l2) >= -0.25) return false;
+      // Square-on. The triangles meeting at the point: those round the corner it is, or the
+      // one across the edge it lies on (it holds both of that edge's corners).
+      const k = where >= EDGE ? where - EDGE : where - CORNER;
+      const v = T[u * 3 + k]!, across = where >= EDGE ? T[u * 3 + ((k + 1) % 3)]! : -1;
+      for (let j = fans.start[v]!; j < fans.start[v + 1]!; j++) {
+        const w = fans.tris[j]!;
+        if (w === u || bvh.area[w]! < 1e-10) continue;
+        if (across >= 0 && T[w * 3] !== across && T[w * 3 + 1] !== across && T[w * 3 + 2] !== across) continue;
+        bvh.closestPoint(cx, cy, cz, w, near);
+        if ((near[0]! - cx) ** 2 + (near[1]! - cy) ** 2 + (near[2]! - cz) ** 2 < l2 * (1 - 1e-9)) return false;
+      }
+      return true;
     };
     for (let i = 0; i < 16 && hi - lo > 0.0005; i++) {
       const r = (lo + hi) / 2;
@@ -317,6 +352,24 @@ function sampleThickness(bvh: Bvh, S: Float64Array): Sample[] {
     out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
+}
+
+/** The triangles round each vertex: those of vertex v are tris[start[v] .. start[v + 1]). */
+function vertexFans(bvh: Bvh): { start: Int32Array; tris: Int32Array } {
+  const T = bvh.tri;
+  let nv = 0;
+  for (let i = 0; i < T.length; i++) nv = Math.max(nv, T[i]! + 1);
+  const start = new Int32Array(nv + 1);
+  for (let i = 0; i < T.length; i++) start[T[i]! + 1] = start[T[i]! + 1]! + 1;
+  for (let v = 0; v < nv; v++) start[v + 1] = start[v + 1]! + start[v]!;
+  const fill = start.slice(0, nv);
+  const tris = new Int32Array(T.length);
+  for (let i = 0; i < T.length; i++) {
+    const v = T[i]!;
+    tris[fill[v]!] = (i / 3) | 0;
+    fill[v] = fill[v]! + 1;
+  }
+  return { start, tris };
 }
 
 function minSample(samples: Sample[], keep: (s: Sample) => boolean = () => true): Sample | null {
@@ -392,7 +445,7 @@ function whereOf(p: V3, decl: FeatureDecl, what: string, centre?: V3): Where {
   return { ...where, description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
 }
 
-const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
+const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 
 /** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
 function onProngColumn(p: V3, decl: FeatureDecl): boolean {
