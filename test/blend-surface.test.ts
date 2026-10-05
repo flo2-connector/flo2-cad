@@ -25,10 +25,11 @@
 //    or a cylinder's edge inside a blend) stands off by a length proportional to the grid
 //    step, not its square: a box in a blend read 0.036 mm.
 //
-// The fix (src/library/field.ts, holdToSurface): after the level set, every facet whose
-// points stand off the field by more than the casting tolerance is split, the new corner
-// put ON the surface, until none does. The check is unchanged: it reads the file, as before.
-// Observed failing on main c678b62 before the fix.
+// The fix (src/library/field.ts, holdToSurface): after the level set, every edge or facet
+// whose points stand off the field by more than the casting tolerance is split, the new
+// corner put ON the surface (on the crease itself where it crosses one), each split guarded
+// so no facet turns over or passes through another, until none stands off. The check is
+// unchanged: it reads the file, as before. Observed failing on main c678b62 before the fix.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -38,7 +39,7 @@ import { runChecks } from '../src/checker/check.js';
 import { checkPiece, limitsFor } from '../src/engine.js';
 import { writeBinaryStl } from '../src/files/stl.js';
 import { kernel } from '../src/kernel/manifold.js';
-import { Arena, buildPiece, EXPORT_TOL } from '../src/library/build.js';
+import { Arena, buildPiece, EXPORT_TOL, polygonsToMesh } from '../src/library/build.js';
 import { fieldOf } from '../src/library/field.js';
 import { buildOp } from '../src/library/ops.js';
 import { IDENTITY } from '../src/library/thicken.js';
@@ -90,14 +91,20 @@ const CREASED: { name: string; node: TreeNode }[] = [
 /**
  * How far the blend's casting facets stand off its own surface: the largest |field| over every
  * facet of its level set, at its edges' quarter points and centroid, and, where those stand
- * off at all, on a grid of 45 points over the facet. Outside the solid the field is the exact
- * distance to it; inside, a distance at most as large as the true one.
+ * off at all, on a grid of 45 points over the facet. Across a crease this is the distance
+ * itself (outside a wire's bend the field is the exact distance to it; inside a box, to its
+ * nearest face); where a blend's bridge between two shapes begins it is at most the distance,
+ * and those points (a cone point of the surface, neither smooth nor a crease) are not what
+ * this pins. And the blend alone, written as a casting file, is one closed solid that does
+ * not pass through itself, as the casting check reads it: the refinement guards every split.
  */
-async function standOff(node: TreeNode): Promise<{ worst: number; at: number[]; facets: number }> {
+async function standOff(node: TreeNode): Promise<{ worst: number; at: number[]; facets: number; watertight: string }> {
   const k = await kernel();
   const A = new Arena();
   try {
     const m = buildOp(k, A, node, EXPORT_TOL, { m: IDENTITY, sheets: [], blends: [] });
+    const stl = writeBinaryStl(polygonsToMesh(m), 'blend');
+    const w = runChecks(stl, { prongs: [], scale: 1 }, limitsFor(METALS.gold_14k_yellow), stl).entries.find((e) => e.id === 'watertight')!;
     const mesh = m.getMesh();
     const np = mesh.numProp, V = mesh.vertProperties, T = mesh.triVerts;
     const f = fieldOf(node);
@@ -120,7 +127,7 @@ async function standOff(node: TreeNode): Promise<{ worst: number; at: number[]; 
       const N = 8;
       for (let i = 0; i <= N; i++) for (let j = 0; i + j <= N; j++) look(...pt(i / N, j / N));
     }
-    return { worst, at, facets: n };
+    return { worst, at, facets: n, watertight: w.result === 'pass' ? 'pass' : (w.measured ?? 'fail') };
   } finally {
     A.free();
   }
@@ -128,8 +135,9 @@ async function standOff(node: TreeNode): Promise<{ worst: number; at: number[]; 
 
 describe("a smooth blend's casting facets stand within the surface limit of the blend's own surface, creases included", () => {
   for (const { name, node } of CREASED) {
-    it(`${name}: no point of any facet stands more than ${LIMIT} mm off the field's zero level`, { timeout: 120_000 }, async () => {
+    it(`${name}: no point of any facet stands more than ${LIMIT} mm off the field's zero level`, { timeout: 300_000 }, async () => {
       const r = await standOff(node);
+      assert.equal(r.watertight, 'pass', 'the blend, refined, is not one closed solid that keeps clear of itself');
       assert.ok(r.worst <= LIMIT, `a facet stands ${r.worst.toFixed(4)} mm off the blend's surface at [${r.at.map((v) => v.toFixed(3)).join(', ')}] (${r.facets} facets)`);
     });
   }
@@ -158,7 +166,7 @@ describe('the casting check reads a creased blend within the limit', () => {
 });
 
 describe('the surface check names a place on a blend by the blend, not by the region round it', () => {
-  it("a blend point under a bezel's outline is named as the blend's", async () => {
+  it("a blend point under a bezel's outline is named as the blend's", { timeout: 120_000 }, async () => {
     const tree = bandWith(CREASED[0]!.node, 10.2);
     const built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true });
     const stl = writeBinaryStl(built.metal, 'x');
