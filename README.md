@@ -217,6 +217,50 @@ the container bounds what an escape reaches; on a laptop, the child runs as the 
 it. Where there is no `/proc` (macOS, Windows) the resident-memory watch is off: the heap and kernel caps and the time
 limit still hold, but memory a program takes in typed arrays is bounded only by the time limit.
 
+## A picture as a relief
+
+`relief` lays a grayscale **height image** onto the piece (`cap:a-relief-from-a-picture`). It is a tree operation
+(`"op": "relief"`) and a program call (`relief({...})`). White is the highest point; RGB and RGBA are read by their
+brightness (Rec. 709 luma), and a transparent pixel is the lowest.
+
+- **Where the image comes from.** A PNG file, by its plain name, from one folder: `FLO2_CAD_IMAGE_DIR`, else the
+  engine's working directory.
+  - The image (`Dockerfile`) sets `FLO2_CAD_IMAGE_DIR=/design`, where flo2 mounts the design's own folder read-only. So
+    on flo2.io a relief names a file the design keeps.
+  - A program's evaluation child reads no files. The engine reads the images the program names in quotes and hands it
+    their bytes.
+  - The check report lists each image by name, sha256 and size: the casting file's provenance.
+- **The decoder** (`src/files/png-read.ts`) is plain JavaScript over `node:zlib`, with no new dependency.
+  - It reads 8-bit grayscale, grayscale with alpha, RGB and RGBA, through all five row filters, and checks every
+    chunk's CRC.
+  - It refuses palette, 16-bit, 1/2/4-bit and interlaced PNGs plainly, and anything damaged or cut short.
+  - The largest image it takes is 2048 pixels a side and 16 MB. That limit is provisional until the owner decides
+    (`dec:idea-a-photo-becomes-a-height-image`).
+- **The solid** (`src/library/relief.ts`) is one closed solid over a `width` × `height` patch.
+  - It runs from its back, `base` below its surface, to its face: raised up to `depth`, or sunk that deep into its own
+    back.
+  - `"flat"` lies in XY facing +Z. `"cylinder"` wraps round the Y axis at `radius`, for a band's top.
+- **Smoothing.** A continuous Gaussian blur over the image's pixels, with σ = max(`smoothing` / 2, 0.4 × `depth`).
+  - `smoothing` defaults to 0.35 mm, the casting detail limit, and is never less.
+  - So no ridge or hollow survives finer than about 0.41 mm across, and no slope is steeper than 45°. The wall check's
+    ball never reads two faces of a relief as a thin wall.
+- **The mesh.** A grid whose spacing keeps the facets within 0.9 × the tolerance each way of the smoothed surface.
+  - The kernel then removes the vertices that flat or gently curved places do not need, within a tenth of the
+    tolerance. On a 16 mm dome that took 124,000 triangles to 30,000.
+  - The surface check's reference build is finer by the same rule.
+
+Measured on an Intel N95 at one CPU (`taskset -c 0`), while another build kept all four cores busy (load average 5 to
+6):
+
+- `check_piece` on the skill's lion signet took **17.5 s** (`test/relief.test.ts`). That is a US 8 band, a plate,
+  and a 10 × 8 mm relief from a 512 × 512 picture, written as a program. The program's evaluation took 4.7 s, at
+  277 MiB.
+- A US 7 signet with a 10 × 10 mm relief of the same picture, written as a program, took 21.7 s (evaluation 5.2 s,
+  308 MiB).
+- A US 7 signet with a 512 × 512 picture, written as a tree, took 4 to 11 s, depending on the picture.
+
+Both are well inside flo2's 60 s door, and the test holds the program's check under 30 s.
+
 ## What "casting-ready" means here
 
 Every number below has a cited source. The sources are in `src/metals.ts`, in each check report, and on the design.
@@ -332,7 +376,7 @@ from the repo needs no build step:
   bundles only the engine's own library and kernel loader. No sandbox library is added: the confinement is Node's own
   (`node:vm`, `node:child_process`, the permission model).
 - **No native dependencies.** The PNG preview comes from a software rasterizer. The 3MF zip is written with
-  `node:zlib`.
+  `node:zlib`. A relief's height image is read by a PNG decoder in plain JavaScript over `node:zlib`.
 
 ```sh
 npm ci

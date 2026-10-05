@@ -1,6 +1,6 @@
 ---
 name: design-jewelry
-description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, a ring with petals, leaves or a flower on it, or any other shape (a cabochon, a signet, a sculpted piece) written as a program, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, writing a piece as a program, refusals and what to thicken, and platinum.
+description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, a ring with petals, leaves or a flower on it, or any other shape (a cabochon, a signet, a sculpted piece) written as a program, or a picture laid on as a relief (a lion's face on a signet), for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, writing a piece as a program, refusals and what to thicken, and platinum.
 compatibility: Needs the flo2-cad MCP server, which provides start_piece, change_piece, preview_piece, check_piece, export_for_casting and describe_piece.
 ---
 
@@ -200,9 +200,9 @@ engine runs it confined, keeps it as the piece's file, and previews, checks and 
   program: `describe_piece` shows it written as one, ready to edit.
 - **What it can call.** `describe_piece` lists everything, with settings. In short:
   - the **library**, today's parts: `ringShank`, `roundStone`, `emeraldStone`, `cabochon`, `stone` (a stone of your
-    own shape), `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). They take the same
-    settings and defaults as `start_piece`, and each reads back its dimensions as `.dims` (the seat, the bezel, each
-    prong, the band), so a fit is worked from the engine's numbers;
+    own shape), `prongHead`, `bezel`, `thicken`, `relief` (a picture as a relief, below), and `op` (any operation node
+    a tree can hold). They take the same settings and defaults as `start_piece`, and each reads back its dimensions as
+    `.dims` (the seat, the bezel, each prong, the band), so a fit is worked from the engine's numbers;
   - the **kernel**: `sphere`, `cylinder`, `box`, `torus`, `sweep`; `circle`, `rect` and `polygon` (2D, with
     `.offset`); `extrude`, `revolve`, `hull`; `union`, `difference`, `intersection`, `smoothUnion` (a fillet); and on
     a solid `.translate`, `.rotate`, `.mirror`, `.scale`, `.named("...")`, `.bounds()`, `.volume()`. `segments(r)`
@@ -246,6 +246,62 @@ base), so its dome is its full 2.6 mm height. `kind: 'cabochon'` declares it a c
 the cabochon's rule: it rises at least a third of the dome, 0.87 mm here (J. Cogswell, Creative Stonesetting). The
 auto lip rises 1.56 mm (60 %); a lower bezel, down to that third, passes too. Left undeclared, a dome is checked as a
 faceted stone, by 50 % to 75 % of its crown.
+
+## A picture as a relief: `relief`
+
+For a sculpted face that no program draws well by numbers (a lion's head on a signet, a rose, a crest), lay a
+**height image** onto the piece. White is the highest point, black the lowest; colour is read by its brightness, and
+a transparent pixel is the lowest.
+
+- **The image.** A PNG kept beside the piece: on flo2, a file the design keeps, named as `list_my_design_files` gives
+  it (the person uploads it, or another tool makes it). It is 8-bit grayscale (RGB and RGBA are read by brightness), at
+  most 2048 pixels a side. Name it in quotes in the program, exactly as kept, so the engine can find it before the
+  program runs.
+- **Where it goes.** `relief({ id, image, width, height, depth, mode, surface, radius, base, smoothing })`, or an
+  `"op": "relief"` node in a tree.
+  - `"surface": "flat"` (the default) lies in the XY plane, centred on the origin and facing +Z, with the image's top
+    towards +Y. Move it onto a plate with `.translate`.
+  - `"surface": "cylinder"` wraps it round the band, its surface at `radius`, centred on the top. Set `radius` to the
+    band's outer radius (`band.dims.outerDiameterMm / 2`). Then `width` runs round the band and `height` along the
+    finger.
+- **Raised or sunk.** `"raised"` (the default) stands up to `depth` above its surface. Its `base` (default 1 mm) is a
+  back that sinks into the metal under it, so it joins that metal.
+
+  `"sunk"` carves the picture up to `depth` into its own back, so make the relief the face itself: a signet's plate,
+  or a panel laid on the band. Its base must be more than its depth, and the floor (base less depth) needs the 0.8 mm
+  wall.
+- **Smoothing.** The picture is smoothed so that no ridge or hollow is finer than `smoothing` and no slope is steeper
+  than 45°.
+  - The default for `smoothing`, and the least it may be, is 0.35 mm, the casting detail limit.
+  - A deeper relief is therefore a softer one. For crisper detail, use less depth.
+  - A picture finer than that is smoothed, never refused. Tell the person when the fine detail will not survive.
+- **The check** measures it like any other metal (walls, details, gaps and the surface) and names a thin place by the
+  relief's id. The check report names each image by its file and sha256, so the casting file's source is on record.
+
+**A worked example: a lion's face on a signet.**
+
+```js
+// A signet ring, US 8, with a lion's face raised 0.8 mm on its plate, from the
+// height image lion-face.png kept beside the piece (white is highest).
+const band = ringShank({ ring_size: { system: 'US', size: '8' }, band_width: 3, band_thickness: 1.8 });
+const rin = band.dims.innerDiameterMm / 2, rout = band.dims.outerDiameterMm / 2;
+
+// The plate: a 12 x 10 mm block on top of the band, its underside cut clear of the finger.
+const top = rout + 1.5;
+const plate = difference(box(12, 10, 4).translate([0, 0, top - 2]), cylinder(rin, 30, { center: true }).rotate([90, 0, 0]));
+
+// The face, 10 x 8 mm, 0.8 mm at its highest; its 0.5 mm back sinks into the plate.
+const lion = relief({ id: 'lion', image: 'lion-face.png', width: 10, height: 8, depth: 0.8, base: 0.5 }).translate([0, 0, top]);
+return union(band, plate, lion);
+```
+
+**The honest limit.** The engine lays the picture it is given. It does not invent one.
+
+- A convincing lion's face comes from a good height image: a depth map of a sculpt or a photo, or a grayscale drawing
+  where brightness means height.
+- An ordinary photo is not a height map. Its shadows and colours would become bumps.
+- If the person has only a photo, say so plainly, and ask for a height image made from it (by an artist, or by a
+  depth-estimation tool) rather than carving the photo as it is.
 
 ## Platinum
 

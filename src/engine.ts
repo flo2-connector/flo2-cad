@@ -19,6 +19,7 @@ import { declarationProblems, type RunOut } from './program/verify.js';
 import type { Mesh } from './kernel/manifold.js';
 import { lengthMm } from './units.js';
 import { reachDeg, sheetSpec } from './library/thicken.js';
+import { programImagesReport, reliefImagesOf } from './library/relief.js';
 import { renderPreview, type RenderItem, type ViewName } from './render/render.js';
 import { ENGINE_NAME, ENGINE_VERSION, KERNEL_NAME, KERNEL_VERSION } from './version.js';
 
@@ -281,6 +282,9 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
         const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
         return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
       }
+      if (e.where?.part === 'added shape' && reliefAmong(v, part)) {
+        return `The relief ${quoteIds(part)} is only ${e.value} mm thick at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Give it more metal under its face: raise its "base" (a sunk relief's floor is its base less its depth), or lay it on thicker metal; a lower "depth" or a larger "smoothing" makes its slopes gentler.`;
+      }
       if (e.where?.part === 'added shape') {
         return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
       }
@@ -303,6 +307,21 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
       return `The casting file's facets stand ${e.value} mm off the curved surface, over the ${metal.limits.surfaceDeviation} mm limit. This is an engine fault, not the design: report it.`;
   }
   return null;
+}
+
+/** Whether the added shape(s) a thin place is named by hold a relief (by the ids the checker names, "a, b"). */
+function reliefAmong(v: PieceView, ids: string): boolean {
+  const holds = (n: TreeNode | undefined): boolean => !!n && (n.op === 'relief' || (n.children ?? []).some(holds));
+  return ids.split(', ').some((id) => v.extras.some((x) => holds(findNode(x as TreeNode, id))));
+}
+
+/** The height images a tree's reliefs read, with their hashes, for the check report: the casting file's provenance. */
+function treeImages(tree: PieceTree): ReturnType<typeof reliefImagesOf> {
+  try {
+    return reliefImagesOf(tree.root);
+  } catch {
+    return [];
+  }
 }
 
 function couldNotRun(msg: string): CheckEntry[] {
@@ -390,6 +409,8 @@ export async function checkPiece(piece: Piece, mode: 'check' | 'export', limits:
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) },
   };
+  const images = treeImages(tree);
+  if (images.length) report['images'] = images;
   let threeMf: Buffer | null = null;
   if (built && stl && verdict === 'pass' && mode === 'export') {
     threeMf = write3mf(built.metal, {
@@ -645,6 +666,8 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) },
   };
+  const images = programImagesReport(p.program);
+  if (images.length) report['images'] = images;
   let threeMf: Buffer | null = null;
   if (mesh && stl && verdict === 'pass' && mode === 'export') {
     threeMf = write3mf(mesh, {

@@ -13,5 +13,7 @@ WORKDIR /app
 COPY package.json ./
 COPY dist/ ./dist/
 COPY vendor/ ./vendor/
+# A relief's height image is a file the design keeps: flo2 mounts the design's folder here, read-only.
+ENV FLO2_CAD_IMAGE_DIR=/design
 USER node
 ENTRYPOINT ["node", "/app/dist/main.js"]

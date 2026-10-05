@@ -58,7 +58,7 @@ export const PROGRAM_CALLS = [
   // kernel: 2D profiles
   'circle', 'rect', 'polygon',
   // library
-  'ringShank', 'roundStone', 'emeraldStone', 'cabochon', 'stone', 'prongHead', 'bezel', 'thicken',
+  'ringShank', 'roundStone', 'emeraldStone', 'cabochon', 'stone', 'prongHead', 'bezel', 'thicken', 'relief',
   // methods of a solid
   'translate', 'rotate', 'mirror', 'scale', 'named', 'bounds', 'volume', 'slice', 'project', 'trim',
   // methods of a profile
@@ -604,6 +604,14 @@ export class ProgramLibrary {
         for (const k of ['radius', 'round_corners'] as const) if (o[k] !== undefined) params[k] = this.#lenText(o[k], `thicken.${k}`);
         for (const k of ['surface', 'axis'] as const) if (o[k] !== undefined) params[k] = o[k];
         return this.#fromNode({ id, op: 'thicken', params }, 'thicken', id);
+      }
+      case 'relief': {
+        const o = this.#opts(a[0], 'relief', ['id', 'image', 'width', 'height', 'depth', 'mode', 'surface', 'radius', 'base', 'smoothing']);
+        const id = o['id'] === undefined ? this.#id('relief') : nameId(o['id'], 'relief.id');
+        const params: Record<string, unknown> = {};
+        for (const k of ['width', 'height', 'depth', 'radius', 'base', 'smoothing'] as const) if (o[k] !== undefined) params[k] = this.#lenText(o[k], `relief.${k}`);
+        for (const k of ['image', 'mode', 'surface'] as const) if (o[k] !== undefined) params[k] = o[k];
+        return this.#fromNode({ id, op: 'relief', params }, 'relief', id);
       }
     }
   }

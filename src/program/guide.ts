@@ -18,6 +18,7 @@ export const PROGRAM_CALLS_GUIDE = [
   '- stone(solid, { name?, kind? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal. kind: "cabochon" declares a domed stone, checked by the cabochon\'s lip rule; left out, the stone is faceted and its lip covers 50-75 % of its crown. The engine never guesses which from the shape.',
   '- prongHead({ stone, on: band, prong_count, prong_thickness, prong_grip, culet_clearance, prong_overrides }) and bezel({ stone, on: band, wall, lip, culet_clearance }) -> the setting round the stone, on top of the band (leave out `on` for a setting standing on the XY plane, as on a pendant). .dims has the seat, the outside, the bezel or each prong, and the culet clearance, as describe_piece reports them.',
   '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
+  '- relief({ id, image: "lion.png", width, height, depth, mode: "raised" | "sunk", surface: "flat" | "cylinder", radius, base, smoothing }) -> a grayscale height image (a PNG kept beside the piece, named in quotes; white highest) as one solid: from its back, base below its surface (default 1 mm), to its face, raised up to depth or sunk that deep. Flat lies in XY facing +Z, centred; cylinder wraps round the Y axis at radius (the band\'s outer radius lays it on the band\'s top). Smoothed so no ridge or hollow is finer than smoothing (default and least 0.35 mm) and no slope is steeper than 45°. The check names it by its id.',
   '- op(node) -> any operation node of a tree, as JSON with units (describe_piece of a tree lists them): what a tree can hold, a program can hold.',
   'KERNEL (general shapes, numbers in mm and degrees):',
   '- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire).',
@@ -31,6 +32,20 @@ export const PROGRAM_CALLS_GUIDE = [
 export function programGuide(limits: ProgramLimits): string {
   return [...PROGRAM_RULES, `Limits: ${limits.seconds} s and ${limits.memoryMiB} MiB for each evaluation.`, ...PROGRAM_CALLS_GUIDE].join('\n');
 }
+
+/** A worked example: a picture raised on a signet's plate (skills/design-jewelry/SKILL.md quotes it; test/relief.test.ts checks it). */
+export const RELIEF_EXAMPLE = String.raw`// A signet ring, US 8, with a lion's face raised 0.8 mm on its plate, from the
+// height image lion-face.png kept beside the piece (white is highest).
+const band = ringShank({ ring_size: { system: 'US', size: '8' }, band_width: 3, band_thickness: 1.8 });
+const rin = band.dims.innerDiameterMm / 2, rout = band.dims.outerDiameterMm / 2;
+
+// The plate: a 12 x 10 mm block on top of the band, its underside cut clear of the finger.
+const top = rout + 1.5;
+const plate = difference(box(12, 10, 4).translate([0, 0, top - 2]), cylinder(rin, 30, { center: true }).rotate([90, 0, 0]));
+
+// The face, 10 x 8 mm, 0.8 mm at its highest; its 0.5 mm back sinks into the plate.
+const lion = relief({ id: 'lion', image: 'lion-face.png', width: 10, height: 8, depth: 0.8, base: 0.5 }).translate([0, 0, top]);
+return union(band, plate, lion);`;
 
 /** A worked example: a cabochon in a bezel on a band, with no feature of its own in the engine. */
 export const CABOCHON_EXAMPLE = String.raw`// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.

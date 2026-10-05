@@ -3,7 +3,8 @@
 // primitives, booleans, transforms, extrude, revolve, a SWEEP of a round wire along
 // a path, a SMOOTH BLEND (smooth_union) evaluated as a level set of distance
 // functions (Manifold's levelSet; the field and how it is read are in field.ts),
-// and THICKEN, a curved sheet given a thickness (thicken.ts). Every one evaluates
+// THICKEN, a curved sheet given a thickness (thicken.ts), and RELIEF, a height image
+// laid onto a flat or curved patch (relief.ts). Every one evaluates
 // to a closed solid; the kernel guarantees manifold output.
 //
 // Each call carries where its node sits in the piece (an OpContext: the transforms
@@ -19,6 +20,7 @@ import { angleDeg, lengthMm } from '../units.js';
 import type { Arena } from './build.js';
 import { BlendField, holdToSurface, levelSetStep } from './field.js';
 import { EXPORT_TOL } from './tolerances.js';
+import { buildRelief } from './relief.js';
 import { buildThicken, compose, IDENTITY, reflection, rotation, translation, type OpContext } from './thicken.js';
 
 type Params = Record<string, unknown>;
@@ -118,6 +120,8 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpCo
       return smoothUnion(k, A, n, tol, ctx);
     case 'thicken':
       return buildThicken(k, A, n, tol, ctx);
+    case 'relief':
+      return buildRelief(k, A, n, tol);
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }
