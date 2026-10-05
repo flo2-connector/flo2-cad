@@ -22828,8 +22828,23 @@ var RELS = `<?xml version="1.0" encoding="UTF-8"?>
 function xmlEscape(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
-function num(v) {
-  return (Math.round(v * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, "");
+function float32Text(v) {
+  const f = Math.fround(v);
+  if (f === 0) return "0";
+  for (let p = 1; p < 9; p++) {
+    const s = f.toPrecision(p);
+    if (Math.fround(Number(s)) === f) return plainDecimal(s);
+  }
+  return plainDecimal(f.toPrecision(9));
+}
+function plainDecimal(s) {
+  let out = s;
+  const e = s.search(/e/i);
+  if (e >= 0) {
+    const decimals = Math.max(0, (s.slice(0, e).split(".")[1]?.length ?? 0) - Number(s.slice(e + 1)));
+    out = Number(s).toFixed(decimals);
+  }
+  return out.includes(".") ? out.replace(/0+$/, "").replace(/\.$/, "") : out;
 }
 function write3mf(mesh, metadata) {
   const parts = [];
@@ -22839,7 +22854,7 @@ function write3mf(mesh, metadata) {
 `);
   parts.push('  <resources>\n    <object id="1" type="model">\n      <mesh>\n        <vertices>\n');
   const p = mesh.positions;
-  for (let i = 0; i < p.length; i += 3) parts.push(`          <vertex x="${num(p[i])}" y="${num(p[i + 1])}" z="${num(p[i + 2])}"/>
+  for (let i = 0; i < p.length; i += 3) parts.push(`          <vertex x="${float32Text(p[i])}" y="${float32Text(p[i + 1])}" z="${float32Text(p[i + 2])}"/>
 `);
   parts.push("        </vertices>\n        <triangles>\n");
   const t = mesh.triangles;
@@ -23016,48 +23031,48 @@ function split(v, path, example) {
   if (!m) {
     throw new CallError(path, `"${v}" is not a measurement; write a number and its unit, for example "${example}".`);
   }
-  const num2 = Number(m[1]);
-  if (!Number.isFinite(num2)) {
+  const num = Number(m[1]);
+  if (!Number.isFinite(num)) {
     throw new CallError(path, `"${v}" is not a finite number.`);
   }
-  return { num: num2, unit: m[2], text: v };
+  return { num, unit: m[2], text: v };
 }
 function lengthMm(v, path) {
-  const { num: num2, unit, text: text2 } = split(v, path, "1.2 mm");
+  const { num, unit, text: text2 } = split(v, path, "1.2 mm");
   if (unit === void 0) {
-    throw new CallError(path, `"${text2}" has no unit. Write "${num2} mm" if you mean millimetres.`);
+    throw new CallError(path, `"${text2}" has no unit. Write "${num} mm" if you mean millimetres.`);
   }
-  if (unit === "mm") return num2;
+  if (unit === "mm") return num;
   const f = FOREIGN_LENGTH[unit] ?? FOREIGN_LENGTH[unit.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text2}" is in ${unit}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num2} ${unit} \xD7 ${f} = ${round(num2 * f)} mm.`
+      `"${text2}" is in ${unit}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num} ${unit} \xD7 ${f} = ${round(num * f)} mm.`
     );
   }
   throw new CallError(path, `"${unit}" is not a length unit this engine takes; write the length in mm, for example "1.2 mm".`);
 }
 function angleDeg(v, path) {
-  const { num: num2, unit, text: text2 } = split(v, path, "30 deg");
+  const { num, unit, text: text2 } = split(v, path, "30 deg");
   if (unit === void 0) {
-    throw new CallError(path, `"${text2}" has no unit. Write "${num2} deg" if you mean degrees.`);
+    throw new CallError(path, `"${text2}" has no unit. Write "${num} deg" if you mean degrees.`);
   }
-  if (unit === "deg" || unit === "\xB0" || unit === "degrees") return num2;
+  if (unit === "deg" || unit === "\xB0" || unit === "degrees") return num;
   const f = FOREIGN_ANGLE[unit.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text2}" is in ${unit}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num2} ${unit} = ${round(num2 * f)} deg.`
+      `"${text2}" is in ${unit}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num} ${unit} = ${round(num * f)} deg.`
     );
   }
   throw new CallError(path, `"${unit}" is not an angle unit this engine takes; write the angle in deg, for example "30 deg".`);
 }
 function percent(v, path) {
-  const { num: num2, unit, text: text2 } = split(v, path, "1.5 %");
+  const { num, unit, text: text2 } = split(v, path, "1.5 %");
   if (unit !== "%") {
     throw new CallError(path, `"${text2}" must be a percentage written with "%", for example "1.5 %".`);
   }
-  return num2;
+  return num;
 }
 function looksLikeQuantity(v) {
   return QUANTITY.test(v);
@@ -23131,12 +23146,12 @@ function parseFraction(t) {
   return null;
 }
 function caratText(v, path) {
-  const { num: num2, unit, text: text2 } = split(v, path, "2.00 ct");
+  const { num, unit, text: text2 } = split(v, path, "2.00 ct");
   if (unit !== "ct") {
     throw new CallError(path, `"${text2}" must be a carat weight written with "ct", for example "2.00 ct". It is kept for reference only; the stone is sized from its measured length, width and depth.`);
   }
-  if (num2 <= 0 || num2 > 50) throw new CallError(path, `${num2} ct is not a plausible weight for one stone.`);
-  return `${num2} ct`;
+  if (num <= 0 || num > 50) throw new CallError(path, `${num} ct is not a plausible weight for one stone.`);
+  return `${num} ct`;
 }
 
 // src/library/thicken.ts
@@ -24845,6 +24860,7 @@ function buildWith(k, A, tree, opts) {
     scaleDecl(decl, scale2);
   }
   decl.scale = scale2;
+  metal = atFilePrecision(A, metal);
   const status = metal.status();
   if (status !== "NoError") throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
@@ -24857,6 +24873,14 @@ function buildWith(k, A, tree, opts) {
     bbox: { min: [...bb.min], max: [...bb.max] },
     dims
   };
+}
+function atFilePrecision(A, m) {
+  const snapped = A.t(
+    m.warpBatch((v, count) => {
+      for (let i = 0; i < count * 3; i++) v[i] = Math.fround(v[i]);
+    })
+  );
+  return A.t(snapped.simplify());
 }
 function crossingsX(poly, halfWidth) {
   const xs = [];

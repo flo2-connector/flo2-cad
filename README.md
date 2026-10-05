@@ -130,6 +130,12 @@ How each metal is handled:
 - **Platinum** melts at about 1780-1795 °C and is cast at about 1850-2200 °C, so every platinum reply says it goes
   to a specialist caster.
 - **The stone** is never in the casting file. It appears in the preview only.
+- **Both casting files hold the same vertices**, the float32 numbers the checker reads back from the STL; the 3MF
+  writes each as the shortest decimal that reads back as that float32. Before writing, the build moves every vertex
+  to that float32 inside the kernel, and the kernel collapses any edge that became zero-length. The kernel works in
+  double precision and keeps vertices 1e-10 mm apart, which a float32 file would merge into one point (a round
+  stone in a bezel did this until 2026-10-05). Rounding moves nothing the file would not move anyway, less than
+  1e-6 mm on a ring.
 
 ## Measurements
 
@@ -204,10 +210,10 @@ npm run measure
   the sliver rule. Since the sphere must meet a crease square-on, it reads 0.96 mm and 0.89 mm there (0.85-0.99 mm
   over five tessellations), still thinner than the 1.17 mm section, so the exclusion stays: where a curved far side
   crosses the 105° line, the reading still moves with the tessellation.
-- **A round stone in a bezel does not export yet.** Its file fails the watertight check (edges shared by more than two
-  faces, and degenerate triangles), though every other check passes; the emerald-cut bezel passes. Measured
-  2026-10-05 and recorded as `fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05`. Until it is fixed,
-  a round stone exports in prongs.
+- **The checker reads back the STL only.** The 3MF carries the same float32 vertices and triangles, and a test holds
+  that, but the checker does not parse the 3MF itself. (A round stone in a bezel now exports. Its file used to fail
+  the watertight check, `fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05`; the cause and the fix
+  are in "Both casting files hold the same vertices" above.)
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
 - **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
   its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face

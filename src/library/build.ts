@@ -505,6 +505,7 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
     scaleDecl(decl, scale);
   }
   decl.scale = scale;
+  metal = atFilePrecision(A, metal);
   const status = metal.status();
   if (status !== 'NoError') throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
@@ -517,6 +518,37 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
     bbox: { min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 },
     dims,
   };
+}
+
+// ------------------------------------------------- the casting files' precision
+//
+// The kernel builds in double precision and keeps any two vertices further apart than its
+// own tolerance, about 4e-11 mm on a ring. The casting files hold float32: the STL by its
+// format, the 3MF because it writes the same numbers (src/files/threemf.ts). A float32 step
+// is about 1e-6 mm at 14 mm from the origin. Two cuts that meet edge on edge (a round seat's
+// cone and its bezel's back hole share their vertex angles) leave pairs of vertices 1e-10 to
+// 1e-7 mm apart, joined by an edge. The kernel calls that solid sound, but in the file each
+// pair became one point and the triangles between them collapsed: every round stone in a
+// bezel was refused, the moonstone with 200 edges shared by more than two faces and 80
+// degenerate triangles (fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05).
+//
+// So every vertex is moved to the float32 the file will hold anyway, INSIDE the kernel, and
+// the kernel then collapses each edge that made zero-length, keeping the solid manifold. This
+// moves nothing the file would not have moved (under 1e-6 mm on a ring, far inside the
+// 0.0045 mm chord tolerance), so every built dimension stands. A coarser grid would not do:
+// measured, a 2^-19 mm grid flipped two micro-triangles of an openwork ring into
+// self-intersections that float32 leaves alone. The checker still reads the written file and
+// judges it alone.
+
+/** The solid with every vertex at the float32 the casting files hold, and the edges that made zero-length collapsed by the kernel. */
+export function atFilePrecision(A: Arena, m: Manifold): Manifold {
+  const snapped = A.t(
+    m.warpBatch((v: Float64Array, count: number) => {
+      for (let i = 0; i < count * 3; i++) v[i] = Math.fround(v[i]!);
+    }),
+  );
+  // At the kernel's own tolerance, so nothing but what the rounding closed up is collapsed.
+  return A.t(snapped.simplify());
 }
 
 function circlePts(r: number, n: number, cx: number, cy: number): Vec2[] {
