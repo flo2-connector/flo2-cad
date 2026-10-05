@@ -57,6 +57,15 @@ sheet, such as a cupped or curled petal or a leaf, a stated thickness along a sp
 square to the surface. `describe_piece` lists every operation with its settings, and the design-jewelry skill walks
 through a five-petal flower.
 
+**A stated thickness means what it says.** A thickened sheet is built at least as thick as stated, measured square to
+its surface, at any thickness, radius and size. The flat facets of a curved sheet's convex face would cut into it by up
+to their chord sagitta, so that face is built further out by exactly the largest sagitta its own facets have, computed
+from the facets actually built. Both faces also move out by a float32 allowance of 2.4 × 10⁻⁷ of the piece's size, so
+the STL as written holds the bound too. A sheet comes out at most the sagitta plus that allowance over: under twice the
+chord tolerance, 0.009 mm in a casting file (about 0.008 mm on a sphere and 0.004 mm on a cylinder). `src/library/thicken.ts`
+(AT LEAST THE STATED THICKNESS) gives the proof, and `test/thicken.test.ts` reads every face triangle of ring petals
+and of a 100 mm sculpture leaf, 0.5 to 5 mm thick, to hold it.
+
 **Units and errors:**
 
 - A length is a string with its unit, like `"1.4 mm"`.
@@ -179,5 +188,4 @@ npm run measure
   its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face
   curving back, so it reads the rim thinner than it is (measured: 99.8 % of the thickness at 5 times, 84-94 % at 4
   times on a sphere, 62-70 % at 3 times). On a sphere, widths narrow by sin θ / θ as the cup deepens; lengths from
-  the origin are kept. A sheet stated at exactly 0.8 mm reads 0.799 mm, because the facets of its convex face cut
-  about a micrometre into it, and is refused: state at least 0.85 mm.
+  the origin are kept.
