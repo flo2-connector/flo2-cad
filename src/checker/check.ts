@@ -42,6 +42,8 @@ export interface CheckLimits {
   gripMin: number;
   lipMinOfCrown: number;
   lipMaxOfCrown: number;
+  /** A cabochon's bezel lip, as a share of its dome above the girdle: the least it may rise. */
+  lipMinOfCabochon: number;
 }
 
 export interface Where {
@@ -148,7 +150,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
   }
   if (decl.bezel && decl.stone) {
     guard('bezel_wall', 'Bezel wall thickness', mm(L.wall), () => bezelWallEntry(bvh, samples, decl, L));
-    guard('bezel_lip', 'Bezel lip height', `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L));
+    guard('bezel_lip', 'Bezel lip height', decl.stone.kind === 'cabochon' ? "at least a third of the cabochon's dome" : `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L));
   }
   if (decl.sheets?.length) guard('sheet', 'Sheet thickness', `${mm(L.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets!, L));
   guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
@@ -1063,6 +1065,21 @@ function bezelLipEntry(bvh: Bvh, decl: FeatureDecl, L: CheckLimits): CheckEntry 
   }
   const lip = top - st.girdleTopZ;
   const share = lip / st.crownHeight;
+  if (st.kind === 'cabochon') {
+    // A cabochon declared so is held to its own rule, the least share of its dome the bezel
+    // must rise to be pushed over it (metals.ts SETTING, from Cogswell), with no upper limit.
+    const need = L.lipMinOfCabochon * st.crownHeight;
+    return {
+      id: 'bezel_lip',
+      name: 'Bezel lip height',
+      limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
+      result: share >= L.lipMinOfCabochon - 1e-6 ? 'pass' : 'fail',
+      measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
+      value: r3(lip),
+      where: { part: 'head', feature: 'bezel', point_mm: pt(at), description: 'the top of the bezel, measured from the top of the girdle' },
+      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
+    };
+  }
   const ok = share >= L.lipMinOfCrown - 1e-6 && share <= L.lipMaxOfCrown + 1e-6;
   return {
     id: 'bezel_lip',

@@ -14,7 +14,8 @@ export const PROGRAM_CALLS_GUIDE = [
   'LIBRARY (today\'s parts; each takes start_piece\'s settings and its defaults, checked the same way, and reads back its dimensions as `.dims`):',
   '- ringShank({ ring_size: {system: "US", size: "7"}, band_width, band_thickness, band_profile }) -> the band; .dims has innerDiameterMm, outerDiameterMm, widthMm, thicknessMm.',
   '- roundStone({ diameter, depth, carat? }), emeraldStone({ length, width, depth, orientation?, carat? }) -> a stone, sized from its MEASURED dimensions.',
-  '- stone(solid, { name? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal.',
+  '- cabochon({ diameter, height, name? }) or cabochon({ length, width, height, orientation?, name? }) -> a cabochon from its MEASURED flat base (round or oval) and dome height, base to top. A bezel round it is checked by the cabochon\'s lip rule: it rises at least a third of the dome (J. Cogswell, Creative Stonesetting).',
+  '- stone(solid, { name?, kind? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal. kind: "cabochon" declares a domed stone, checked by the cabochon\'s lip rule; left out, the stone is faceted and its lip covers 50-75 % of its crown. The engine never guesses which from the shape.',
   '- prongHead({ stone, on: band, prong_count, prong_thickness, prong_grip, culet_clearance, prong_overrides }) and bezel({ stone, on: band, wall, lip, culet_clearance }) -> the setting round the stone, on top of the band (leave out `on` for a setting standing on the XY plane, as on a pendant). .dims has the seat, the outside, the bezel or each prong, and the culet clearance, as describe_piece reports them.',
   '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
   '- op(node) -> any operation node of a tree, as JSON with units (describe_piece of a tree lists them): what a tree can hold, a program can hold.',
@@ -42,7 +43,7 @@ for (let i = 0; i <= n; i++) {
   const a = (i / n) * Math.PI / 2;
   profile.push([r * Math.cos(a), h * Math.sin(a)]);
 }
-const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });
 
 // The bezel seats it on a flat ledge and rises over its curve.
 const setting = bezel({ stone: moonstone, on: band, wall: 1.0 });

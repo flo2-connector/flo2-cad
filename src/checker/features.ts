@@ -37,7 +37,15 @@ export interface StoneDecl {
   outline: P2[];
   girdleBottomZ: number;
   girdleTopZ: number;
+  /** Above the girdle's top. On a cabochon, its dome. */
   crownHeight: number;
+  /**
+   * 'cabochon' when the stone was DECLARED one (the library's cabochon(), or a program's
+   * stone(..., { kind: 'cabochon' })); the checker never guesses it from the shape. A
+   * cabochon's bezel lip is held to the cabochon's own rule, any other stone's to the
+   * faceted stone's crown rule (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference).
+   */
+  kind?: 'cabochon';
 }
 
 export interface BezelDecl {

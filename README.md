@@ -131,8 +131,9 @@ template piece shows it written as a program (the same piece, by the same calls)
 
 **What a program calls** (`src/program/library.ts`; `describe_piece` prints the full list):
 
-- the **library**, today's parts as functions: `ringShank`, `roundStone`, `emeraldStone`, `stone` (a stone of the
-  program's own shape), `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). Each takes
+- the **library**, today's parts as functions: `ringShank`, `roundStone`, `emeraldStone`, `cabochon` (from its
+  measured base and dome height), `stone` (a stone of the program's own shape, `kind: 'cabochon'` to declare a domed
+  one), `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). Each takes
   `start_piece`'s settings and defaults, checked by the tree's own checks, is sized by `pieceDims` and built by
   `buildBand` and `buildHead`, so a program-built ring is the template ring (a test holds every reading equal). Each
   returns its solid with the checker declarations it makes (band, seat, prongs, bezel rim, sheets), and reads back
@@ -157,9 +158,14 @@ for (let i = 0; i <= n; i++) {
   const a = (i / n) * Math.PI / 2;
   profile.push([r * Math.cos(a), h * Math.sin(a)]);
 }
-const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });
 return union(band, bezel({ stone: moonstone, on: band, wall: 1.0 }));
 ```
+
+`kind: 'cabochon'` declares the stone a cabochon, so its bezel lip is held to the cabochon's own rule: it rises at
+least a third of the dome (J. Cogswell, *Creative Stonesetting*, `src/metals.ts`). `cabochon({ diameter: 8, height:
+2.6 })` makes the same stone from the person's own measurements, round or oval. The engine never guesses a cabochon
+from its shape: undeclared, a stone is checked as faceted.
 
 **Limits.** Each evaluation gets **20 s** and **512 MiB** by default; `FLO2_CAD_PROGRAM_SECONDS` and
 `FLO2_CAD_PROGRAM_MEMORY_MIB` change them for a host's slot. A check runs the program twice in one evaluation (the
@@ -223,7 +229,7 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section (the whole piece cut, clipped to a disc round the prong's axis), every 0.1 mm (0.02 mm near the narrowest) |
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
 | Bezel wall | ≥ 0.8 mm | largest inscribed sphere on the rim |
-| Bezel lip | covers 50-75 % of the crown (Revere, JCK) | top of the bezel less the girdle |
+| Bezel lip | covers 50-75 % of a faceted stone's crown (Revere, JCK); on a declared cabochon, at least a third of its dome (Cogswell, *Creative Stonesetting*) | top of the bezel less the girdle |
 | Sheets (`thicken`) | ≥ 0.8 mm, the wall minimum | square to the surface: from each point the sheet declares on its middle surface, a ray each way along the normal to the first face, where both faces face along the rays (the sheet's own) |
 | Details | ≥ 0.35 mm | thinnest feature anywhere, measured as the walls are |
 | Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces, along the surface's direction as for the walls |
@@ -354,8 +360,8 @@ npm run measure
   are in "Both casting files hold the same vertices" above.)
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
 - **Programs** (in progress): one band and one stone setting from the library per piece, as the checker measures
-  one of each; a band stays round the Y axis and a setting upright. The bezel lip check is the faceted stone's
-  (50-75 % of the crown), so a lower bezel over a cabochon is refused. A stone of the program's own shape is read at
+  one of each; a band stays round the Y axis and a setting upright. A cabochon's lip rule has no upper limit, since
+  its source gives none. A stone of the program's own shape is read at
   each build's fineness: its girdle is where its slices are widest, which a curve drawn with `segments()` keeps the
   same at every tolerance.
 - **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
