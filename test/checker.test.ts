@@ -29,8 +29,21 @@
 //    degrees) rather than the direction the ball met it from. And the advice named the
 //    band because anything within 0.3 mm of the band's envelope was labelled band.
 //
-// A genuinely thin band under an ornament, a genuinely thin plate with slivers, and a
-// genuinely thin overhang are still refused, the overhang naming the added shape.
+//  · fact:wall-ball-stopped-at-a-crease-it-reached-through-a-face (found 2026-10-04, pinned
+//    by tests that failed on main 75d8a1a). A solitaire with a 1.2 mm ball added beside its
+//    head was refused at 0.728 mm, with advice to thicken the ball. Cause, measured: a ball on
+//    the rail's top 0.01 mm from the rail's outer edge grew straight down, out through the
+//    rail's outer wall (a convex edge's neighbour, rightly ignored), and was stopped at the
+//    crease where the added ball's underside meets that wall. The crease was met from
+//    straight across (177 degrees), so the rule above let it count, but the ball had passed
+//    through the wall to reach it: the wall lay 0.01 mm from the ball's centre, the crease
+//    0.36 mm. Under the rail are 2.79 mm of metal, and the reading wandered 0.61-0.73 mm with
+//    the tessellation. An edge or corner now stops the ball only if the ball meets it
+//    square-on: no face that meets there lies nearer the ball's centre.
+//
+// A genuinely thin band under an ornament, a genuinely thin plate with slivers, a
+// genuinely thin overhang and a thin tab off the rail are still refused, the overhang and
+// the tab naming the added shape.
 
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -311,5 +324,106 @@ describe('a shape added over the band and overhanging its sides', () => {
     assert.equal(wall.result, 'pass', `wall ${wall.measured} at ${wall.where?.description}`);
     assert.ok(Math.abs(wall.value! - 1.0) < 0.01, `wall ${wall.value} at ${wall.where?.description}`);
     assert.deepEqual(r.fixes, []);
+  });
+});
+
+// -------------------------------------------- a shape added beside other metal's edge
+
+/**
+ * A US 7 solitaire (14k) with one added shape, placed relative to the band's top: the
+ * solitaire's head stands on a rail, a flat ring through the prongs' feet whose top lies
+ * 0.09 mm above the band's top.
+ */
+function solitaireWith(extra: ((top: number) => PieceTree['root']['children']) | null): PieceTree {
+  const tree = treeFromTemplate('solitaire_ring', { ring_size: { system: 'US', size: '7' }, name: 'beside', metal: 'gold_14k_yellow' });
+  const v = readPiece(tree);
+  if (extra) tree.root.children!.push(...extra(v.innerDiameterMm / 2 + v.bandThicknessMm)!);
+  return tree;
+}
+
+/**
+ * The same thing away from the library's head: a 1.5 mm block on the half-round band of
+ * bandWith, and, when asked, a 1.2 mm ball whose centre lies `inset` mm inside the block's
+ * side and whose top stands `above` mm above the block's top, so it bulges out of both.
+ */
+function blockWith(ball: { inset: number; above: number } | null): PieceTree {
+  const tree = bandWith(null);
+  const v = readPiece(tree);
+  const top = v.innerDiameterMm / 2 + v.bandThicknessMm + 0.9;
+  tree.root.children!.push({ id: 'block', op: 'translate', params: { z: `${top - 0.75} mm` }, children: [{ id: 'blk', op: 'box', params: { x: '3 mm', y: '3 mm', z: '1.5 mm' } }] });
+  if (ball) {
+    tree.root.children!.push({
+      id: 'knob',
+      op: 'translate',
+      params: { x: `${1.5 - ball.inset} mm`, z: `${top + ball.above - 1.2} mm` },
+      children: [{ id: 'kb', op: 'sphere', params: { radius: '1.2 mm' } }],
+    });
+  }
+  return tree;
+}
+
+describe('a shape added beside the edge of other metal', () => {
+  // fact:wall-check-reads-rail-top-beside-added-ball, measured on main 75d8a1a: the wall read
+  // 0.728 mm "in the added shape side", refused, with advice to thicken the ball. The thinnest
+  // sample is on the rail's flat top where the ball comes up through it, 0.01 mm inside the
+  // rail's outer wall. Its ball grew straight down, out through that wall (90 degrees from its
+  // direction, a convex edge's neighbour, rightly ignored), and was stopped 0.364 mm down at
+  // the crease where the added ball's underside (a facet 109.7 degrees away) meets the wall.
+  // The crease lies straight across (177 degrees), so the direction rule counted it, but the
+  // wall it passed through lay 0.0102 mm from the ball's centre: the ball reached the crease
+  // from outside the metal. Straight down from the sample are 2.79 mm of rail and band. At
+  // five tessellations (0.0025-0.008 mm) main read 0.61-0.73 mm, somewhere different each time.
+  it('a solitaire with a 1.2 mm ball beside its head reads as the solitaire does without it, and is not refused', async () => {
+    const plain = entry((await checkPiece(solitaireWith(null), 'check')).entries, 'wall');
+    const r = await checkPiece(
+      solitaireWith((top) => [{ id: 'side', op: 'translate', params: { x: '4 mm', z: `${top - 0.3} mm` }, children: [{ id: 'ball', op: 'sphere', params: { radius: '1.2 mm' } }] }]),
+      'check',
+    );
+    const wall = entry(r.entries, 'wall');
+    assert.equal(wall.result, 'pass', `wall ${wall.measured} at ${wall.where?.description}`);
+    assert.ok(wall.value! > plain.value! - 0.03, `wall ${wall.value} at ${wall.where?.description}; the solitaire alone reads ${plain.value}`);
+    assert.deepEqual(r.fixes, []);
+  });
+
+  // The same mechanism with no library head: main read 0.810 / 0.866 / 1.022 / 0.961 mm here,
+  // on the block's top beside the ball, where the block alone reads 1.499 mm.
+  for (const [inset, above] of [
+    [0.6, 0.81],
+    [0.5, 0.6],
+    [0.7, 1.0],
+    [0.6, 0.4],
+  ] as const) {
+    it(`a ball bulging out of a block's side and top (centre ${inset} mm inside the side, top ${above} mm above) reads as the block does without it`, async () => {
+      const plain = entry((await checkPiece(blockWith(null), 'check')).entries, 'wall');
+      const wall = entry((await checkPiece(blockWith({ inset, above }), 'check')).entries, 'wall');
+      assert.ok(wall.value! > plain.value! - 0.03, `wall ${wall.value} at ${wall.where?.description}; the block alone reads ${plain.value}`);
+    });
+  }
+
+  // The library's own head did it too. On main the plain solitaire read 1.163 mm "on the band,
+  // 27 deg": a ball on the band's inner edge passed out through the band's flat side and the
+  // rail's underside (both ignored, 0.31 and 0.55 mm from its centre) and was stopped at the
+  // corner where the rail's outer wall meets them, 0.58 mm away. The same band without the head
+  // read 1.304 mm.
+  it("the plain solitaire's thinnest wall reads as its band does without the head, not the corner where the rail meets the band's side", async () => {
+    const head = entry((await checkPiece(solitaireWith(null), 'check')).entries, 'wall');
+    const band = entry((await checkPiece(treeFromTemplate('plain_band', { ring_size: { system: 'US', size: '7' }, name: 'same band' }), 'check')).entries, 'wall');
+    assert.ok(head.value! > band.value! - 0.05, `the solitaire reads ${head.value} at ${head.where?.description}; its band alone reads ${band.value}`);
+  });
+
+  // Genuinely thin metal beside the same edge is still refused, at its own thickness and in its
+  // own name. Main read this 0.5 mm tab at 0.479 mm, thinner than it is, on the rail's top beside
+  // it: the same crease, reached through the rail's wall.
+  it('a genuinely thin 0.5 mm tab off the rail is refused at 0.5 mm, and the advice names the tab', async () => {
+    const r = await checkPiece(
+      solitaireWith((top) => [{ id: 'tab', op: 'translate', params: { x: '5 mm', z: `${top - 0.1} mm` }, children: [{ id: 'tb', op: 'box', params: { x: '2 mm', y: '2 mm', z: '0.5 mm' } }] }]),
+      'check',
+    );
+    const wall = entry(r.entries, 'wall');
+    assert.equal(wall.result, 'fail');
+    assert.ok(Math.abs(wall.value! - 0.5) < 0.01, `wall ${wall.value} at ${wall.where?.description}`);
+    assert.equal(wall.where?.part, 'added shape', JSON.stringify(wall.where));
+    assert.equal(wall.where?.feature, 'tab');
+    assert.match(r.entries.find((e) => e.id === 'wall')!.fix!, /"tab"/);
   });
 });
