@@ -21640,6 +21640,9 @@ function segmentCrossesTri(p, q, a, b, c) {
 }
 
 // src/checker/bvh.ts
+var IN_FACE = 0;
+var CORNER = 1;
+var EDGE = 4;
 var Bvh = class {
   pos;
   tri;
@@ -21742,6 +21745,10 @@ var Bvh = class {
    * Returns true when it lies inside the face, false when it lies on an edge or at a corner.
    */
   closestPoint(px, py, pz, t, out) {
+    return this.nearestOn(px, py, pz, t, out) === IN_FACE;
+  }
+  /** As closestPoint, and says where on the triangle the point lies: IN_FACE, CORNER + k or EDGE + k. */
+  nearestOn(px, py, pz, t, out) {
     const P = this.pos, T = this.tri;
     const a = T[t * 3] * 3, b = T[t * 3 + 1] * 3, c = T[t * 3 + 2] * 3;
     const ax = P[a], ay = P[a + 1], az = P[a + 2];
@@ -21750,11 +21757,12 @@ var Bvh = class {
     const apx = px - ax, apy = py - ay, apz = pz - az;
     const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
     let qx, qy, qz;
-    let inFace = false;
+    let where;
     if (d1 <= 0 && d2 <= 0) {
       qx = ax;
       qy = ay;
       qz = az;
+      where = CORNER;
     } else {
       const bpx = px - P[b], bpy = py - P[b + 1], bpz = pz - P[b + 2];
       const d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
@@ -21765,38 +21773,43 @@ var Bvh = class {
         qx = P[b];
         qy = P[b + 1];
         qz = P[b + 2];
+        where = CORNER + 1;
       } else if (vc <= 0 && d1 >= 0 && d3 <= 0) {
         const v = d1 / (d1 - d3);
         qx = ax + abx * v;
         qy = ay + aby * v;
         qz = az + abz * v;
+        where = EDGE;
       } else if (d6 >= 0 && d5 <= d6) {
         qx = P[c];
         qy = P[c + 1];
         qz = P[c + 2];
+        where = CORNER + 2;
       } else if (vb <= 0 && d2 >= 0 && d6 <= 0) {
         const w = d2 / (d2 - d6);
         qx = ax + acx * w;
         qy = ay + acy * w;
         qz = az + acz * w;
+        where = EDGE + 2;
       } else if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
         const w = (d4 - d3) / (d4 - d3 + (d5 - d6));
         qx = P[b] + (P[c] - P[b]) * w;
         qy = P[b + 1] + (P[c + 1] - P[b + 1]) * w;
         qz = P[b + 2] + (P[c + 2] - P[b + 2]) * w;
+        where = EDGE + 1;
       } else {
         const den = 1 / (va + vb + vc);
         const v = vb * den, w = vc * den;
         qx = ax + abx * v + acx * w;
         qy = ay + aby * v + acy * w;
         qz = az + abz * v + acz * w;
-        inFace = true;
+        where = IN_FACE;
       }
     }
     out[0] = qx;
     out[1] = qy;
     out[2] = qz;
-    return inFace;
+    return where;
   }
   /** Squared distance from (px, py, pz) to triangle t, allocation-free. */
   distSq(px, py, pz, t) {
@@ -21843,8 +21856,9 @@ var Bvh = class {
   }
   /**
    * Whether some triangle that passes `keep` lies closer than r to p and, when `meets` is
-   * given, passes it too: it is handed the triangle's point nearest p and whether that point
-   * lies inside its face (false on an edge or at a corner).
+   * given, passes it too: it is handed the triangle's point nearest p, whether that point
+   * lies inside its face (false on an edge or at a corner), and where on the triangle it
+   * lies (IN_FACE, CORNER + k or EDGE + k, as nearestOn says).
    */
   anyWithin(p, r, keep, meets) {
     if (this.n === 0) return false;
@@ -21859,9 +21873,9 @@ var Bvh = class {
         for (let i = s; i < e; i++) {
           const t = this.#order[i];
           if (!keep(t)) continue;
-          const inFace = this.closestPoint(p[0], p[1], p[2], t, q);
+          const where = this.nearestOn(p[0], p[1], p[2], t, q);
           const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
-          if (dx * dx + dy * dy + dz * dz < r22 && (!meets || meets(t, q, inFace))) return true;
+          if (dx * dx + dy * dy + dz * dz < r22 && (!meets || meets(t, q, where === IN_FACE, where))) return true;
         }
       } else {
         stack.push(this.#left[node2], this.#right[node2]);
@@ -22194,6 +22208,8 @@ function watertight(mesh, bvh) {
 function sampleThickness(bvh, S) {
   const out = [];
   const C = bvh.centroid, P = bvh.pos, T = bvh.tri;
+  const fans = vertexFans(bvh);
+  const near = new Float64Array(3);
   for (let t = 0; t < bvh.n; t++) {
     if (bvh.area[t] < 1e-10) continue;
     const n = [S[t * 3], S[t * 3 + 1], S[t * 3 + 2]];
@@ -22209,11 +22225,22 @@ function sampleThickness(bvh, S) {
       const v = T[u * 3] * 3;
       return (cx - P[v]) * S[u * 3] + (cy - P[v + 1]) * S[u * 3 + 1] + (cz - P[v + 2]) * S[u * 3 + 2] < 1e-7;
     };
-    const metFromAcross = (_u, q, inFace) => {
+    const metFromAcross = (u, q, inFace, where) => {
       if (inFace) return true;
       const dx = q[0] - cx, dy = q[1] - cy, dz = q[2] - cz;
-      const l = Math.hypot(dx, dy, dz);
-      return l === 0 || (dx * n[0] + dy * n[1] + dz * n[2]) / l < -0.25;
+      const l2 = dx * dx + dy * dy + dz * dz;
+      if (l2 === 0) return true;
+      if ((dx * n[0] + dy * n[1] + dz * n[2]) / Math.sqrt(l2) >= -0.25) return false;
+      const k = where >= EDGE ? where - EDGE : where - CORNER;
+      const v = T[u * 3 + k], across = where >= EDGE ? T[u * 3 + (k + 1) % 3] : -1;
+      for (let j = fans.start[v]; j < fans.start[v + 1]; j++) {
+        const w = fans.tris[j];
+        if (w === u || bvh.area[w] < 1e-10) continue;
+        if (across >= 0 && T[w * 3] !== across && T[w * 3 + 1] !== across && T[w * 3 + 2] !== across) continue;
+        bvh.closestPoint(cx, cy, cz, w, near);
+        if ((near[0] - cx) ** 2 + (near[1] - cy) ** 2 + (near[2] - cz) ** 2 < l2 * (1 - 1e-9)) return false;
+      }
+      return true;
     };
     for (let i = 0; i < 16 && hi - lo > 5e-4; i++) {
       const r = (lo + hi) / 2;
@@ -22226,6 +22253,22 @@ function sampleThickness(bvh, S) {
     out.push({ t, p, thickness: 2 * lo, centre: [p[0] - n[0] * lo, p[1] - n[1] * lo, p[2] - n[2] * lo] });
   }
   return out;
+}
+function vertexFans(bvh) {
+  const T = bvh.tri;
+  let nv = 0;
+  for (let i = 0; i < T.length; i++) nv = Math.max(nv, T[i] + 1);
+  const start = new Int32Array(nv + 1);
+  for (let i = 0; i < T.length; i++) start[T[i] + 1] = start[T[i] + 1] + 1;
+  for (let v = 0; v < nv; v++) start[v + 1] = start[v + 1] + start[v];
+  const fill = start.slice(0, nv);
+  const tris = new Int32Array(T.length);
+  for (let i = 0; i < T.length; i++) {
+    const v = T[i];
+    tris[fill[v]] = i / 3 | 0;
+    fill[v] = fill[v] + 1;
+  }
+  return { start, tris };
 }
 function minSample(samples, keep = () => true) {
   let best = null;
@@ -22278,7 +22321,7 @@ function whereOf(p, decl, what, centre) {
   const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
   return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
 }
-var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
+var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
 }

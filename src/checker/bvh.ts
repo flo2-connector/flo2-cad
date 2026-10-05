@@ -3,6 +3,15 @@
 
 import { rayTri, type V3 } from './geom.js';
 
+/**
+ * Where on a triangle its nearest point lies (Bvh.nearestOn): inside the face, at one of
+ * its corners (CORNER + k, k = 0, 1, 2 in the triangle's own order), or on one of its
+ * edges (EDGE + k, the edge from corner k to corner k + 1, mod 3).
+ */
+export const IN_FACE = 0;
+export const CORNER = 1;
+export const EDGE = 4;
+
 export class Bvh {
   readonly pos: Float64Array;
   readonly tri: Uint32Array;
@@ -108,6 +117,11 @@ export class Bvh {
    * Returns true when it lies inside the face, false when it lies on an edge or at a corner.
    */
   closestPoint(px: number, py: number, pz: number, t: number, out: Float64Array): boolean {
+    return this.nearestOn(px, py, pz, t, out) === IN_FACE;
+  }
+
+  /** As closestPoint, and says where on the triangle the point lies: IN_FACE, CORNER + k or EDGE + k. */
+  nearestOn(px: number, py: number, pz: number, t: number, out: Float64Array): number {
     const P = this.pos, T = this.tri;
     const a = T[t * 3]! * 3, b = T[t * 3 + 1]! * 3, c = T[t * 3 + 2]! * 3;
     const ax = P[a]!, ay = P[a + 1]!, az = P[a + 2]!;
@@ -116,9 +130,10 @@ export class Bvh {
     const apx = px - ax, apy = py - ay, apz = pz - az;
     const d1 = abx * apx + aby * apy + abz * apz, d2 = acx * apx + acy * apy + acz * apz;
     let qx: number, qy: number, qz: number;
-    let inFace = false;
+    let where: number;
     if (d1 <= 0 && d2 <= 0) {
       qx = ax; qy = ay; qz = az;
+      where = CORNER;
     } else {
       const bpx = px - P[b]!, bpy = py - P[b + 1]!, bpz = pz - P[b + 2]!;
       const d3 = abx * bpx + aby * bpy + abz * bpz, d4 = acx * bpx + acy * bpy + acz * bpz;
@@ -127,28 +142,33 @@ export class Bvh {
       const vc = d1 * d4 - d3 * d2, vb = d5 * d2 - d1 * d6, va = d3 * d6 - d5 * d4;
       if (d3 >= 0 && d4 <= d3) {
         qx = P[b]!; qy = P[b + 1]!; qz = P[b + 2]!;
+        where = CORNER + 1;
       } else if (vc <= 0 && d1 >= 0 && d3 <= 0) {
         const v = d1 / (d1 - d3);
         qx = ax + abx * v; qy = ay + aby * v; qz = az + abz * v;
+        where = EDGE;
       } else if (d6 >= 0 && d5 <= d6) {
         qx = P[c]!; qy = P[c + 1]!; qz = P[c + 2]!;
+        where = CORNER + 2;
       } else if (vb <= 0 && d2 >= 0 && d6 <= 0) {
         const w = d2 / (d2 - d6);
         qx = ax + acx * w; qy = ay + acy * w; qz = az + acz * w;
+        where = EDGE + 2;
       } else if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0) {
         const w = (d4 - d3) / (d4 - d3 + (d5 - d6));
         qx = P[b]! + (P[c]! - P[b]!) * w; qy = P[b + 1]! + (P[c + 1]! - P[b + 1]!) * w; qz = P[b + 2]! + (P[c + 2]! - P[b + 2]!) * w;
+        where = EDGE + 1;
       } else {
         const den = 1 / (va + vb + vc);
         const v = vb * den, w = vc * den;
         qx = ax + abx * v + acx * w; qy = ay + aby * v + acy * w; qz = az + abz * v + acz * w;
-        inFace = true;
+        where = IN_FACE;
       }
     }
     out[0] = qx;
     out[1] = qy;
     out[2] = qz;
-    return inFace;
+    return where;
   }
 
   /** Squared distance from (px, py, pz) to triangle t, allocation-free. */
@@ -200,10 +220,11 @@ export class Bvh {
 
   /**
    * Whether some triangle that passes `keep` lies closer than r to p and, when `meets` is
-   * given, passes it too: it is handed the triangle's point nearest p and whether that point
-   * lies inside its face (false on an edge or at a corner).
+   * given, passes it too: it is handed the triangle's point nearest p, whether that point
+   * lies inside its face (false on an edge or at a corner), and where on the triangle it
+   * lies (IN_FACE, CORNER + k or EDGE + k, as nearestOn says).
    */
-  anyWithin(p: V3, r: number, keep: (t: number) => boolean, meets?: (t: number, q: Float64Array, inFace: boolean) => boolean): boolean {
+  anyWithin(p: V3, r: number, keep: (t: number) => boolean, meets?: (t: number, q: Float64Array, inFace: boolean, where: number) => boolean): boolean {
     if (this.n === 0) return false;
     const r2 = r * r;
     const q = this.#q;
@@ -216,9 +237,9 @@ export class Bvh {
         for (let i = s; i < e; i++) {
           const t = this.#order[i]!;
           if (!keep(t)) continue;
-          const inFace = this.closestPoint(p[0], p[1], p[2], t, q);
+          const where = this.nearestOn(p[0], p[1], p[2], t, q);
           const dx = p[0] - q[0]!, dy = p[1] - q[1]!, dz = p[2] - q[2]!;
-          if (dx * dx + dy * dy + dz * dz < r2 && (!meets || meets(t, q, inFace))) return true;
+          if (dx * dx + dy * dy + dz * dz < r2 && (!meets || meets(t, q, where === IN_FACE, where))) return true;
         }
       } else {
         stack.push(this.#left[node]!, this.#right[node]!);
