@@ -125,11 +125,20 @@ export const STRICTEST: Limits = (Object.keys(METALS) as MetalId[]).reduce<Limit
 export const SETTING = {
   /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
   gripMin: 0.15,
-  /** Bezel lip: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
+  /** Bezel lip on a FACETED stone: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
   lipMinOfCrown: 0.5,
   lipMaxOfCrown: 0.75,
+  /**
+   * Bezel lip on a CABOCHON (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference):
+   * at least a third of the stone's height, its dome above the girdle. Cogswell gives "a
+   * third to a quarter ... depending on the wall thickness", and never less than a quarter;
+   * he names no wall thickness that earns the quarter, so the stricter third is used
+   * (owner, round 1, Q4). He gives no upper limit, so none is applied.
+   */
+  lipMinOfCabochon: 1 / 3,
   sources: [
     'Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf',
     'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/',
+    'Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon\'s crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.',
   ],
 } as const;

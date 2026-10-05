@@ -45,8 +45,23 @@ export const sha256 = (b: Uint8Array | string) => createHash('sha256').update(b)
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
 export function limitsFor(metal: Metal): CheckLimits {
-  return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown };
+  return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown, lipMinOfCabochon: SETTING.lipMinOfCabochon };
 }
+
+/**
+ * A cabochon's lip that fails is always too low (its rule has no upper limit): what it
+ * needs, in mm, from the check's own limit text, and a lip that clears it, rounded up to
+ * 0.1 mm. Null for a faceted stone's lip.
+ */
+function cabochonLipFix(e: CheckEntry): { dome: number; need: number; to: number } | null {
+  const m = /cabochon's ([\d.]+) mm dome \(at least ([\d.]+) mm for this stone/.exec(e.limit);
+  if (!m) return null;
+  const need = Number(m[2]);
+  return { dome: Number(m[1]), need, to: Math.ceil((need + 0.01) * 10) / 10 };
+}
+
+const cabochonLipWords = (e: CheckEntry, c: { dome: number; need: number }) =>
+  `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
 
 // --------------------------------------------------------------- the words
 
@@ -231,6 +246,8 @@ function fixFor(e: CheckEntry, v: PieceView, metal: Metal): string | null {
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1.0, suggestThicker(h.wallMm, e.value ?? 0, metal.limits.wall))} mm"}.`;
     case 'bezel_lip': {
       if (!h || h.kind !== 'bezel') return null;
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} Change: set {"bezel_lip": "${cab.to} mm"} (or "auto").`;
       const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
       const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
       return (e.value ?? 0) < lo
@@ -442,7 +459,8 @@ const NO_BAND: PieceDims['band'] = { innerDiameterMm: 0, outerDiameterMm: 0, wid
 
 function stoneOfPart(part: Extract<PartReport, { call: 'prongHead' | 'bezel' }>): string {
   const s = part.head.stone;
-  const own = part.stone.shape === 'custom' ? ` stone of its own shape${part.stone.name ? ` ("${part.stone.name}")` : ''}` : part.stone.shape === 'round' ? ' round brilliant' : ' emerald cut';
+  const named = part.stone.name ? ` ("${part.stone.name}")` : '';
+  const own = part.stone.kind === 'cabochon' ? ` cabochon${named}` : part.stone.shape === 'custom' ? ` stone of its own shape${named}` : part.stone.shape === 'round' ? ' round brilliant' : ' emerald cut';
   return `${part.stone.shape === 'round' ? `${mm2(s.lengthMm)}` : `${r2(s.lengthMm).toFixed(2)} × ${mm2(s.widthMm)}`}${own}, ${mm2(s.depthMm)} deep`;
 }
 
@@ -523,6 +541,8 @@ function programFixFor(e: CheckEntry, metal: Metal, parts: readonly PartReport[]
     case 'bezel_wall':
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1.0, suggestThicker(head?.head.bezel?.wallMm ?? metal.limits.wall, e.value ?? 0, metal.limits.wall))} mm.`;
     case 'bezel_lip': {
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} In the program, set lip in its bezel call to ${cab.to} mm or more (or "auto").`;
       const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
       const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
       return `${(e.value ?? 0) < lo ? 'Raise' : 'Lower'} the bezel lip: it rises ${e.value} mm above the girdle. In the program, set lip in its bezel call to ${r2((lo + hi) / 2)} mm (or "auto").`;

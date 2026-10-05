@@ -113,7 +113,7 @@ The limits, so you can explain them:
 | Details | at least 0.35 mm |
 | Gaps | at least 0.3 mm, or 0.8 mm in platinum |
 | The surface | within 0.01 mm of the intended shape |
-| A bezel lip | covers 50 % to 75 % of the stone's crown |
+| A bezel lip | covers 50 % to 75 % of a faceted stone's crown; on a cabochon, rises at least a third of its dome (J. Cogswell, Creative Stonesetting) |
 | Each prong's reach over the girdle | at least 0.15 mm |
 | A petal or leaf (a thickened sheet) | at least 0.8 mm, measured square to its surface |
 
@@ -199,10 +199,10 @@ engine runs it confined, keeps it as the piece's file, and previews, checks and 
   template. `change_piece` with the whole edited `"program"` makes the next version. A template piece can go on as a
   program: `describe_piece` shows it written as one, ready to edit.
 - **What it can call.** `describe_piece` lists everything, with settings. In short:
-  - the **library**, today's parts: `ringShank`, `roundStone`, `emeraldStone`, `stone` (a stone of your own shape),
-    `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). They take the same settings and
-    defaults as `start_piece`, and each reads back its dimensions as `.dims` (the seat, the bezel, each prong, the
-    band), so a fit is worked from the engine's numbers;
+  - the **library**, today's parts: `ringShank`, `roundStone`, `emeraldStone`, `cabochon`, `stone` (a stone of your
+    own shape), `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). They take the same
+    settings and defaults as `start_piece`, and each reads back its dimensions as `.dims` (the seat, the bezel, each
+    prong, the band), so a fit is worked from the engine's numbers;
   - the **kernel**: `sphere`, `cylinder`, `box`, `torus`, `sweep`; `circle`, `rect` and `polygon` (2D, with
     `.offset`); `extrude`, `revolve`, `hull`; `union`, `difference`, `intersection`, `smoothUnion` (a fillet); and on
     a solid `.translate`, `.rotate`, `.mirror`, `.scale`, `.named("...")`, `.bounds()`, `.volume()`. `segments(r)`
@@ -215,8 +215,13 @@ engine runs it confined, keeps it as the piece's file, and previews, checks and 
   stone setting off upright"), and nothing changes. A program that runs too long or uses too much memory is stopped
   and refused, with the limit it hit. `console.log` lines come back with the reply.
 - **Name the shapes you add** (`.named("crest")`), so a refusal can say "the shape named "crest"".
+- **A cabochon**: `cabochon({ diameter, height })`, or `{ length, width, height }` for an oval, with the base size and
+  the dome's height (flat base to top) from the person's own measurement of their stone, never a chart. A domed stone
+  you draw yourself is declared with `stone(shape, { kind: 'cabochon' })`; either way its bezel is checked by the
+  cabochon's lip rule (at least a third of the dome), which the engine never guesses from the shape.
 
-**A worked example: a cabochon in a bezel.** No engine feature makes a cabochon; the program does, in a few lines.
+**A worked example: a cabochon in a bezel**, its stone drawn in a few lines (`cabochon({ diameter: 8, height: 2.6 })`
+makes the same stone in one call).
 
 ```js
 // An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.
@@ -229,7 +234,7 @@ for (let i = 0; i <= n; i++) {
   const a = (i / n) * Math.PI / 2;
   profile.push([r * Math.cos(a), h * Math.sin(a)]);
 }
-const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });
 
 // The bezel seats it on a flat ledge and rises over its curve.
 const setting = bezel({ stone: moonstone, on: band, wall: 1.0 });
@@ -237,9 +242,10 @@ return union(band, setting);
 ```
 
 It passes every casting check in silver and exports. `stone()` reads the girdle where the dome is widest (its flat
-base), so its crown is its full 2.6 mm height, and the bezel's lip is worked from that. The lip check is the
-faceted stone's rule (50 % to 75 % of the crown), so a lower bezel over a cabochon is refused today; if the person
-wants one, say so rather than forcing it.
+base), so its dome is its full 2.6 mm height. `kind: 'cabochon'` declares it a cabochon, so its bezel lip is held to
+the cabochon's rule: it rises at least a third of the dome, 0.87 mm here (J. Cogswell, Creative Stonesetting). The
+auto lip rises 1.56 mm (60 %); a lower bezel, down to that third, passes too. Left undeclared, a dome is checked as a
+faceted stone, by 50 % to 75 % of its crown.
 
 ## Platinum
 
