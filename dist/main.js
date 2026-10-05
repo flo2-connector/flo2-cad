@@ -23235,30 +23235,38 @@ function signedArea2(pts) {
   }
   return a;
 }
-function gridSlab(k, x0, x1, y0, y1, h, zb, zt) {
-  const nx = Math.max(1, Math.ceil((x1 - x0) / h)), ny = Math.max(1, Math.ceil((y1 - y0) / h));
+function gridLines(a, b, h) {
+  const n = Math.max(1, Math.ceil((b - a) / h));
+  return Float64Array.from({ length: n + 1 }, (_, i) => Math.fround(a + (b - a) * i / n));
+}
+function forEachGridTriangle(nx, ny, fn) {
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      fn([i, j], [i + 1, j], [i + 1, j + 1]);
+      fn([i, j], [i + 1, j + 1], [i, j + 1]);
+    }
+  }
+}
+function gridSlab(k, xs, ys, zb, zt) {
+  const nx = xs.length - 1, ny = ys.length - 1;
   const layer = (nx + 1) * (ny + 1);
   const vert = new Float32Array(layer * 2 * 3);
   for (let top = 0; top < 2; top++) {
     for (let j = 0; j <= ny; j++) {
       for (let i = 0; i <= nx; i++) {
         const v = (top * layer + j * (nx + 1) + i) * 3;
-        vert[v] = x0 + (x1 - x0) * i / nx;
-        vert[v + 1] = y0 + (y1 - y0) * j / ny;
+        vert[v] = xs[i];
+        vert[v + 1] = ys[j];
         vert[v + 2] = top ? zt : zb;
       }
     }
   }
   const id = (i, j, top) => top * layer + j * (nx + 1) + i;
   const tri = [];
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nx; i++) {
-      const a = id(i, j, 1), b = id(i + 1, j, 1), c = id(i + 1, j + 1, 1), d = id(i, j + 1, 1);
-      tri.push(a, b, c, a, c, d);
-      const A = id(i, j, 0), B = id(i + 1, j, 0), C = id(i + 1, j + 1, 0), D2 = id(i, j + 1, 0);
-      tri.push(A, C, B, A, D2, C);
-    }
-  }
+  forEachGridTriangle(nx, ny, (a, b, c) => {
+    tri.push(id(a[0], a[1], 1), id(b[0], b[1], 1), id(c[0], c[1], 1));
+    tri.push(id(a[0], a[1], 0), id(c[0], c[1], 0), id(b[0], b[1], 0));
+  });
   const side = (p, q) => tri.push(p, q, q + layer, p, q + layer, p + layer);
   for (let i = 0; i < nx; i++) side(id(i, 0, 0), id(i + 1, 0, 0));
   for (let j = 0; j < ny; j++) side(id(nx, j, 0), id(nx, j + 1, 0));
@@ -23269,6 +23277,49 @@ function gridSlab(k, x0, x1, y0, y1, h, zb, zt) {
 function gridSpacing(s, tol) {
   const rOut = s.radius + s.thickness / 2;
   return Math.min(1, s.radius * Math.sqrt(8 * 0.9 * tol / rOut));
+}
+function nearestOnTriangle(a, b, c) {
+  const seg = (p, q) => {
+    const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+    const l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    const u = l2 > 0 ? Math.max(0, Math.min(1, -(p[0] * d[0] + p[1] * d[1] + p[2] * d[2]) / l2)) : 0;
+    return Math.hypot(p[0] + u * d[0], p[1] + u * d[1], p[2] + u * d[2]);
+  };
+  let best = Math.min(seg(a, b), seg(b, c), seg(c, a));
+  const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+  const nn = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+  if (nn > 0) {
+    const s = (a[0] * n[0] + a[1] * n[1] + a[2] * n[2]) / nn;
+    const f = [s * n[0], s * n[1], s * n[2]];
+    const side = (p, q) => {
+      const u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], w = [f[0] - p[0], f[1] - p[1], f[2] - p[2]];
+      return (u[1] * w[2] - u[2] * w[1]) * n[0] + (u[2] * w[0] - u[0] * w[2]) * n[1] + (u[0] * w[1] - u[1] * w[0]) * n[2];
+    };
+    if (side(a, b) >= 0 && side(b, c) >= 0 && side(c, a) >= 0) best = Math.min(best, Math.abs(s) * Math.sqrt(nn));
+  }
+  return best;
+}
+function convexSag(s, xs, ys) {
+  if (s.surface === "flat") return 0;
+  const R = s.radius, map = surfaceMap(s);
+  const nx = xs.length - 1;
+  const at2 = [];
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const p = map(xs[i], ys[j], 0).p;
+      at2.push(s.surface === "sphere" ? [p[0], p[1], p[2] - R] : s.axis === "x" ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
+    }
+  }
+  let fMin = 1;
+  forEachGridTriangle(nx, ys.length - 1, (a, b, c) => {
+    fMin = Math.min(fMin, nearestOnTriangle(at2[a[1] * (nx + 1) + a[0]], at2[b[1] * (nx + 1) + b[0]], at2[c[1] * (nx + 1) + c[0]]) / R);
+  });
+  return (R + s.thickness / 2) * (1 / fMin - 1);
+}
+var FLOAT_ALLOWANCE = 2 ** -22;
+function floatAllowance(reach, m) {
+  return FLOAT_ALLOWANCE * (Math.hypot(m[3], m[7], m[11]) + reach);
 }
 function divide(polys, step) {
   return polys.map((poly) => {
@@ -23295,9 +23346,12 @@ function buildThicken(k, A, n, tol, ctx) {
     throw new CallError(`${n.id}.params.round_corners`, `rounding the corners by ${s.roundCorners} mm leaves nothing of the outline: no part of it is ${2 * s.roundCorners} mm across. Use a smaller round_corners or a wider outline.`);
   }
   if (s.surface !== "flat") cs = A.t(new CrossSection(divide(cs.toPolygons(), Math.min(0.25, 0.05 * s.radius))));
+  const bb = cs.bounds();
+  const far = Math.max(...[bb.min[0], bb.max[0]].flatMap((x) => [bb.min[1], bb.max[1]].map((y) => Math.hypot(x, y))));
   let solid;
   if (s.surface === "flat") {
-    solid = A.t(A.t(Manifold.extrude(cs, t)).translate([0, 0, -t / 2]));
+    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY);
+    solid = A.t(A.t(Manifold.extrude(cs, t + 2 * eps)).translate([0, 0, -(t / 2 + eps)]));
   } else {
     const map = surfaceMap(s);
     const warp = (v, count) => {
@@ -23309,12 +23363,15 @@ function buildThicken(k, A, n, tol, ctx) {
       }
     };
     const h = gridSpacing(s, tol);
-    const bb = cs.bounds();
-    const slab = A.t(A.t(gridSlab(k, bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h, -t / 2, t / 2)).warpBatch(warp));
+    const xs = gridLines(bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, h), ys = gridLines(bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h);
+    const sag = convexSag(s, xs, ys);
+    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY);
+    const zb = -(t / 2 + sag + eps), zt = t / 2 + eps;
+    const slab = A.t(A.t(gridSlab(k, xs, ys, zb, zt)).warpBatch(warp));
     const m = Math.min(0.3, (s.radius - t / 2) / 2);
-    const rOut = s.radius + t / 2 + m;
+    const rOut = s.radius - zb + m;
     const lc = Math.min(1, s.radius * Math.sqrt(m / rOut));
-    const prism = A.t(A.t(A.t(A.t(Manifold.extrude(cs, t + 2 * m)).translate([0, 0, -(t / 2 + m)])).refineToLength(lc)).warpBatch(warp));
+    const prism = A.t(A.t(A.t(A.t(Manifold.extrude(cs, zt - zb + 2 * m)).translate([0, 0, zb - m])).refineToLength(lc)).warpBatch(warp));
     solid = A.t(slab.intersect(prism));
   }
   if (ctx?.sheets) ctx.sheets.push(declareSheet(n.id, s, cs.toPolygons(), ctx.m));

@@ -153,7 +153,10 @@ describe('a thickened sheet is one closed solid, its edges square to its surface
     assert.equal(entry(run.entries, 'watertight').result, 'pass');
     assert.ok(Math.abs(entry(run.entries, 'sheet').value! - 0.8) < 0.005);
     const zs = Array.from({ length: mesh.positions.length / 3 }, (_, i) => mesh.positions[i * 3 + 2]!);
-    assert.ok(Math.abs(Math.min(...zs) + 0.4) < 1e-6 && Math.abs(Math.max(...zs) - 0.4) < 1e-6);
+    // Each face 0.4 mm from the middle, moved out by the float32 allowance alone (about 1e-6 mm here), never in.
+    const lo = Math.min(...zs), hi = Math.max(...zs);
+    assert.ok(lo <= -0.4 && lo > -0.4 - 1e-5 && hi >= 0.4 && hi < 0.4 + 1e-5, `the faces lie at ${lo} and ${hi} mm`);
+    assert.ok(Math.abs(lo + hi) < 1e-7, `the faces lie at ${lo} and ${hi} mm`);
   });
 
   it('the same tree builds the same mesh, every time', async () => {
@@ -219,6 +222,191 @@ describe('a thickened sheet is one closed solid, its edges square to its surface
     assert.match(wall.where!.description, /where it meets/);
     assert.equal(entry(run.entries, 'sheet').result, 'pass');
   });
+});
+
+// ------------------------------------------------------------- at least its stated thickness
+//
+// The owner settled it on 2026-10-04 (dec:idea-four-choices-left-by-the-thicken-build,
+// choice 3): the library compensates, so a stated thickness is always built at least
+// that thick, whatever the material, and a stated number means what it says. It must
+// hold for any thickness, radius, tessellation and scale
+// (req:limits-follow-the-material-process-and-size), so it is proved two ways on every
+// sheet below: the sheet check's own reading, and an exact look at every face triangle
+// of the written file, which the declared points only sample.
+
+/**
+ * The most a sheet may come out over its stated thickness in a casting file: the
+ * convex face's own chord sagitta, which the grid spacing holds near 1.8 x the chord
+ * tolerance, plus a float32 allowance far below a micrometre. Never more than twice
+ * the chord tolerance (thicken.ts, AT LEAST THE STATED THICKNESS; the README).
+ */
+const EXCESS_MAX = 2 * EXPORT_TOL;
+
+type V = [number, number, number];
+const sub = (a: V, b: V): V => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a: V, b: V) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: V, b: V): V => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len = (a: V) => Math.sqrt(dot(a, a));
+
+function segmentDist(p: V, a: V, b: V): number {
+  const ab = sub(b, a), l2 = dot(ab, ab);
+  const u = l2 > 0 ? Math.max(0, Math.min(1, dot(sub(p, a), ab) / l2)) : 0;
+  return len(sub(p, [a[0] + u * ab[0], a[1] + u * ab[1], a[2] + u * ab[2]]));
+}
+
+/** The exact distance from p to the nearest point of triangle abc (a degenerate one too). */
+function triangleDist(p: V, a: V, b: V, c: V): number {
+  let best = Math.min(segmentDist(p, a, b), segmentDist(p, b, c), segmentDist(p, c, a));
+  const n = cross(sub(b, a), sub(c, a)), nn = dot(n, n);
+  if (nn > 1e-24) {
+    const s = dot(sub(p, a), n) / nn;
+    const q: V = [p[0] - s * n[0], p[1] - s * n[1], p[2] - s * n[2]];
+    if (dot(cross(sub(b, a), sub(q, a)), n) >= 0 && dot(cross(sub(c, b), sub(q, b)), n) >= 0 && dot(cross(sub(a, c), sub(q, c)), n) >= 0) best = Math.min(best, Math.abs(s) * Math.sqrt(nn));
+  }
+  return best;
+}
+
+interface SheetCase {
+  name: string;
+  t: number;
+  surface: 'flat' | 'sphere' | 'cylinder';
+  radius?: number;
+  axis?: 'x' | 'y';
+  outline: string[][];
+  /** Also read by the casting checker (every check runs, and the wall check takes 15-60 s on a thick 100 mm leaf). */
+  read: boolean;
+}
+
+/**
+ * Where the two faces of a sheet built in its own frame lie, from every triangle of the
+ * file: each point's offset s from the middle surface along its normal (positive towards
+ * the centre of curvature, the side the inner face is on, as the slab's z). A face
+ * triangle is told by its normal (within 25° of the surface's); the rim's are skipped.
+ * For a curved face s = R - (distance to the centre, or to a cylinder's axis), so its
+ * range over a triangle is exact: the nearest point of the triangle, and its furthest
+ * corner.
+ */
+function faceOffsets(c: SheetCase, mesh: { positions: Float32Array; triangles: Uint32Array }) {
+  const R = c.radius ?? Infinity;
+  // Project out the cylinder's axis: the distance to the axis is the distance to the centre in what remains.
+  const proj = (p: V): V => (c.surface === 'cylinder' ? (c.axis === 'x' ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]) : c.surface === 'sphere' ? [p[0], p[1], p[2] - R] : p);
+  /** The direction s decreases in: away from the centre of curvature (or -z when flat). */
+  const away = (g: V): V => {
+    if (c.surface === 'flat') return [0, 0, -1];
+    const r = proj(g), l = len(r);
+    return [r[0] / l, r[1] / l, r[2] / l];
+  };
+  const P = mesh.positions, T = mesh.triangles;
+  const out = { outer: { hi: -Infinity, lo: Infinity, n: 0 }, inner: { hi: -Infinity, lo: Infinity, n: 0 } };
+  for (let i = 0; i < T.length / 3; i++) {
+    const v = [0, 1, 2].map((j) => [P[T[i * 3 + j]! * 3]!, P[T[i * 3 + j]! * 3 + 1]!, P[T[i * 3 + j]! * 3 + 2]!] as V) as [V, V, V];
+    const n = cross(sub(v[1], v[0]), sub(v[2], v[0])), area2 = len(n);
+    const longest = Math.max(len(sub(v[1], v[0])), len(sub(v[2], v[1])), len(sub(v[0], v[2])));
+    if (area2 / longest < 1e-3) continue; // too narrow for float32 corners to give a direction
+    const g: V = [(v[0][0] + v[1][0] + v[2][0]) / 3, (v[0][1] + v[1][1] + v[2][1]) / 3, (v[0][2] + v[1][2] + v[2][2]) / 3];
+    const facing = dot(n, away(g)) / area2;
+    if (Math.abs(facing) < Math.cos((25 * Math.PI) / 180)) continue; // the rim
+    let sHi: number, sLo: number;
+    if (c.surface === 'flat') {
+      sHi = Math.max(v[0][2], v[1][2], v[2][2]);
+      sLo = Math.min(v[0][2], v[1][2], v[2][2]);
+    } else {
+      const q = v.map(proj) as [V, V, V];
+      sHi = R - triangleDist([0, 0, 0], q[0], q[1], q[2]);
+      sLo = R - Math.max(len(q[0]), len(q[1]), len(q[2]));
+    }
+    const f = facing > 0 ? out.outer : out.inner;
+    f.hi = Math.max(f.hi, sHi);
+    f.lo = Math.min(f.lo, sLo);
+    f.n++;
+  }
+  return out;
+}
+
+const sheetNode = (c: SheetCase): TreeNode =>
+  thicken('leaf', { outline: c.outline, thickness: mm(c.t), surface: c.surface, ...(c.radius ? { radius: mm(c.radius) } : {}), ...(c.axis ? { axis: c.axis } : {}) });
+
+/** One sheet built as a casting file is, and, if asked, read by the casting checker (no reference: only the sheet's reading is wanted). */
+async function buildAndRead(c: SheetCase) {
+  const node = sheetNode(c);
+  // Within what the tree accepts (the 5 x thickness floor, the outline's reach round the surface).
+  const tree = treeFromTemplate('plain_band', { ring_size: { system: 'US', size: '7' } });
+  tree.root.children!.push(node);
+  validateTree(tree);
+  const k = await kernel();
+  const A = new Arena();
+  try {
+    const sheets: SheetDecl[] = [];
+    const mesh = polygonsToMesh(buildOp(k, A, node, EXPORT_TOL, { m: IDENTITY, sheets }));
+    if (!c.read) return { mesh, sheet: null };
+    const run = runChecks(writeBinaryStl(mesh, 'x'), { prongs: [], scale: 1, sheets }, SILVER);
+    return { mesh, sheet: entry(run.entries, 'sheet') };
+  } finally {
+    A.free();
+  }
+}
+
+describe('a stated thickness is built at least that thick, at any thickness, radius and scale', () => {
+  it('a cupped petal stated at exactly the wall minimum, 0.8 mm, reads at least 0.8 mm and passes (it read 0.799 mm and was refused)', async () => {
+    const { run } = await checkAlone(thicken('limit', { outline: oval(2.5, 4, 3.5), thickness: '0.8 mm', surface: 'sphere', radius: '7 mm' }));
+    const sheet = entry(run.entries, 'sheet');
+    assert.ok(sheet.value! >= 0.8, `the sheet reads ${sheet.value} mm`);
+    assert.equal(sheet.result, 'pass', sheet.measured ?? '');
+    const wall = entry(run.entries, 'wall');
+    assert.equal(wall.result, 'pass', `${wall.measured} at ${wall.where?.description}`);
+    assert.equal(entry(run.entries, 'surface_deviation').result, 'pass', entry(run.entries, 'surface_deviation').measured ?? '');
+  });
+
+  // Ring petals 7 mm long, and a sculpture leaf 100 mm long and 40 mm wide; from 0.5 to 5 mm thick; each surface
+  // from as tight as the tree allows (5 x the thickness, or the radius the outline's reach needs) to gentle. Every
+  // sheet's faces are read exactly, triangle by triangle; the casting checker also reads every ring petal, every
+  // leaf 0.8 mm thick and one 5 mm thick.
+  const cases: SheetCase[] = [];
+  const ring = petal(7, 4.4, 1.0);
+  for (const t of [0.5, 0.8, 1.0, 1.5]) {
+    const tight = 5 * t;
+    cases.push(
+      { name: `a ring petal ${t} mm thick, cupped on a ${Math.max(tight, 4.5)} mm sphere`, t, surface: 'sphere', radius: Math.max(tight, 4.5), outline: ring, read: true },
+      { name: `a ring petal ${t} mm thick, cupped on a 25 mm sphere`, t, surface: 'sphere', radius: 25, outline: ring, read: true },
+      { name: `a ring petal ${t} mm thick, curled along its length on a ${Math.max(tight, 2.7)} mm cylinder`, t, surface: 'cylinder', radius: Math.max(tight, 2.7), axis: 'x', outline: ring, read: true },
+      { name: `a ring petal ${t} mm thick, fluted on a ${tight} mm cylinder`, t, surface: 'cylinder', radius: tight, axis: 'y', outline: ring, read: true },
+      { name: `a ring petal ${t} mm thick, flat`, t, surface: 'flat', outline: ring, read: true },
+    );
+  }
+  const leaf = oval(20, 50, 0, 96);
+  for (const t of [0.8, 2, 5]) {
+    const read = t === 0.8;
+    cases.push(
+      { name: `a 100 mm sculpture leaf ${t} mm thick, cupped on a 40 mm sphere`, t, surface: 'sphere', radius: 40, outline: leaf, read },
+      { name: `a 100 mm sculpture leaf ${t} mm thick, cupped on a 1000 mm sphere`, t, surface: 'sphere', radius: 1000, outline: leaf, read },
+      { name: `a 100 mm sculpture leaf ${t} mm thick, curled along its length on a 25 mm cylinder`, t, surface: 'cylinder', radius: 25, axis: 'x', outline: leaf, read },
+      { name: `a 100 mm sculpture leaf ${t} mm thick, fluted on a ${Math.max(5 * t, 10)} mm cylinder`, t, surface: 'cylinder', radius: Math.max(5 * t, 10), axis: 'y', outline: leaf, read: read || t === 5 },
+      { name: `a 100 mm sculpture leaf ${t} mm thick, flat`, t, surface: 'flat', outline: leaf, read: true },
+    );
+  }
+  for (const c of cases) {
+    it(`${c.name}: no thinner than stated anywhere, and no thicker than stated plus the tessellation's error`, async (ctx) => {
+      const { mesh, sheet } = await buildAndRead(c);
+      if (sheet) {
+        // The casting checker's reading, square to the surface at every declared point.
+        assert.ok(sheet.value! >= c.t, `the sheet check reads ${sheet.value} mm on a sheet stated at ${c.t} mm`);
+        assert.ok(sheet.value! <= c.t + EXCESS_MAX + 0.0005, `the sheet check reads ${sheet.value} mm on a sheet stated at ${c.t} mm`);
+      }
+      // Every face triangle of the file, exactly: the outer face lies on or beyond the stated outer surface, the inner
+      // face on or beyond the stated inner one, so measured square to the surface anywhere the sheet is at least t.
+      const f = faceOffsets(c, mesh);
+      const um = (x: number) => `${(x * 1000).toFixed(3)} um`;
+      ctx.diagnostic(
+        `${sheet ? `sheet check ${sheet.value} mm; ` : ''}outer face ${um(-c.t / 2 - f.outer.hi)} to ${um(-c.t / 2 - f.outer.lo)} beyond the stated surface, inner face ${um(f.inner.lo - c.t / 2)} to ${um(f.inner.hi - c.t / 2)}`,
+      );
+      assert.ok(f.outer.n > 20 && f.inner.n > 20, `${f.outer.n} outer and ${f.inner.n} inner face triangles`);
+      assert.ok(f.outer.hi <= -c.t / 2, `the outer face comes ${(f.outer.hi + c.t / 2).toExponential(2)} mm inside the stated outer surface`);
+      assert.ok(f.inner.lo >= c.t / 2, `the inner face comes ${(c.t / 2 - f.inner.lo).toExponential(2)} mm inside the stated inner surface`);
+      // And neither face stands further out than the tessellation's error.
+      assert.ok(-c.t / 2 - f.outer.lo <= EXCESS_MAX, `the outer face stands ${(-c.t / 2 - f.outer.lo).toFixed(5)} mm out`);
+      assert.ok(f.inner.hi - c.t / 2 <= EXCESS_MAX, `the inner face stands ${(f.inner.hi - c.t / 2).toFixed(5)} mm out`);
+    });
+  }
 });
 
 // ------------------------------------------------------------- the tree
