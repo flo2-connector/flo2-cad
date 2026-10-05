@@ -26171,6 +26171,7 @@ function declarationProblems(m, d) {
 // src/program/run.ts
 var DEFAULT_SECONDS = 20;
 var DEFAULT_MEMORY_MIB = 512;
+var STARTUP_SECONDS = 10;
 var MAX_OUTPUT_BYTES = 256 * 2 ** 20;
 function programLimits(env = process.env) {
   const s = Number(env["FLO2_CAD_PROGRAM_SECONDS"] ?? DEFAULT_SECONDS);
@@ -26221,7 +26222,7 @@ function rssOf(pid) {
     return null;
   }
 }
-async function runProgram(source, runs, limits = programLimits()) {
+async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
   const t0 = performance.now();
   const { entry, read } = childEntry();
   const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
@@ -26230,6 +26231,7 @@ async function runProgram(source, runs, limits = programLimits()) {
   const args = [`--max-old-space-size=${heapMiB}`, "--disallow-code-generation-from-strings", "--permission", ...read.map((p) => `--allow-fs-read=${p}`), entry];
   const child = spawn(process.execPath, args, { stdio: ["pipe", "pipe", "pipe"], env: {}, windowsHide: true });
   const pid = child.pid;
+  hooks.started?.(child);
   if (pid !== void 0) {
     try {
       writeFileSync(`/proc/${pid}/oom_score_adj`, "1000");
@@ -26248,7 +26250,17 @@ async function runProgram(source, runs, limits = programLimits()) {
       stopped = f;
       child.kill("SIGKILL");
     };
-    const hard = setTimeout(() => stop(new ProgramFailed("time", null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1e3 + 1500);
+    const startupSeconds = limits.startupSeconds ?? STARTUP_SECONDS;
+    const startup = setTimeout(
+      () => stop(new ProgramFailed("engine", null, `the engine could not start the program's evaluation within ${startupSeconds} s (the machine is too busy); none of the program ran, so try again`)),
+      startupSeconds * 1e3
+    );
+    let hard;
+    let head = Buffer.alloc(0);
+    const ready = () => {
+      clearTimeout(startup);
+      hard = setTimeout(() => stop(new ProgramFailed("time", null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1e3 + 1500);
+    };
     const watch = setInterval(() => {
       if (pid === void 0) return;
       const rss = rssOf(pid);
@@ -26257,6 +26269,10 @@ async function runProgram(source, runs, limits = programLimits()) {
       if (rss > limitBytes) stop(new ProgramFailed("memory", null, `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
     }, 20);
     child.stdout.on("data", (c) => {
+      if (head.length < 4) {
+        head = Buffer.concat([head, c.subarray(0, 4 - head.length)]);
+        if (head.length === 4 && head.readUInt32LE(0) === 0) ready();
+      }
       outBytes += c.length;
       if (outBytes > MAX_OUTPUT_BYTES) stop(new ProgramFailed("output", null, `the program's piece came to more than ${MAX_OUTPUT_BYTES / 2 ** 20} MiB of mesh; make it simpler`));
       else out.push(c);
@@ -26269,12 +26285,14 @@ async function runProgram(source, runs, limits = programLimits()) {
     child.stdin.end(JSON.stringify(request));
     child.on("error", (e) => stop(new ProgramFailed("engine", null, `the program could not be started: ${e.message}`)));
     child.on("close", (code, signal) => {
+      clearTimeout(startup);
       clearTimeout(hard);
       clearInterval(watch);
       const ms = performance.now() - t0;
       const peakMiB = peak === null ? null : Math.round(peak / 2 ** 20);
       if (stopped) return reject(stopped);
-      const buf = Buffer.concat(out);
+      const all = Buffer.concat(out);
+      const buf = all.length >= 4 && all.readUInt32LE(0) === 0 ? all.subarray(4) : all;
       if (buf.length < 4) {
         if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(new ProgramFailed("memory", null, `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
         if (signal === "SIGKILL") return reject(new ProgramFailed("memory", null, `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));

@@ -20,7 +20,7 @@ import { programPiece, validatePiece, type ProgramPiece } from '../src/piece/pro
 import { treeFromTemplate, type PieceTree } from '../src/piece/tree.js';
 import { treeAsProgram } from '../src/program/from-tree.js';
 import { CABOCHON_EXAMPLE } from '../src/program/guide.js';
-import { ProgramFailed, runProgram, type ProgramLimits } from '../src/program/run.js';
+import { ProgramFailed, runProgram, type ProgramLimits, type RunHooks } from '../src/program/run.js';
 import { declarationProblems } from '../src/program/verify.js';
 import { Session } from '../src/session.js';
 
@@ -48,9 +48,9 @@ function insideStl(stl: Buffer, p: [number, number, number]): boolean {
   return crossings % 2 === 1;
 }
 
-async function refusal(source: string, limits: ProgramLimits = QUICK): Promise<ProgramFailed> {
+async function refusal(source: string, limits: ProgramLimits = QUICK, hooks: RunHooks = {}): Promise<ProgramFailed> {
   try {
-    await runProgram(source, [{ tol: 0.03, scale: 1 }], limits);
+    await runProgram(source, [{ tol: 0.03, scale: 1 }], limits, hooks);
   } catch (e) {
     if (e instanceof ProgramFailed) return e;
     throw e;
@@ -161,6 +161,59 @@ describe('a program runs in its own process, within a time and a memory limit', 
     assert.match(e.plain, /^line 1: .*ringShank\.band_width.*in/);
     const s = await refusal('const a = 1;\nconst b = ;');
     assert.match(s.plain, /^line 2: the program does not parse: SyntaxError/);
+  });
+});
+
+// WHY THIS SUITE EXISTS. CI run 37280397226 (attempt 1, 2026-10-05) refused 'const a = 1;\nconst b = ;'
+// as "the program ran past its time limit (3 s) and was stopped". The test took 4596 ms: about 0.1 s
+// for the refusal before it, then 4.5 s, which is exactly the engine's backstop (3 s + 1.5 s). The
+// words "and was stopped" are the engine's backstop's, not the child's own clock's. The same
+// runner answered every other refusal in about 0.1 s, so it was not steadily slow: that one
+// child's START stalled. The cause was the accounting, not the runner: the program's clock
+// started when its process was spawned, so Node's start, the engine's modules and the kernel
+// (about 0.15 s; 1.1 s on one CPU shared eight ways) were charged to the program, and the parse
+// waited behind the kernel. Now the child asks V8 whether the program parses before it loads the
+// kernel, says when it is ready, and only then do the program's clock and the backstop start; the
+// start-up has its own bound, and running past it is the engine's failure, never the program's.
+// A stalled start-up is reproduced here by stopping the child (SIGSTOP) as it starts.
+describe("a program's clock starts when the engine is ready, not when its process starts", () => {
+  const PARSE_ERROR = 'const a = 1;\nconst b = ;';
+  /** Stops the child as it starts, and lets it go on after `ms`. */
+  const stall = (ms: number): RunHooks => ({
+    started: (child) => {
+      child.kill('SIGSTOP');
+      const t = setTimeout(() => child.kill('SIGCONT'), ms);
+      child.once('exit', () => clearTimeout(t));
+    },
+  });
+  it('a program that does not parse is refused as such under a time limit shorter than any start-up', async () => {
+    const e = await refusal(PARSE_ERROR, { seconds: 0.001, memoryMiB: 256 });
+    assert.equal(e.kind, 'program', e.plain);
+    assert.match(e.plain, /^line 2: the program does not parse: SyntaxError/);
+  });
+  it('a program that does not parse is refused as such when its start-up stalls past the time limit', async () => {
+    const e = await refusal(PARSE_ERROR, QUICK, stall(5000));
+    assert.equal(e.kind, 'program', e.plain);
+    assert.match(e.plain, /^line 2: the program does not parse: SyntaxError/);
+  });
+  it('a start-up that stalls past the time limit is not charged to the program', async () => {
+    const r = await runProgram('return sphere(1);', [{ tol: 0.03, scale: 1 }], QUICK, stall(5000));
+    assert.equal(r.runs.length, 1);
+  });
+  it("a start-up that never finishes is the engine's failure, not the program's", async () => {
+    const t0 = performance.now();
+    const e = await refusal('return sphere(1);', { ...QUICK, startupSeconds: 1 }, stall(60_000));
+    assert.equal(e.kind, 'engine', e.plain);
+    assert.match(e.plain, /could not start the program's evaluation within 1 s/);
+    assert.ok(performance.now() - t0 < 1000 + 1500, 'it is stopped at the start-up bound');
+  });
+  it('the time limit still holds once the program runs: an endless loop is stopped at it', async () => {
+    const t0 = performance.now();
+    const e = await refusal('while (true) {}', QUICK, stall(1000));
+    assert.equal(e.kind, 'time');
+    assert.match(e.plain, /ran past its time limit \(3 s\)/);
+    const took = performance.now() - t0;
+    assert.ok(took >= 1000 + 3000 && took < 1000 + 3000 + 2500, `stopped ${Math.round(took)} ms after it was started, 1 s of it stalled`);
   });
 });
 
