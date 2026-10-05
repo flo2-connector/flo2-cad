@@ -63,9 +63,8 @@ describe('the casting check finishes in time for a wire-and-blend piece', () => 
     const run = checkInOwnProcess(FIXTURE);
     const at = (id: string) => run.entries.find((e) => e.id === id)!;
     // Strictness unchanged: every reading main 0b432a3 gave this piece, once its check was let
-    // run to the end (352 s). The piece is refused, as it was: a 0 mm gap where its wires
-    // meet, and facets standing off the blend's surface by 0.010 mm on main's reference and
-    // by more on the blend's own surface points (the check reads at least what main read).
+    // run to the end (352 s). The piece is refused, as it was, for a 0 mm gap where its wires
+    // meet: the chat's own layout.
     assert.deepEqual(
       ['watertight', 'wall', 'detail', 'band', 'bezel_wall', 'bezel_lip', 'gap'].map((id) => [id, at(id).result, at(id).value]),
       [
@@ -78,8 +77,12 @@ describe('the casting check finishes in time for a wire-and-blend piece', () => 
         ['gap', 'fail', 0],
       ],
     );
-    assert.equal(at('surface_deviation').result, 'fail');
-    assert.ok(at('surface_deviation').value! >= 0.01, `surface ${at('surface_deviation').value} mm`);
+    // The surface is no longer refused, and the check is as strict as it was: it read 0.010 mm
+    // on 0b432a3 and 0.012 on c678b62 (both fails) where the rails bend at their peak, the
+    // blend's facets cutting across a crease of its own field (blend-surface.test.ts). The
+    // build now holds those facets to the surface.
+    assert.equal(at('surface_deviation').result, 'pass', `surface ${at('surface_deviation').value} mm`);
+    assert.ok(at('surface_deviation').value! <= 0.01, `surface ${at('surface_deviation').value} mm`);
     assert.equal(run.verdict, 'fail');
     assert.ok(run.ms <= TIME_BUDGET_S * 1000, `the check took ${(run.ms / 1000).toFixed(1)} s at one CPU; the budget is ${TIME_BUDGET_S} s`);
     assert.ok(run.hwmMiB <= MEMORY_BUDGET_MIB, `the check peaked at ${run.hwmMiB.toFixed(0)} MiB; the budget is ${MEMORY_BUDGET_MIB} MiB`);
