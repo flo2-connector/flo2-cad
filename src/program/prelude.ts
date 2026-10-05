@@ -147,6 +147,7 @@ export const PRELUDE = String.raw`(function (bridge) {
     prongHead: (o) => call('prongHead', [o]),
     bezel: (o) => call('bezel', [o]),
     thicken: (o) => call('thicken', [o]),
+    relief: (o) => call('relief', [o]),
     translate: (s, ...a) => call('translate', [s, ...a]),
     rotate: (s, ...a) => call('rotate', [s, ...a]),
     mirror: (s, p) => call('mirror', [s, p]),

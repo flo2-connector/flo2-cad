@@ -302,6 +302,415 @@ function caratText(v, path) {
   return `${num} ct`;
 }
 
+// src/files/png-read.ts
+import { crc32, inflateSync } from "node:zlib";
+var MAX_IMAGE_SIDE = 2048;
+var MAX_IMAGE_BYTES = 16 * 2 ** 20;
+var ImageRefused = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ImageRefused";
+  }
+};
+var SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+var SAVE_AS = "Save it as an 8-bit grayscale PNG (or 8-bit RGB or RGBA), not interlaced.";
+var COLOUR = {
+  0: { name: "grayscale", channels: 1 },
+  2: { name: "RGB", channels: 3 },
+  4: { name: "grayscale with alpha", channels: 2 },
+  6: { name: "RGBA", channels: 4 }
+};
+function readHeightPng(bytes) {
+  if (bytes.length > MAX_IMAGE_BYTES) throw new ImageRefused(`the file is ${(bytes.length / 2 ** 20).toFixed(1)} MB; a height image may be at most ${MAX_IMAGE_BYTES / 2 ** 20} MB.`);
+  if (bytes.length < 8 || SIGNATURE.some((b, i) => bytes[i] !== b)) throw new ImageRefused(`it is not a PNG file (its first bytes are not a PNG's signature). ${SAVE_AS}`);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 8;
+  let header = null;
+  const idat = [];
+  let ended = false;
+  while (off < bytes.length) {
+    if (off + 12 > bytes.length) throw new ImageRefused("the file is cut short (a chunk runs past its end).");
+    const len = view.getUint32(off);
+    const type = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+    if (!/^[A-Za-z]{4}$/.test(type)) throw new ImageRefused("the file is damaged (a chunk has no readable name).");
+    if (off + 12 + len > bytes.length) throw new ImageRefused(`the file is cut short (its ${type} chunk runs past its end).`);
+    const data = bytes.subarray(off + 8, off + 8 + len);
+    if (crc32(bytes.subarray(off + 4, off + 8 + len)) !== view.getUint32(off + 8 + len)) throw new ImageRefused(`the file is damaged (its ${type} chunk fails its checksum).`);
+    off += 12 + len;
+    if (type === "IHDR") {
+      if (header || len !== 13) throw new ImageRefused("the file is damaged (its header chunk is not one 13-byte IHDR).");
+      const d = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      header = { width: d.getUint32(0), height: d.getUint32(4), depth: data[8], colour: data[9], interlace: data[12] };
+      if (data[10] !== 0 || data[11] !== 0) throw new ImageRefused("the file uses a compression or filter method PNG does not define.");
+    } else if (!header) {
+      throw new ImageRefused("the file is damaged (its first chunk is not its header).");
+    } else if (type === "IDAT") {
+      idat.push(data);
+    } else if (type === "IEND") {
+      ended = true;
+      break;
+    } else if (type !== "PLTE" && (type.charCodeAt(0) & 32) === 0) {
+      throw new ImageRefused(`the file holds a ${type} chunk, which this engine does not read. ${SAVE_AS}`);
+    }
+  }
+  if (!header) throw new ImageRefused("the file has no header chunk.");
+  if (!ended) throw new ImageRefused("the file is cut short (it has no end chunk).");
+  const { width, height, depth, colour, interlace } = header;
+  if (colour === 3) throw new ImageRefused(`it is a palette (indexed-colour) PNG. ${SAVE_AS}`);
+  const kind = COLOUR[colour];
+  if (!kind) throw new ImageRefused(`its colour type (${colour}) is not one PNG defines.`);
+  if (depth !== 8) throw new ImageRefused(`it has ${depth} bits a channel; this engine reads 8. ${SAVE_AS}`);
+  if (interlace !== 0) throw new ImageRefused(`it is interlaced (Adam7). ${SAVE_AS}`);
+  if (width < 2 || height < 2) throw new ImageRefused(`it is ${width} \xD7 ${height} pixels; a height image needs at least 2 \xD7 2.`);
+  if (width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE) throw new ImageRefused(`it is ${width} \xD7 ${height} pixels; a height image may be at most ${MAX_IMAGE_SIDE} pixels a side. Scale it down.`);
+  if (!idat.length) throw new ImageRefused("the file holds no image data.");
+  const ch = kind.channels;
+  const stride = width * ch;
+  const expected = height * (1 + stride);
+  let raw;
+  try {
+    raw = inflateSync(Buffer.concat(idat), { maxOutputLength: expected + 1 });
+  } catch (e) {
+    throw new ImageRefused(`its image data does not unpack${/maxOutputLength|larger than/i.test(String(e)) ? " to the size its header states" : ""} (the file is damaged).`);
+  }
+  if (raw.length !== expected) throw new ImageRefused(`its image data unpacks to ${raw.length} bytes, not the ${expected} its header states (the file is damaged).`);
+  const px = new Uint8Array(height * stride);
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (1 + stride)];
+    const src = y * (1 + stride) + 1;
+    const row = y * stride, prev = row - stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= ch ? px[row + x - ch] : 0;
+      const b = y > 0 ? px[prev + x] : 0;
+      const c = x >= ch && y > 0 ? px[prev + x - ch] : 0;
+      let pred;
+      switch (f) {
+        case 0:
+          pred = 0;
+          break;
+        case 1:
+          pred = a;
+          break;
+        case 2:
+          pred = b;
+          break;
+        case 3:
+          pred = a + b >> 1;
+          break;
+        case 4: {
+          const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          pred = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+          break;
+        }
+        default:
+          throw new ImageRefused(`row ${y + 1} uses filter ${f}, which PNG does not define (the file is damaged).`);
+      }
+      px[row + x] = raw[src + x] + pred & 255;
+    }
+  }
+  const values = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const p = i * ch;
+    const lum = ch <= 2 ? px[p] : 0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2];
+    const alpha = ch === 2 ? px[p + 1] / 255 : ch === 4 ? px[p + 3] / 255 : 1;
+    values[i] = lum / 255 * alpha;
+  }
+  return { width, height, values };
+}
+
+// src/library/relief.ts
+import { readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join as join2 } from "node:path";
+var RELIEF_MODES = ["raised", "sunk"];
+var RELIEF_SURFACES = ["flat", "cylinder"];
+var RELIEF_RANGE = {
+  size: [1, 100],
+  depth: [0.05, 5],
+  base: [0.2, 20],
+  smoothing: [0.35, 5],
+  radius: [3, 100]
+};
+var RELIEF_DEFAULT_SMOOTHING_MM = 0.35;
+var RELIEF_MAX_SLOPE_DEG = 45;
+var RELIEF_MAX_CELLS = 6e5;
+var IMAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,123}\.png$/i;
+var at2 = (path, k) => `${path}.${k}`;
+function reliefSpec(p, path) {
+  const image = p["image"];
+  if (typeof image !== "string" || !IMAGE_NAME.test(image)) {
+    throw new CallError(at2(path, "image"), `the height image's file name, a PNG kept beside the piece, e.g. "lion-face.png" (letters, digits, ".", "_" and "-", no folder); got ${JSON.stringify(image)}.`);
+  }
+  const len = (k, [lo, hi], dflt) => {
+    if (p[k] === void 0) {
+      if (dflt === void 0) throw new CallError(at2(path, k), `a relief needs "${k}".`);
+      return dflt;
+    }
+    const x = lengthMm(p[k], at2(path, k));
+    if (!(x >= lo && x <= hi)) throw new CallError(at2(path, k), `${x} mm is outside what the library builds (${lo} to ${hi} mm).`);
+    return x;
+  };
+  const word = (k, allowed, dflt) => {
+    const v = p[k] ?? dflt;
+    if (!allowed.includes(v)) throw new CallError(at2(path, k), `must be ${allowed.map((a) => `"${a}"`).join(" or ")}; got ${JSON.stringify(p[k])}.`);
+    return v;
+  };
+  const width = len("width", RELIEF_RANGE.size);
+  const height = len("height", RELIEF_RANGE.size);
+  const depth = len("depth", RELIEF_RANGE.depth);
+  const mode = word("mode", RELIEF_MODES, "raised");
+  const surface = word("surface", RELIEF_SURFACES, "flat");
+  if (p["smoothing"] !== void 0 && lengthMm(p["smoothing"], at2(path, "smoothing")) < RELIEF_RANGE.smoothing[0]) {
+    throw new CallError(at2(path, "smoothing"), `${lengthMm(p["smoothing"], at2(path, "smoothing"))} mm is finer than a casting holds: the least is the casting detail limit, ${RELIEF_RANGE.smoothing[0]} mm. Leave it out for that.`);
+  }
+  const smoothing = len("smoothing", RELIEF_RANGE.smoothing, RELIEF_DEFAULT_SMOOTHING_MM);
+  const base = len("base", RELIEF_RANGE.base, mode === "sunk" ? depth + 1 : 1);
+  if (mode === "sunk" && base < depth + 0.1) {
+    throw new CallError(at2(path, "base"), `a sunk relief is carved into its own back, so its base (${base} mm) must be more than its depth (${depth} mm): at least ${Math.round((depth + 0.1) * 100) / 100} mm, and the casting needs the wall minimum (0.8 mm) under the deepest place.`);
+  }
+  let radius = 0;
+  if (surface === "cylinder") {
+    radius = len("radius", RELIEF_RANGE.radius);
+    if (radius - base < 0.5) throw new CallError(at2(path, "base"), `the back would lie ${Math.round((radius - base) * 100) / 100} mm from the axis; keep base under the radius less 0.5 mm (${Math.round((radius - 0.5) * 100) / 100} mm).`);
+    if (width / radius > Math.PI) throw new CallError(at2(path, "width"), `${width} mm reaches more than half way round a radius of ${radius} mm (${Math.round(Math.PI * radius * 100) / 100} mm). Use a narrower relief.`);
+  } else if (p["radius"] !== void 0) {
+    throw new CallError(at2(path, "radius"), 'a flat relief has no radius; leave it out, or set "surface" to "cylinder".');
+  }
+  return { image, width, height, depth, mode, surface, radius, base, smoothing };
+}
+function reliefSigma(s) {
+  return Math.max(s.smoothing / 2, s.depth / (Math.sqrt(2 * Math.PI) * Math.tan(RELIEF_MAX_SLOPE_DEG * Math.PI / 180)));
+}
+function reliefSpacing(s, tol) {
+  const sigma = reliefSigma(s);
+  let curvature = 0.968 * s.depth / (sigma * sigma);
+  if (s.surface === "cylinder") curvature += 1 / (s.radius - s.base);
+  return Math.min(sigma / 2, 0.5, Math.sqrt(8 * 0.9 * tol / curvature));
+}
+var given = null;
+var decoded = /* @__PURE__ */ new Map();
+function imageFolder() {
+  return process.env["FLO2_CAD_IMAGE_DIR"] || process.cwd();
+}
+function useGivenImages(images) {
+  given = images;
+}
+function imageBytes(name, path) {
+  if (!IMAGE_NAME.test(name)) throw new CallError(path, `"${name}" is not a plain PNG file name.`);
+  if (given) {
+    const b = given.get(name);
+    if (!b) throw new CallError(path, `no height image called "${name}" was found beside the piece. Write the name exactly as the file is kept, in quotes, so the engine can find it before the program runs.`);
+    return b;
+  }
+  const file = join2(imageFolder(), name);
+  let size;
+  try {
+    const st = statSync(file);
+    if (!st.isFile()) throw new Error("not a file");
+    size = st.size;
+  } catch {
+    throw new CallError(path, `no height image called "${name}" was found beside the piece${process.env["FLO2_CAD_IMAGE_DIR"] ? "" : " (the engine reads images from its working folder, or from FLO2_CAD_IMAGE_DIR)"}. On flo2, keep the PNG in the design and give its name as list_my_design_files shows it.`);
+  }
+  if (size > MAX_IMAGE_BYTES) throw new CallError(path, `"${name}" is ${(size / 2 ** 20).toFixed(1)} MB; a height image may be at most ${MAX_IMAGE_BYTES / 2 ** 20} MB.`);
+  return readFileSync(file);
+}
+function heightImage(name, path) {
+  const bytes = imageBytes(name, path);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  let image = decoded.get(sha256);
+  if (!image) {
+    try {
+      image = readHeightPng(bytes);
+    } catch (e) {
+      if (e instanceof ImageRefused) throw new CallError(path, `"${name}" cannot be read as a height image: ${e.message}`);
+      throw e;
+    }
+    if (decoded.size >= 8) decoded.delete(decoded.keys().next().value);
+    decoded.set(sha256, image);
+  }
+  return { image, sha256 };
+}
+function phi(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return z >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
+}
+function axisWeights(at3, edges, sigma) {
+  const n = edges.length - 1;
+  const reach = 4 * sigma;
+  const lo = (x) => {
+    let a = 0, b = n - 1;
+    while (a < b) {
+      const m = a + b >> 1;
+      if (edges[m + 1] < x) a = m + 1;
+      else b = m;
+    }
+    return a;
+  };
+  const from = new Int32Array(at3.length);
+  let k = 1;
+  const spans = [];
+  for (let i = 0; i < at3.length; i++) {
+    const c0 = lo(at3[i] - reach), c1 = lo(at3[i] + reach);
+    spans.push([c0, c1]);
+    from[i] = c0;
+    k = Math.max(k, c1 - c0 + 1);
+  }
+  const w = new Float64Array(at3.length * k);
+  for (let i = 0; i < at3.length; i++) {
+    const x = at3[i];
+    const [c0, c1] = spans[i];
+    let sum = 0;
+    for (let c = c0; c <= c1; c++) {
+      const hi = c === n - 1 ? 1 : phi((edges[c + 1] - x) / sigma);
+      const lo2 = c === 0 ? 0 : phi((edges[c] - x) / sigma);
+      const v = Math.max(0, hi - lo2);
+      w[i * k + (c - c0)] = v;
+      sum += v;
+    }
+    if (sum > 0) for (let c = c0; c <= c1; c++) w[i * k + (c - c0)] /= sum;
+  }
+  return { from, k, w };
+}
+function coarsen(img, f) {
+  const cols = Math.ceil(img.width / f), rows = Math.ceil(img.height / f);
+  const values = new Float64Array(cols * rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let s = 0, n = 0;
+      for (let y = r * f; y < Math.min(img.height, (r + 1) * f); y++) {
+        for (let x = c * f; x < Math.min(img.width, (c + 1) * f); x++) {
+          s += img.values[y * img.width + x];
+          n++;
+        }
+      }
+      values[r * cols + c] = s / n;
+    }
+  }
+  const colEdges = Array.from({ length: cols + 1 }, (_, c) => Math.min(img.width, c * f));
+  const rowEdges = Array.from({ length: rows + 1 }, (_, r) => Math.min(img.height, r * f));
+  return { cols, rows, values, colEdges, rowEdges };
+}
+function smoothedGrid(img, width, height, sigma, us, vs) {
+  const px = width / img.width, py = height / img.height;
+  const f = Math.max(1, Math.floor(sigma / (2 * Math.max(px, py))));
+  const g = coarsen(img, f);
+  const colEdges = Float64Array.from(g.colEdges, (c) => -width / 2 + c * px);
+  const rowEdges = Float64Array.from(g.rowEdges, (r) => r * py);
+  const wx = axisWeights(us, colEdges, sigma);
+  const vDown = Float64Array.from(vs, (v) => height / 2 - v);
+  const wy = axisWeights(vDown, rowEdges, sigma);
+  const nu = us.length, nv = vs.length;
+  const rowsAtU = new Float64Array(g.rows * nu);
+  for (let r = 0; r < g.rows; r++) {
+    const row = r * g.cols;
+    for (let i = 0; i < nu; i++) {
+      const c0 = wx.from[i];
+      let s = 0;
+      for (let t = 0; t < wx.k; t++) {
+        const c = c0 + t;
+        if (c >= g.cols) break;
+        s += wx.w[i * wx.k + t] * g.values[row + c];
+      }
+      rowsAtU[r * nu + i] = s;
+    }
+  }
+  const out = new Float32Array(nu * nv);
+  for (let j = 0; j < nv; j++) {
+    const r0 = wy.from[j];
+    for (let i = 0; i < nu; i++) {
+      let s = 0;
+      for (let t = 0; t < wy.k; t++) {
+        const r = r0 + t;
+        if (r >= g.rows) break;
+        s += wy.w[j * wy.k + t] * rowsAtU[r * nu + i];
+      }
+      out[j * nu + i] = Math.min(1, Math.max(0, s));
+    }
+  }
+  return out;
+}
+function lines(a, b, n) {
+  return Float64Array.from({ length: n + 1 }, (_, i) => a + (b - a) * i / n);
+}
+function reliefCells(s, tol) {
+  const h = reliefSpacing(s, tol);
+  return { nx: Math.max(2, Math.ceil(s.width / h)), ny: Math.max(2, Math.ceil(s.height / h)) };
+}
+function buildRelief(k, A, n, tol) {
+  const path = `${n.id}.params`;
+  const s = reliefSpec(n.params ?? {}, path);
+  const { nx, ny } = reliefCells(s, tol);
+  if (nx * ny > RELIEF_MAX_CELLS) {
+    throw new CallError(path, `a ${s.width} \xD7 ${s.height} mm relief ${s.depth} mm deep needs ${nx * ny} grid cells at the casting tolerance, more than the ${RELIEF_MAX_CELLS} one relief may have. Make it smaller, shallower, or smoother (a larger "smoothing").`);
+  }
+  const { image } = heightImage(s.image, `${path}.image`);
+  const sigma = reliefSigma(s);
+  const us = lines(-s.width / 2, s.width / 2, nx), vs = lines(-s.height / 2, s.height / 2, ny);
+  const field = smoothedGrid(image, s.width, s.height, sigma, us, vs);
+  const sign = s.mode === "raised" ? 1 : -1;
+  const put = (out, o, u, v, w) => {
+    if (s.surface === "flat") {
+      out[o] = Math.fround(u);
+      out[o + 1] = Math.fround(v);
+      out[o + 2] = Math.fround(w);
+    } else {
+      const th = u / s.radius, r = s.radius + w;
+      out[o] = Math.fround(r * Math.sin(th));
+      out[o + 1] = Math.fround(v);
+      out[o + 2] = Math.fround(r * Math.cos(th));
+    }
+  };
+  const top = (nx + 1) * (ny + 1);
+  const T = (i, j) => j * (nx + 1) + i;
+  const ring = [];
+  for (let i = 0; i <= nx; i++) ring.push([i, 0]);
+  for (let j = 1; j <= ny; j++) ring.push([nx, j]);
+  for (let i = nx - 1; i >= 0; i--) ring.push([i, ny]);
+  for (let j = ny - 1; j >= 1; j--) ring.push([0, j]);
+  const backIndex = /* @__PURE__ */ new Map();
+  ring.forEach(([i, j], q) => backIndex.set(T(i, j), top + q));
+  const B = (i, j) => backIndex.get(T(i, j));
+  const centres = top + ring.length;
+  const vert = new Float32Array((centres + 2) * 3);
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) put(vert, T(i, j) * 3, us[i], vs[j], sign * s.depth * field[j * (nx + 1) + i]);
+  ring.forEach(([i, j], q) => put(vert, (top + q) * 3, us[i], vs[j], -s.base));
+  put(vert, centres * 3, (us[0] + us[1]) / 2, 0, -s.base);
+  put(vert, (centres + 1) * 3, (us[nx - 1] + us[nx]) / 2, 0, -s.base);
+  const tri = [];
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      tri.push(T(i, j), T(i + 1, j), T(i + 1, j + 1));
+      tri.push(T(i, j), T(i + 1, j + 1), T(i, j + 1));
+    }
+  }
+  const side = (a, b) => {
+    const [ta, tb, ba, bb] = [T(...a), T(...b), B(...a), B(...b)];
+    tri.push(ba, bb, tb, ba, tb, ta);
+  };
+  for (let i = 0; i < nx; i++) side([i, 0], [i + 1, 0]);
+  for (let j = 0; j < ny; j++) side([nx, j], [nx, j + 1]);
+  for (let i = nx; i > 0; i--) side([i, ny], [i - 1, ny]);
+  for (let j = ny; j > 0; j--) side([0, j], [0, j - 1]);
+  for (let i = 0; i < nx; i++) {
+    const loop = [B(i, 0), B(i + 1, 0)];
+    if (i + 1 === nx) for (let j = 1; j < ny; j++) loop.push(B(nx, j));
+    loop.push(B(i + 1, ny), B(i, ny));
+    if (i === 0) for (let j = ny - 1; j >= 1; j--) loop.push(B(0, j));
+    if (loop.length === 4) {
+      tri.push(loop[0], loop[2], loop[1], loop[0], loop[3], loop[2]);
+    } else {
+      const c = i === 0 ? centres : centres + 1;
+      for (let q = 0; q < loop.length; q++) tri.push(c, loop[(q + 1) % loop.length], loop[q]);
+    }
+  }
+  const made = A.t(new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: vert, triVerts: Uint32Array.from(tri) })));
+  const status = made.status();
+  if (status !== "NoError") throw new Error(`engine bug: the relief "${n.id}" is not a closed solid (${status})`);
+  return A.t(made.simplify(0.1 * tol));
+}
+
 // src/library/thicken.ts
 var SURFACES = ["flat", "sphere", "cylinder"];
 var SHEET_AXES = ["x", "y"];
@@ -467,16 +876,16 @@ function convexSag(s, xs, ys) {
   if (s.surface === "flat") return 0;
   const R = s.radius, map = surfaceMap(s);
   const nx = xs.length - 1;
-  const at2 = [];
+  const at3 = [];
   for (let j = 0; j < ys.length; j++) {
     for (let i = 0; i <= nx; i++) {
       const p = map(xs[i], ys[j], 0).p;
-      at2.push(s.surface === "sphere" ? [p[0], p[1], p[2] - R] : s.axis === "x" ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
+      at3.push(s.surface === "sphere" ? [p[0], p[1], p[2] - R] : s.axis === "x" ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
     }
   }
   let fMin = 1;
   forEachGridTriangle(nx, ys.length - 1, (a, b, c) => {
-    fMin = Math.min(fMin, nearestOnTriangle(at2[a[1] * (nx + 1) + a[0]], at2[b[1] * (nx + 1) + b[0]], at2[c[1] * (nx + 1) + c[0]]) / R);
+    fMin = Math.min(fMin, nearestOnTriangle(at3[a[1] * (nx + 1) + a[0]], at3[b[1] * (nx + 1) + b[0]], at3[c[1] * (nx + 1) + c[0]]) / R);
   });
   return (R + s.thickness / 2) * (1 / fMin - 1);
 }
@@ -627,7 +1036,8 @@ var OPERATIONS = [
   "cylinder",
   "box",
   "torus",
-  "thicken"
+  "thicken",
+  "relief"
 ];
 var BLENDABLE = /* @__PURE__ */ new Set(["sphere", "cylinder", "box", "torus", "sweep", "translate", "rotate", "mirror", "union", "smooth_union"]);
 var PARTS = ["ring_shank", "prong_head", "bezel"];
@@ -858,7 +1268,7 @@ function validateNode(v, path, ids, inBlend) {
   if (op && ["union", "difference", "intersection", "smooth_union", "translate", "rotate", "mirror"].includes(op) && kids === 0) {
     throw new CallError(at(path, "children"), `a ${op} needs at least one child.`);
   }
-  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude", "thicken"].includes(op) && kids > 0) {
+  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude", "thicken", "relief"].includes(op) && kids > 0) {
     throw new CallError(at(path, "children"), `a ${op} is a shape and has no children.`);
   }
 }
@@ -948,7 +1358,26 @@ var OP_PARAMS = {
   extrude: { points: "points2", height: "length" },
   revolve: { points: "points2", degrees: "angle" },
   sweep: { radius: "length", path: "points3", closed: "boolean" },
-  thicken: { outline: "points2", thickness: "length", surface: "word", radius: "length", axis: "word", round_corners: "length" }
+  thicken: { outline: "points2", thickness: "length", surface: "word", radius: "length", axis: "word", round_corners: "length" },
+  relief: { image: "word", width: "length", height: "length", depth: "length", mode: "word", surface: "word", radius: "length", base: "length", smoothing: "length" }
+};
+var OP_HELP = {
+  union: "joins its children into one solid.",
+  difference: "its first child, with every later child cut away.",
+  intersection: "only what all its children share.",
+  smooth_union: "joins its children with a fillet of `radius`; it can blend sphere, cylinder, box, torus, sweep and the transforms and unions of those.",
+  translate: "moves its children by x, y and z.",
+  rotate: "turns its children about x, then y, then z.",
+  mirror: 'reflects its children through the plane "xy", "yz" or "xz".',
+  sphere: "a ball of `radius`, centred on the origin.",
+  cylinder: "a round rod of `radius`, standing `height` tall on the origin along z.",
+  box: "a block x by y by z, centred on the origin.",
+  torus: "a ring round z, `major_radius` to the middle of its wire, the wire `minor_radius` thick.",
+  extrude: 'a closed 2D outline `points` [["x mm", "y mm"], ...] raised `height` along z.',
+  revolve: "a closed 2D profile `points` (x the radius, y the height) turned round z, all the way or `degrees`.",
+  sweep: 'a round wire of `radius` along the 3D `path` [["x mm", "y mm", "z mm"], ...]; `closed` joins its ends.',
+  thicken: 'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60\xB0). The outline stays within 90\xB0 round a sphere and 150\xB0 round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.',
+  relief: `a picture laid onto the piece as a relief: \`image\` names a grayscale HEIGHT image, a PNG kept beside the piece (on flo2, a file the design keeps, by the name list_my_design_files gives), white highest, black lowest (RGB is read by its brightness; transparent is lowest), at most ${MAX_IMAGE_SIDE} pixels a side. It covers \`width\` \xD7 \`height\` (the image is stretched to fill it) and stands \`depth\` at its highest above its surface ("mode": "raised", the default) or is carved that deep into it ("sunk"). It is one solid from its back, \`base\` below its surface (default 1 mm; a sunk relief's default is its depth + 1 mm), to its face. "surface": "flat" (the default) lies in the xy plane, centred on the origin, facing +z, the image's top towards +y: lay it on a plate with translate. "surface": "cylinder" wraps it round the y axis, its surface at \`radius\`, centred on the top (+z), width measured round the band: set radius to the band's outer radius to lay it on the band's top. A raised relief joins the metal its back is buried in; a sunk one is carved into its own back, so make it the face itself (a signet's plate, or a panel on the band). The picture is smoothed so no ridge or hollow is finer than \`smoothing\` (default ${RELIEF_DEFAULT_SMOOTHING_MM} mm, the casting detail limit, and never less) and no slope is steeper than ${RELIEF_MAX_SLOPE_DEG}\xB0, so a deeper relief is a softer one. The engine does not invent detail: a convincing face needs a good height image. The check measures it like any metal and names it by its id.`
 };
 var REQUIRED_OP_PARAMS = {
   smooth_union: ["radius"],
@@ -960,7 +1389,8 @@ var REQUIRED_OP_PARAMS = {
   extrude: ["points", "height"],
   revolve: ["points"],
   sweep: ["radius", "path"],
-  thicken: ["outline", "thickness"]
+  thicken: ["outline", "thickness"],
+  relief: ["image", "width", "height", "depth"]
 };
 function validateOp(op, p, path) {
   const spec = OP_PARAMS[op];
@@ -991,6 +1421,7 @@ function validateOp(op, p, path) {
     }
   }
   if (op === "thicken") validateThicken(p, path);
+  if (op === "relief") reliefSpec(p, path);
 }
 function validateThicken(p, path) {
   const surface = p["surface"] ?? "flat";
@@ -1334,12 +1765,12 @@ var BlendField = class {
   }
 };
 var SURFACE_REACH_MM = 0.2;
-function projectOntoSurface(f, p, d, out, at2) {
+function projectOntoSurface(f, p, d, out, at3) {
   const g = (s) => f(p[0] + s * d[0], p[1] + s * d[1], p[2] + s * d[2]);
   const put = (s) => {
-    out[at2] = p[0] + s * d[0];
-    out[at2 + 1] = p[1] + s * d[1];
-    out[at2 + 2] = p[2] + s * d[2];
+    out[at3] = p[0] + s * d[0];
+    out[at3 + 1] = p[1] + s * d[1];
+    out[at3 + 2] = p[2] + s * d[2];
   };
   const g0 = g(0);
   if (Math.abs(g0) <= 1e-9) return put(0);
@@ -1391,9 +1822,9 @@ function gradient(f, x, y, z) {
   const l = Math.hypot(g[0], g[1], g[2]);
   return l > 0 ? [g[0] / l, g[1] / l, g[2] / l] : [0, 0, 0];
 }
-function meetOfPlanes(n, at2, p) {
+function meetOfPlanes(n, at3, p) {
   const G = n.map((u) => n.map((v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]));
-  const r = n.map((u, i) => u[0] * (p[0] - at2[i][0]) + u[1] * (p[1] - at2[i][1]) + u[2] * (p[2] - at2[i][2]));
+  const r = n.map((u, i) => u[0] * (p[0] - at3[i][0]) + u[1] * (p[1] - at3[i][1]) + u[2] * (p[2] - at3[i][2]));
   const l = solveSmall(G, r);
   if (!l) return null;
   const x = [p[0], p[1], p[2]];
@@ -1448,7 +1879,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
   const alive = new Array(T.length / 3).fill(1);
   const born = new Array(T.length / 3).fill(0);
   const pair = (a, b) => a < b ? a * PAIR + b : b * PAIR + a;
-  const at2 = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+  const at3 = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
   const dist2 = (a, b) => (P[b * 3] - P[a * 3]) ** 2 + (P[b * 3 + 1] - P[a * 3 + 1]) ** 2 + (P[b * 3 + 2] - P[a * 3 + 2]) ** 2;
   const normal = (a, b, c) => {
     const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2];
@@ -1485,12 +1916,12 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
   const edgeOff = (a, b) => {
     const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
     const dx = P[b * 3] - ax, dy = P[b * 3 + 1] - ay, dz = P[b * 3 + 2] - az;
-    let w = -1, at3 = 0.5, bv = 0;
+    let w = -1, at4 = 0.5, bv = 0;
     for (let i = 1; i <= 3; i++) {
       const s = i / 4, v = f(ax + dx * s, ay + dy * s, az + dz * s);
-      if (Math.abs(v) > w) w = Math.abs(v), at3 = s, bv = v;
+      if (Math.abs(v) > w) w = Math.abs(v), at4 = s, bv = v;
     }
-    return standOffNear(ax + dx * at3, ay + dy * at3, az + dz * at3, bv, a, b, -1);
+    return standOffNear(ax + dx * at4, ay + dy * at4, az + dz * at4, bv, a, b, -1);
   };
   const turned = (a, b, c, from) => {
     const n = normal(a, b, c);
@@ -1525,7 +1956,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
     for (let t = 0; t < nt; t++) if (alive[t]) eachCell(t, (key) => fresh.has(key) && put(key, t));
   };
   const crosses = (a, b, c) => {
-    const A = at2(a), B = at2(b), C = at2(c);
+    const A = at3(a), B = at3(b), C = at3(c);
     const seen = /* @__PURE__ */ new Set();
     let hit = false;
     const lo = [0, 1, 2].map((k) => cellOf(Math.min(A[k], B[k], C[k])));
@@ -1541,7 +1972,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
             seen.add(u);
             const x = T[u * 3], y = T[u * 3 + 1], z = T[u * 3 + 2];
             if (x === a || x === b || x === c || y === a || y === b || y === c || z === a || z === b || z === c) continue;
-            const X = at2(x), Y = at2(y), Z = at2(z);
+            const X = at3(x), Y = at3(y), Z = at3(z);
             if (segmentThrough(A, B, X, Y, Z) || segmentThrough(B, C, X, Y, Z) || segmentThrough(C, A, X, Y, Z) || segmentThrough(X, Y, A, B, C) || segmentThrough(Y, Z, A, B, C) || segmentThrough(Z, X, A, B, C)) {
               hit = true;
               break;
@@ -1663,8 +2094,8 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
         if (!on && found && !before && !turnedOver) crossing = true;
       };
       if (na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2] < CREASE_COS) {
-        attempt(meetOfPlanes([na, nb], [at2(a), at2(b)], mid), mean);
-        for (const [, , , r] of side) attempt(meetOfPlanes([na, nb, gradient(f, P[r * 3], P[r * 3 + 1], P[r * 3 + 2])], [at2(a), at2(b), at2(r)], mid), mean);
+        attempt(meetOfPlanes([na, nb], [at3(a), at3(b)], mid), mean);
+        for (const [, , , r] of side) attempt(meetOfPlanes([na, nb, gradient(f, P[r * 3], P[r * 3 + 1], P[r * 3 + 2])], [at3(a), at3(b), at3(r)], mid), mean);
       }
       attempt(mid, mean);
       attempt(mid, gradient(f, mid[0], mid[1], mid[2]));
@@ -1786,6 +2217,8 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
       return smoothUnion(k, A, n, tol, ctx);
     case "thicken":
       return buildThicken(k, A, n, tol, ctx);
+    case "relief":
+      return buildRelief(k, A, n, tol);
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }
@@ -1984,14 +2417,14 @@ function bandProfile(profile, rIn, t, w, tol) {
   }
   if (profile === "round") {
     const a = t / 2;
-    const ell = (phi) => [rIn + a + a * Math.cos(phi), hw * Math.sin(phi)];
+    const ell = (phi2) => [rIn + a + a * Math.cos(phi2), hw * Math.sin(phi2)];
     return dedupe([...adaptive(ell, -Math.PI / 2, Math.PI / 2, tol), ...adaptive(ell, Math.PI / 2, 3 * Math.PI / 2, tol)]);
   }
   const d = domeOf(t);
   const dIn = profile === "comfort_fit" ? d * 0.35 : 0;
   const dOut = profile === "comfort_fit" ? d * 0.65 : d;
-  const inner = (phi) => [rIn + dIn * (1 - Math.cos(phi)), hw * Math.sin(phi)];
-  const outer = (phi) => [rIn + t - dOut * (1 - Math.cos(phi)), hw * Math.sin(phi)];
+  const inner = (phi2) => [rIn + dIn * (1 - Math.cos(phi2)), hw * Math.sin(phi2)];
+  const outer = (phi2) => [rIn + t - dOut * (1 - Math.cos(phi2)), hw * Math.sin(phi2)];
   const pts = [...adaptive(inner, Math.PI / 2, -Math.PI / 2, tol), inner(-Math.PI / 2), ...adaptive(outer, -Math.PI / 2, Math.PI / 2, tol), outer(Math.PI / 2)];
   return dedupe(pts);
 }
@@ -2047,7 +2480,7 @@ function prongPlaces(stone, outline, count) {
     const a = Math.atan2(p[0], p[1]);
     return a < 0 ? a + 2 * Math.PI : a;
   };
-  return places.map(({ at: at2, out }) => ({ at: at2, out })).sort((a, b) => angle(a.at) - angle(b.at));
+  return places.map(({ at: at3, out }) => ({ at: at3, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
 function prongPlacesAround(outline, count) {
   const n = outline.length;
@@ -2303,7 +2736,7 @@ function blendSurface(mesh, blends, scale) {
     const seenEdge = /* @__PURE__ */ new Set();
     const pts = new Float32Array(3 * 7 * tris.length);
     let n = 0;
-    const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
+    const at3 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
     const add = (x, y, z, nrm) => {
       projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
@@ -2315,7 +2748,7 @@ function blendSurface(mesh, blends, scale) {
     };
     for (const t of tris) {
       const ia = T[t * 3], ib = T[t * 3 + 1], ic = T[t * 3 + 2];
-      const a = at2(ia), bb = at2(ib), c = at2(ic);
+      const a = at3(ia), bb = at3(ib), c = at3(ic);
       const ux = bb[0] - a[0], uy = bb[1] - a[1], uz = bb[2] - a[2];
       const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -2325,7 +2758,7 @@ function blendSurface(mesh, blends, scale) {
       for (const i of [ia, ib, ic]) {
         if (seenVert[i]) continue;
         seenVert[i] = 1;
-        const p = at2(i);
+        const p = at3(i);
         add(p[0], p[1], p[2], nrm);
       }
       for (const [i, j] of [
@@ -2337,7 +2770,7 @@ function blendSurface(mesh, blends, scale) {
         const key = lo * nv + hi;
         if (seenEdge.has(key)) continue;
         seenEdge.add(key);
-        const p = at2(lo), q = at2(hi);
+        const p = at3(lo), q = at3(hi);
         add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
       }
       add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
@@ -2425,6 +2858,7 @@ var PROGRAM_CALLS = [
   "prongHead",
   "bezel",
   "thicken",
+  "relief",
   // methods of a solid
   "translate",
   "rotate",
@@ -2778,10 +3212,10 @@ var ProgramLibrary = class {
         const p = this.#profile(a[0], "offset");
         const d = this.#len(a[1], "offset.distance");
         const o = this.#opts(a[2], "offset.options", ["join"]);
-        const join2 = o["join"] ?? "round";
+        const join3 = o["join"] ?? "round";
         const J = { round: "Round", square: "Square", miter: "Miter" };
-        if (!(typeof join2 === "string" && join2 in J)) throw new CallError("offset.options.join", 'is "round", "square" or "miter".');
-        return { kind: "profile", cs: A.t(p.cs.offset(d, J[join2], 2, segmentsFor(Math.max(Math.abs(d), tol), tol, 16))) };
+        if (!(typeof join3 === "string" && join3 in J)) throw new CallError("offset.options.join", 'is "round", "square" or "miter".');
+        return { kind: "profile", cs: A.t(p.cs.offset(d, J[join3], 2, segmentsFor(Math.max(Math.abs(d), tol), tol, 16))) };
       }
       case "p_add":
       case "p_subtract":
@@ -2897,6 +3331,14 @@ var ProgramLibrary = class {
         for (const k of ["radius", "round_corners"]) if (o[k] !== void 0) params[k] = this.#lenText(o[k], `thicken.${k}`);
         for (const k of ["surface", "axis"]) if (o[k] !== void 0) params[k] = o[k];
         return this.#fromNode({ id, op: "thicken", params }, "thicken", id);
+      }
+      case "relief": {
+        const o = this.#opts(a[0], "relief", ["id", "image", "width", "height", "depth", "mode", "surface", "radius", "base", "smoothing"]);
+        const id = o["id"] === void 0 ? this.#id("relief") : nameId(o["id"], "relief.id");
+        const params = {};
+        for (const k of ["width", "height", "depth", "radius", "base", "smoothing"]) if (o[k] !== void 0) params[k] = this.#lenText(o[k], `relief.${k}`);
+        for (const k of ["image", "mode", "surface"]) if (o[k] !== void 0) params[k] = o[k];
+        return this.#fromNode({ id, op: "relief", params }, "relief", id);
       }
     }
   }
@@ -3029,9 +3471,9 @@ var ProgramLibrary = class {
     const amax = Math.max(...areas);
     const wide = areas.map((x, i) => x >= (1 - 1e-4) * amax ? i : -1).filter((i) => i >= 0);
     const lo = wide[0], hi = wide[wide.length - 1];
-    const at2 = (i) => i === 0 ? zMin : i === N - 1 ? zMax : zMin + (i + 0.5) * (zMax - zMin) / N;
-    const zGb = at2(lo);
-    const zGt = lo === hi ? zGb : at2(hi);
+    const at3 = (i) => i === 0 ? zMin : i === N - 1 ? zMax : zMin + (i + 0.5) * (zMax - zMin) / N;
+    const zGb = at3(lo);
+    const zGt = lo === hi ? zGb : at3(hi);
     const pavilion = zGb - zMin, girdle = zGt - zGb, crown = zMax - zGt;
     if (!(crown > 0.05)) throw new CallError("stone", "the stone has no crown above its widest place; a setting holds a stone over its crown.");
     const mesh = A.t(r.m.hull()).getMesh();
@@ -3292,6 +3734,7 @@ var PRELUDE = String.raw`(function (bridge) {
     prongHead: (o) => call('prongHead', [o]),
     bezel: (o) => call('bezel', [o]),
     thicken: (o) => call('thicken', [o]),
+    relief: (o) => call('relief', [o]),
     translate: (s, ...a) => call('translate', [s, ...a]),
     rotate: (s, ...a) => call('rotate', [s, ...a]),
     mirror: (s, p) => call('mirror', [s, p]),
@@ -3396,6 +3839,7 @@ async function main() {
   const blob = blobber(blobs);
   const runs = [];
   let logs = [];
+  useGivenImages(new Map(Object.entries(req.images ?? {}).map(([name, b64]) => [name, Buffer.from(b64, "base64")])));
   for (const run of req.runs) {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail("time", "the program ran past its time limit", null, logs);

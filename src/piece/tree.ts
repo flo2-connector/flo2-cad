@@ -13,6 +13,8 @@
 import { CallError, at } from '../errors.js';
 import { METAL_IDS, METALS, type MetalId } from '../metals.js';
 import { anyQuantity, caratText, lengthMm, looksLikeQuantity, percent, ringInnerDiameterMm, type RingSize } from '../units.js';
+import { MAX_IMAGE_SIDE } from '../files/png-read.js';
+import { RELIEF_DEFAULT_SMOOTHING_MM, RELIEF_MAX_SLOPE_DEG, reliefSpec } from '../library/relief.js';
 import {
   CYLINDER_MAX_DEG,
   MIN_RADIUS_PER_THICKNESS,
@@ -72,6 +74,7 @@ export const OPERATIONS = [
   'box',
   'torus',
   'thicken',
+  'relief',
 ] as const;
 export type Operation = (typeof OPERATIONS)[number];
 
@@ -555,7 +558,7 @@ function validateNode(v: unknown, path: string, ids: Set<string>, inBlend: boole
   if (op && ['union', 'difference', 'intersection', 'smooth_union', 'translate', 'rotate', 'mirror'].includes(op) && kids === 0) {
     throw new CallError(at(path, 'children'), `a ${op} needs at least one child.`);
   }
-  if (op && ['sphere', 'cylinder', 'box', 'torus', 'sweep', 'revolve', 'extrude', 'thicken'].includes(op) && kids > 0) {
+  if (op && ['sphere', 'cylinder', 'box', 'torus', 'sweep', 'revolve', 'extrude', 'thicken', 'relief'].includes(op) && kids > 0) {
     throw new CallError(at(path, 'children'), `a ${op} is a shape and has no children.`);
   }
 }
@@ -658,6 +661,7 @@ export const OP_PARAMS: Readonly<Record<Operation, Readonly<Record<string, 'leng
   revolve: { points: 'points2', degrees: 'angle' },
   sweep: { radius: 'length', path: 'points3', closed: 'boolean' },
   thicken: { outline: 'points2', thickness: 'length', surface: 'word', radius: 'length', axis: 'word', round_corners: 'length' },
+  relief: { image: 'word', width: 'length', height: 'length', depth: 'length', mode: 'word', surface: 'word', radius: 'length', base: 'length', smoothing: 'length' },
 };
 
 /**
@@ -681,6 +685,8 @@ export const OP_HELP: Readonly<Record<Operation, string>> = {
   sweep: 'a round wire of `radius` along the 3D `path` [["x mm", "y mm", "z mm"], ...]; `closed` joins its ends.',
   thicken:
     'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60°). The outline stays within 90° round a sphere and 150° round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.',
+  relief:
+    `a picture laid onto the piece as a relief: \`image\` names a grayscale HEIGHT image, a PNG kept beside the piece (on flo2, a file the design keeps, by the name list_my_design_files gives), white highest, black lowest (RGB is read by its brightness; transparent is lowest), at most ${MAX_IMAGE_SIDE} pixels a side. It covers \`width\` × \`height\` (the image is stretched to fill it) and stands \`depth\` at its highest above its surface ("mode": "raised", the default) or is carved that deep into it ("sunk"). It is one solid from its back, \`base\` below its surface (default 1 mm; a sunk relief's default is its depth + 1 mm), to its face. "surface": "flat" (the default) lies in the xy plane, centred on the origin, facing +z, the image's top towards +y: lay it on a plate with translate. "surface": "cylinder" wraps it round the y axis, its surface at \`radius\`, centred on the top (+z), width measured round the band: set radius to the band's outer radius to lay it on the band's top. A raised relief joins the metal its back is buried in; a sunk one is carved into its own back, so make it the face itself (a signet's plate, or a panel on the band). The picture is smoothed so no ridge or hollow is finer than \`smoothing\` (default ${RELIEF_DEFAULT_SMOOTHING_MM} mm, the casting detail limit, and never less) and no slope is steeper than ${RELIEF_MAX_SLOPE_DEG}°, so a deeper relief is a softer one. The engine does not invent detail: a convincing face needs a good height image. The check measures it like any metal and names it by its id.`,
 };
 
 const REQUIRED_OP_PARAMS: Readonly<Partial<Record<Operation, readonly string[]>>> = {
@@ -694,6 +700,7 @@ const REQUIRED_OP_PARAMS: Readonly<Partial<Record<Operation, readonly string[]>>
   revolve: ['points'],
   sweep: ['radius', 'path'],
   thicken: ['outline', 'thickness'],
+  relief: ['image', 'width', 'height', 'depth'],
 };
 
 function validateOp(op: Operation, p: Record<string, unknown>, path: string): void {
@@ -725,6 +732,7 @@ function validateOp(op: Operation, p: Record<string, unknown>, path: string): vo
     }
   }
   if (op === 'thicken') validateThicken(p, path);
+  if (op === 'relief') reliefSpec(p, path);
 }
 
 /**

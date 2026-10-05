@@ -1694,9 +1694,9 @@ var Doc = class {
       return;
     }
     const content = arg2;
-    const lines = content.split("\n").filter((x) => x);
-    const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
-    const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
+    const lines2 = content.split("\n").filter((x) => x);
+    const minIndent = Math.min(...lines2.map((x) => x.length - x.trimStart().length));
+    const dedented = lines2.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
     for (const line of dedented) {
       this.content.push(line);
     }
@@ -11660,9 +11660,9 @@ var Protocol = class {
   * `Server` instances never receive `input_required` responses on their
   * outbound legs and leave the base behavior in place.
   */
-  _resolveNonCompleteResult(decoded, flow) {
-    return Promise.reject(new SdkError(SdkErrorCode.UnsupportedResultType, `Unsupported result type '${decoded.kind}' for ${flow.request.method}`, {
-      resultType: decoded.kind,
+  _resolveNonCompleteResult(decoded2, flow) {
+    return Promise.reject(new SdkError(SdkErrorCode.UnsupportedResultType, `Unsupported result type '${decoded2.kind}' for ${flow.request.method}`, {
+      resultType: decoded2.kind,
       method: flow.request.method
     }));
   }
@@ -12098,15 +12098,15 @@ var Protocol = class {
         if (options?.signal?.aborted) return;
         responseReceived = true;
         if (response instanceof Error) return reject(response);
-        let decoded;
+        let decoded2;
         try {
-          decoded = codec.decodeResult(request.method, response.result);
+          decoded2 = codec.decodeResult(request.method, response.result);
         } catch (error2) {
           return reject(error2 instanceof Error ? error2 : new Error(String(error2)));
         }
-        if (decoded.kind === "invalid") return reject(decoded.error);
-        if (decoded.kind === "input_required") {
-          if (options?.allowInputRequired === true) return resolve(manualInputRequiredValue(decoded));
+        if (decoded2.kind === "invalid") return reject(decoded2.error);
+        if (decoded2.kind === "input_required") {
+          if (options?.allowInputRequired === true) return resolve(manualInputRequiredValue(decoded2));
           const flow = {
             codec,
             request,
@@ -12118,9 +12118,9 @@ var Protocol = class {
               params
             }, resultSchema, legOptions)
           };
-          return resolve(this._resolveNonCompleteResult(decoded, flow));
+          return resolve(this._resolveNonCompleteResult(decoded2, flow));
         }
-        const result = decoded.result;
+        const result = decoded2.result;
         validateStandardSchema(resultSchema, result).then((parseResult) => {
           if (parseResult.success) resolve(parseResult.data);
           else reject(new SdkError(SdkErrorCode.InvalidResult, `Invalid result for ${request.method}: ${parseResult.error}`));
@@ -12309,12 +12309,12 @@ function partitionInputResponses(inputResponses) {
     droppedKeys
   };
 }
-function manualInputRequiredValue(decoded) {
+function manualInputRequiredValue(decoded2) {
   return {
     resultType: "input_required",
-    inputRequests: decoded.inputRequests,
-    ...decoded.requestState !== void 0 && { requestState: decoded.requestState },
-    ...decoded._meta !== void 0 && { _meta: decoded._meta }
+    inputRequests: decoded2.inputRequests,
+    ...decoded2.requestState !== void 0 && { requestState: decoded2.requestState },
+    ...decoded2._meta !== void 0 && { _meta: decoded2._meta }
   };
 }
 var require_content_type = /* @__PURE__ */ __commonJSMin(((exports) => {
@@ -14951,11 +14951,11 @@ var require_compile = /* @__PURE__ */ __commonJSMin(((exports) => {
     const _sch = getCompilingSchema.call(this, sch);
     if (_sch) return _sch;
     const rootId = (0, resolve_1.getFullPath)(this.opts.uriResolver, sch.root.baseId);
-    const { es5, lines } = this.opts.code;
+    const { es5, lines: lines2 } = this.opts.code;
     const { ownProperties } = this.opts;
     const gen = new codegen_1.CodeGen(this.scope, {
       es5,
-      lines,
+      lines: lines2,
       ownProperties
     });
     let _ValidationError;
@@ -15853,12 +15853,12 @@ var require_core$3 = /* @__PURE__ */ __commonJSMin(((exports) => {
         ...opts,
         ...requiredOptions(opts)
       };
-      const { es5, lines } = this.opts.code;
+      const { es5, lines: lines2 } = this.opts.code;
       this.scope = new codegen_2.ValueScope({
         scope: {},
         prefixes: EXT_SCOPE_NAMES,
         es5,
-        lines
+        lines: lines2
       });
       this.logger = getLogger(opts.logger);
       const formatOpt = opts.validateFormats;
@@ -19777,8 +19777,8 @@ var LegacyInputRequiredShim = class {
         }
       };
       if (requestState !== void 0) {
-        const decoded = await this._host.verifyRequestState(requestState, ctxNext, method);
-        if (decoded !== void 0) ctxNext = withRequestStateValue(ctxNext, decoded);
+        const decoded2 = await this._host.verifyRequestState(requestState, ctxNext, method);
+        if (decoded2 !== void 0) ctxNext = withRequestStateValue(ctxNext, decoded2);
       }
       const next = await handler(request, ctxNext);
       if (!isInputRequiredResult(next)) return next;
@@ -20026,8 +20026,8 @@ var Server = class extends Protocol {
     if (rawRequestState !== void 0 && typeof rawRequestState !== "string") throw new ProtocolError(ProtocolErrorCode.InvalidParams, "Invalid or expired requestState", { reason: "invalid_request_state" });
     let ctxForHandler = ctx;
     if (typeof rawRequestState === "string") {
-      const decoded = await this._verifyRequestState(rawRequestState, ctx, method);
-      if (decoded !== void 0) ctxForHandler = withRequestStateValue(ctx, decoded);
+      const decoded2 = await this._verifyRequestState(rawRequestState, ctx, method);
+      if (decoded2 !== void 0) ctxForHandler = withRequestStateValue(ctx, decoded2);
     }
     let result;
     try {
@@ -21595,7 +21595,7 @@ function at(path, key) {
 }
 
 // src/engine.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 
 // src/checker/geom.ts
 var sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -22430,9 +22430,9 @@ var BallCandidates = class {
       start[b + 1] = start[b + 1] + start[b];
       floor[b] = b === 0 ? -Infinity : lo + (b - 1e-6) * width;
     }
-    const at2 = start.slice(0, BUCKETS);
+    const at3 = start.slice(0, BUCKETS);
     for (let i = 0; i < k; i++) {
-      const j = at2[tmp.b[i]]++;
+      const j = at3[tmp.b[i]]++;
       this.tri[j] = tmp.tri[i];
       this.tau[j] = tmp.tau[i];
       this.alpha[j] = tmp.alpha[i];
@@ -22550,8 +22550,8 @@ function whereOf(p, decl, what, centre) {
   const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, ...a.meets ? { meets: a.meets } : {}, point_mm: pt(p) };
   if (a.part === "added shape") return { ...where, description: `${what} in the added shape ${quoteIds(a.feature)}` };
   if (a.part === "sheet") return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` };
-  const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
-  return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
+  const at3 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
+  return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at3}` };
 }
 function onBlend(p, label, what) {
   const clock = clockAt(p[0], p[1]);
@@ -22760,16 +22760,16 @@ function prongEntry(bvh, prongs, L3) {
     const [ax, ay] = pr.axis;
     const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
     const region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
-    const at2 = (z) => {
+    const at3 = (z) => {
       const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
       const ins = largestCircleIn(segs, region);
       if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
     };
     const steps = Math.max(8, Math.ceil((pr.sectionToZ - pr.sectionFromZ) / 0.1));
-    for (let i = 0; i <= steps; i++) at2(pr.sectionFromZ + (pr.sectionToZ - pr.sectionFromZ) * i / steps);
+    for (let i = 0; i <= steps; i++) at3(pr.sectionFromZ + (pr.sectionToZ - pr.sectionFromZ) * i / steps);
     const zc = worst?.z;
     if (zc !== void 0) {
-      for (let dz = -0.1; dz <= 0.1001; dz += 0.02) if (zc + dz >= pr.sectionFromZ && zc + dz <= pr.sectionToZ) at2(zc + dz);
+      for (let dz = -0.1; dz <= 0.1001; dz += 0.02) if (zc + dz >= pr.sectionFromZ && zc + dz <= pr.sectionToZ) at3(zc + dz);
     }
     if (!worst) throw new Error(`no section of ${pr.label} could be measured`);
     const w = worst;
@@ -22805,17 +22805,17 @@ function gripEntry(bvh, decl, L3) {
   const P = bvh.pos;
   for (const pr of decl.prongs) {
     let reach = -Infinity;
-    let at2 = [pr.axis[0], pr.axis[1], s.girdleTopZ];
+    let at3 = [pr.axis[0], pr.axis[1], s.girdleTopZ];
     for (let i = 0; i < P.length; i += 3) {
       const x = P[i], y = P[i + 1], z = P[i + 2];
       if (z < s.girdleTopZ + 0.02 || Math.hypot(x - pr.axis[0], y - pr.axis[1]) > pr.nominalDiameter / 2 + 0.05) continue;
       const inset = signedInset(s.outline, x, y);
       if (inset > reach) {
         reach = inset;
-        at2 = [x, y, z];
+        at3 = [x, y, z];
       }
     }
-    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at2), description: `${pr.label}, at ${pr.clock}` } });
+    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at3), description: `${pr.label}, at ${pr.clock}` } });
   }
   const failing = results.filter((r) => r.value < L3.gripMin);
   const least = results.reduce((a, b) => b.value < a.value ? b : a);
@@ -22873,13 +22873,13 @@ function bezelLipEntry(bvh, decl, L3) {
   const bz = decl.bezel, st = decl.stone;
   const P = bvh.pos;
   let top = -Infinity;
-  let at2 = [0, 0, 0];
+  let at3 = [0, 0, 0];
   for (let i = 0; i < P.length; i += 3) {
     const x = P[i], y = P[i + 1], z = P[i + 2];
     if (!inPolygon(bz.outer, x, y, 0.05)) continue;
     if (z > top) {
       top = z;
-      at2 = [x, y, z];
+      at3 = [x, y, z];
     }
   }
   const lip = top - st.girdleTopZ;
@@ -22892,7 +22892,7 @@ function bezelLipEntry(bvh, decl, L3) {
     result: ok ? "pass" : "fail",
     measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
     value: r3(lip),
-    where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
+    where: { part: "head", feature: "bezel", point_mm: pt(at3), description: "the top of the bezel, measured from the top of the girdle" },
     method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
   };
 }
@@ -23411,6 +23411,452 @@ function caratText(v, path) {
   return `${num} ct`;
 }
 
+// src/files/png-read.ts
+import { crc32 as crc322, inflateSync } from "node:zlib";
+var MAX_IMAGE_SIDE = 2048;
+var MAX_IMAGE_BYTES = 16 * 2 ** 20;
+var ImageRefused = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ImageRefused";
+  }
+};
+var SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+var SAVE_AS = "Save it as an 8-bit grayscale PNG (or 8-bit RGB or RGBA), not interlaced.";
+var COLOUR = {
+  0: { name: "grayscale", channels: 1 },
+  2: { name: "RGB", channels: 3 },
+  4: { name: "grayscale with alpha", channels: 2 },
+  6: { name: "RGBA", channels: 4 }
+};
+function readHeightPng(bytes) {
+  if (bytes.length > MAX_IMAGE_BYTES) throw new ImageRefused(`the file is ${(bytes.length / 2 ** 20).toFixed(1)} MB; a height image may be at most ${MAX_IMAGE_BYTES / 2 ** 20} MB.`);
+  if (bytes.length < 8 || SIGNATURE.some((b, i) => bytes[i] !== b)) throw new ImageRefused(`it is not a PNG file (its first bytes are not a PNG's signature). ${SAVE_AS}`);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let off = 8;
+  let header = null;
+  const idat = [];
+  let ended = false;
+  while (off < bytes.length) {
+    if (off + 12 > bytes.length) throw new ImageRefused("the file is cut short (a chunk runs past its end).");
+    const len2 = view.getUint32(off);
+    const type = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+    if (!/^[A-Za-z]{4}$/.test(type)) throw new ImageRefused("the file is damaged (a chunk has no readable name).");
+    if (off + 12 + len2 > bytes.length) throw new ImageRefused(`the file is cut short (its ${type} chunk runs past its end).`);
+    const data = bytes.subarray(off + 8, off + 8 + len2);
+    if (crc322(bytes.subarray(off + 4, off + 8 + len2)) !== view.getUint32(off + 8 + len2)) throw new ImageRefused(`the file is damaged (its ${type} chunk fails its checksum).`);
+    off += 12 + len2;
+    if (type === "IHDR") {
+      if (header || len2 !== 13) throw new ImageRefused("the file is damaged (its header chunk is not one 13-byte IHDR).");
+      const d = new DataView(data.buffer, data.byteOffset, data.byteLength);
+      header = { width: d.getUint32(0), height: d.getUint32(4), depth: data[8], colour: data[9], interlace: data[12] };
+      if (data[10] !== 0 || data[11] !== 0) throw new ImageRefused("the file uses a compression or filter method PNG does not define.");
+    } else if (!header) {
+      throw new ImageRefused("the file is damaged (its first chunk is not its header).");
+    } else if (type === "IDAT") {
+      idat.push(data);
+    } else if (type === "IEND") {
+      ended = true;
+      break;
+    } else if (type !== "PLTE" && (type.charCodeAt(0) & 32) === 0) {
+      throw new ImageRefused(`the file holds a ${type} chunk, which this engine does not read. ${SAVE_AS}`);
+    }
+  }
+  if (!header) throw new ImageRefused("the file has no header chunk.");
+  if (!ended) throw new ImageRefused("the file is cut short (it has no end chunk).");
+  const { width, height, depth, colour, interlace } = header;
+  if (colour === 3) throw new ImageRefused(`it is a palette (indexed-colour) PNG. ${SAVE_AS}`);
+  const kind = COLOUR[colour];
+  if (!kind) throw new ImageRefused(`its colour type (${colour}) is not one PNG defines.`);
+  if (depth !== 8) throw new ImageRefused(`it has ${depth} bits a channel; this engine reads 8. ${SAVE_AS}`);
+  if (interlace !== 0) throw new ImageRefused(`it is interlaced (Adam7). ${SAVE_AS}`);
+  if (width < 2 || height < 2) throw new ImageRefused(`it is ${width} \xD7 ${height} pixels; a height image needs at least 2 \xD7 2.`);
+  if (width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE) throw new ImageRefused(`it is ${width} \xD7 ${height} pixels; a height image may be at most ${MAX_IMAGE_SIDE} pixels a side. Scale it down.`);
+  if (!idat.length) throw new ImageRefused("the file holds no image data.");
+  const ch = kind.channels;
+  const stride = width * ch;
+  const expected = height * (1 + stride);
+  let raw;
+  try {
+    raw = inflateSync(Buffer.concat(idat), { maxOutputLength: expected + 1 });
+  } catch (e) {
+    throw new ImageRefused(`its image data does not unpack${/maxOutputLength|larger than/i.test(String(e)) ? " to the size its header states" : ""} (the file is damaged).`);
+  }
+  if (raw.length !== expected) throw new ImageRefused(`its image data unpacks to ${raw.length} bytes, not the ${expected} its header states (the file is damaged).`);
+  const px = new Uint8Array(height * stride);
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (1 + stride)];
+    const src = y * (1 + stride) + 1;
+    const row = y * stride, prev = row - stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= ch ? px[row + x - ch] : 0;
+      const b = y > 0 ? px[prev + x] : 0;
+      const c = x >= ch && y > 0 ? px[prev + x - ch] : 0;
+      let pred;
+      switch (f) {
+        case 0:
+          pred = 0;
+          break;
+        case 1:
+          pred = a;
+          break;
+        case 2:
+          pred = b;
+          break;
+        case 3:
+          pred = a + b >> 1;
+          break;
+        case 4: {
+          const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          pred = pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+          break;
+        }
+        default:
+          throw new ImageRefused(`row ${y + 1} uses filter ${f}, which PNG does not define (the file is damaged).`);
+      }
+      px[row + x] = raw[src + x] + pred & 255;
+    }
+  }
+  const values = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const p = i * ch;
+    const lum = ch <= 2 ? px[p] : 0.2126 * px[p] + 0.7152 * px[p + 1] + 0.0722 * px[p + 2];
+    const alpha = ch === 2 ? px[p + 1] / 255 : ch === 4 ? px[p + 3] / 255 : 1;
+    values[i] = lum / 255 * alpha;
+  }
+  return { width, height, values };
+}
+
+// src/library/relief.ts
+import { readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { join as join2 } from "node:path";
+var RELIEF_MODES = ["raised", "sunk"];
+var RELIEF_SURFACES = ["flat", "cylinder"];
+var RELIEF_RANGE = {
+  size: [1, 100],
+  depth: [0.05, 5],
+  base: [0.2, 20],
+  smoothing: [0.35, 5],
+  radius: [3, 100]
+};
+var RELIEF_DEFAULT_SMOOTHING_MM = 0.35;
+var RELIEF_MAX_SLOPE_DEG = 45;
+var RELIEF_MAX_CELLS = 6e5;
+var IMAGE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,123}\.png$/i;
+var at2 = (path, k) => `${path}.${k}`;
+function reliefSpec(p, path) {
+  const image = p["image"];
+  if (typeof image !== "string" || !IMAGE_NAME.test(image)) {
+    throw new CallError(at2(path, "image"), `the height image's file name, a PNG kept beside the piece, e.g. "lion-face.png" (letters, digits, ".", "_" and "-", no folder); got ${JSON.stringify(image)}.`);
+  }
+  const len2 = (k, [lo, hi], dflt) => {
+    if (p[k] === void 0) {
+      if (dflt === void 0) throw new CallError(at2(path, k), `a relief needs "${k}".`);
+      return dflt;
+    }
+    const x = lengthMm(p[k], at2(path, k));
+    if (!(x >= lo && x <= hi)) throw new CallError(at2(path, k), `${x} mm is outside what the library builds (${lo} to ${hi} mm).`);
+    return x;
+  };
+  const word = (k, allowed, dflt) => {
+    const v = p[k] ?? dflt;
+    if (!allowed.includes(v)) throw new CallError(at2(path, k), `must be ${allowed.map((a) => `"${a}"`).join(" or ")}; got ${JSON.stringify(p[k])}.`);
+    return v;
+  };
+  const width = len2("width", RELIEF_RANGE.size);
+  const height = len2("height", RELIEF_RANGE.size);
+  const depth = len2("depth", RELIEF_RANGE.depth);
+  const mode = word("mode", RELIEF_MODES, "raised");
+  const surface = word("surface", RELIEF_SURFACES, "flat");
+  if (p["smoothing"] !== void 0 && lengthMm(p["smoothing"], at2(path, "smoothing")) < RELIEF_RANGE.smoothing[0]) {
+    throw new CallError(at2(path, "smoothing"), `${lengthMm(p["smoothing"], at2(path, "smoothing"))} mm is finer than a casting holds: the least is the casting detail limit, ${RELIEF_RANGE.smoothing[0]} mm. Leave it out for that.`);
+  }
+  const smoothing = len2("smoothing", RELIEF_RANGE.smoothing, RELIEF_DEFAULT_SMOOTHING_MM);
+  const base = len2("base", RELIEF_RANGE.base, mode === "sunk" ? depth + 1 : 1);
+  if (mode === "sunk" && base < depth + 0.1) {
+    throw new CallError(at2(path, "base"), `a sunk relief is carved into its own back, so its base (${base} mm) must be more than its depth (${depth} mm): at least ${Math.round((depth + 0.1) * 100) / 100} mm, and the casting needs the wall minimum (0.8 mm) under the deepest place.`);
+  }
+  let radius = 0;
+  if (surface === "cylinder") {
+    radius = len2("radius", RELIEF_RANGE.radius);
+    if (radius - base < 0.5) throw new CallError(at2(path, "base"), `the back would lie ${Math.round((radius - base) * 100) / 100} mm from the axis; keep base under the radius less 0.5 mm (${Math.round((radius - 0.5) * 100) / 100} mm).`);
+    if (width / radius > Math.PI) throw new CallError(at2(path, "width"), `${width} mm reaches more than half way round a radius of ${radius} mm (${Math.round(Math.PI * radius * 100) / 100} mm). Use a narrower relief.`);
+  } else if (p["radius"] !== void 0) {
+    throw new CallError(at2(path, "radius"), 'a flat relief has no radius; leave it out, or set "surface" to "cylinder".');
+  }
+  return { image, width, height, depth, mode, surface, radius, base, smoothing };
+}
+function reliefSigma(s) {
+  return Math.max(s.smoothing / 2, s.depth / (Math.sqrt(2 * Math.PI) * Math.tan(RELIEF_MAX_SLOPE_DEG * Math.PI / 180)));
+}
+function reliefSpacing(s, tol) {
+  const sigma = reliefSigma(s);
+  let curvature = 0.968 * s.depth / (sigma * sigma);
+  if (s.surface === "cylinder") curvature += 1 / (s.radius - s.base);
+  return Math.min(sigma / 2, 0.5, Math.sqrt(8 * 0.9 * tol / curvature));
+}
+var given = null;
+var decoded = /* @__PURE__ */ new Map();
+function imageFolder() {
+  return process.env["FLO2_CAD_IMAGE_DIR"] || process.cwd();
+}
+function imageBytes(name, path) {
+  if (!IMAGE_NAME.test(name)) throw new CallError(path, `"${name}" is not a plain PNG file name.`);
+  if (given) {
+    const b = given.get(name);
+    if (!b) throw new CallError(path, `no height image called "${name}" was found beside the piece. Write the name exactly as the file is kept, in quotes, so the engine can find it before the program runs.`);
+    return b;
+  }
+  const file = join2(imageFolder(), name);
+  let size;
+  try {
+    const st = statSync(file);
+    if (!st.isFile()) throw new Error("not a file");
+    size = st.size;
+  } catch {
+    throw new CallError(path, `no height image called "${name}" was found beside the piece${process.env["FLO2_CAD_IMAGE_DIR"] ? "" : " (the engine reads images from its working folder, or from FLO2_CAD_IMAGE_DIR)"}. On flo2, keep the PNG in the design and give its name as list_my_design_files shows it.`);
+  }
+  if (size > MAX_IMAGE_BYTES) throw new CallError(path, `"${name}" is ${(size / 2 ** 20).toFixed(1)} MB; a height image may be at most ${MAX_IMAGE_BYTES / 2 ** 20} MB.`);
+  return readFileSync(file);
+}
+function heightImage(name, path) {
+  const bytes = imageBytes(name, path);
+  const sha2562 = createHash("sha256").update(bytes).digest("hex");
+  let image = decoded.get(sha2562);
+  if (!image) {
+    try {
+      image = readHeightPng(bytes);
+    } catch (e) {
+      if (e instanceof ImageRefused) throw new CallError(path, `"${name}" cannot be read as a height image: ${e.message}`);
+      throw e;
+    }
+    if (decoded.size >= 8) decoded.delete(decoded.keys().next().value);
+    decoded.set(sha2562, image);
+  }
+  return { image, sha256: sha2562 };
+}
+function phi(z) {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const erf = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return z >= 0 ? 0.5 * (1 + erf) : 0.5 * (1 - erf);
+}
+function axisWeights(at3, edges, sigma) {
+  const n = edges.length - 1;
+  const reach = 4 * sigma;
+  const lo = (x) => {
+    let a = 0, b = n - 1;
+    while (a < b) {
+      const m = a + b >> 1;
+      if (edges[m + 1] < x) a = m + 1;
+      else b = m;
+    }
+    return a;
+  };
+  const from = new Int32Array(at3.length);
+  let k = 1;
+  const spans = [];
+  for (let i = 0; i < at3.length; i++) {
+    const c0 = lo(at3[i] - reach), c1 = lo(at3[i] + reach);
+    spans.push([c0, c1]);
+    from[i] = c0;
+    k = Math.max(k, c1 - c0 + 1);
+  }
+  const w = new Float64Array(at3.length * k);
+  for (let i = 0; i < at3.length; i++) {
+    const x = at3[i];
+    const [c0, c1] = spans[i];
+    let sum = 0;
+    for (let c = c0; c <= c1; c++) {
+      const hi = c === n - 1 ? 1 : phi((edges[c + 1] - x) / sigma);
+      const lo2 = c === 0 ? 0 : phi((edges[c] - x) / sigma);
+      const v = Math.max(0, hi - lo2);
+      w[i * k + (c - c0)] = v;
+      sum += v;
+    }
+    if (sum > 0) for (let c = c0; c <= c1; c++) w[i * k + (c - c0)] /= sum;
+  }
+  return { from, k, w };
+}
+function coarsen(img, f) {
+  const cols = Math.ceil(img.width / f), rows = Math.ceil(img.height / f);
+  const values = new Float64Array(cols * rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let s = 0, n = 0;
+      for (let y = r * f; y < Math.min(img.height, (r + 1) * f); y++) {
+        for (let x = c * f; x < Math.min(img.width, (c + 1) * f); x++) {
+          s += img.values[y * img.width + x];
+          n++;
+        }
+      }
+      values[r * cols + c] = s / n;
+    }
+  }
+  const colEdges = Array.from({ length: cols + 1 }, (_, c) => Math.min(img.width, c * f));
+  const rowEdges = Array.from({ length: rows + 1 }, (_, r) => Math.min(img.height, r * f));
+  return { cols, rows, values, colEdges, rowEdges };
+}
+function smoothedGrid(img, width, height, sigma, us, vs) {
+  const px = width / img.width, py = height / img.height;
+  const f = Math.max(1, Math.floor(sigma / (2 * Math.max(px, py))));
+  const g = coarsen(img, f);
+  const colEdges = Float64Array.from(g.colEdges, (c) => -width / 2 + c * px);
+  const rowEdges = Float64Array.from(g.rowEdges, (r) => r * py);
+  const wx = axisWeights(us, colEdges, sigma);
+  const vDown = Float64Array.from(vs, (v) => height / 2 - v);
+  const wy = axisWeights(vDown, rowEdges, sigma);
+  const nu = us.length, nv = vs.length;
+  const rowsAtU = new Float64Array(g.rows * nu);
+  for (let r = 0; r < g.rows; r++) {
+    const row = r * g.cols;
+    for (let i = 0; i < nu; i++) {
+      const c0 = wx.from[i];
+      let s = 0;
+      for (let t = 0; t < wx.k; t++) {
+        const c = c0 + t;
+        if (c >= g.cols) break;
+        s += wx.w[i * wx.k + t] * g.values[row + c];
+      }
+      rowsAtU[r * nu + i] = s;
+    }
+  }
+  const out = new Float32Array(nu * nv);
+  for (let j = 0; j < nv; j++) {
+    const r0 = wy.from[j];
+    for (let i = 0; i < nu; i++) {
+      let s = 0;
+      for (let t = 0; t < wy.k; t++) {
+        const r = r0 + t;
+        if (r >= g.rows) break;
+        s += wy.w[j * wy.k + t] * rowsAtU[r * nu + i];
+      }
+      out[j * nu + i] = Math.min(1, Math.max(0, s));
+    }
+  }
+  return out;
+}
+function lines(a, b, n) {
+  return Float64Array.from({ length: n + 1 }, (_, i) => a + (b - a) * i / n);
+}
+function reliefCells(s, tol) {
+  const h = reliefSpacing(s, tol);
+  return { nx: Math.max(2, Math.ceil(s.width / h)), ny: Math.max(2, Math.ceil(s.height / h)) };
+}
+function buildRelief(k, A, n, tol) {
+  const path = `${n.id}.params`;
+  const s = reliefSpec(n.params ?? {}, path);
+  const { nx, ny } = reliefCells(s, tol);
+  if (nx * ny > RELIEF_MAX_CELLS) {
+    throw new CallError(path, `a ${s.width} \xD7 ${s.height} mm relief ${s.depth} mm deep needs ${nx * ny} grid cells at the casting tolerance, more than the ${RELIEF_MAX_CELLS} one relief may have. Make it smaller, shallower, or smoother (a larger "smoothing").`);
+  }
+  const { image } = heightImage(s.image, `${path}.image`);
+  const sigma = reliefSigma(s);
+  const us = lines(-s.width / 2, s.width / 2, nx), vs = lines(-s.height / 2, s.height / 2, ny);
+  const field = smoothedGrid(image, s.width, s.height, sigma, us, vs);
+  const sign = s.mode === "raised" ? 1 : -1;
+  const put = (out, o, u, v, w) => {
+    if (s.surface === "flat") {
+      out[o] = Math.fround(u);
+      out[o + 1] = Math.fround(v);
+      out[o + 2] = Math.fround(w);
+    } else {
+      const th = u / s.radius, r = s.radius + w;
+      out[o] = Math.fround(r * Math.sin(th));
+      out[o + 1] = Math.fround(v);
+      out[o + 2] = Math.fround(r * Math.cos(th));
+    }
+  };
+  const top = (nx + 1) * (ny + 1);
+  const T = (i, j) => j * (nx + 1) + i;
+  const ring = [];
+  for (let i = 0; i <= nx; i++) ring.push([i, 0]);
+  for (let j = 1; j <= ny; j++) ring.push([nx, j]);
+  for (let i = nx - 1; i >= 0; i--) ring.push([i, ny]);
+  for (let j = ny - 1; j >= 1; j--) ring.push([0, j]);
+  const backIndex = /* @__PURE__ */ new Map();
+  ring.forEach(([i, j], q) => backIndex.set(T(i, j), top + q));
+  const B = (i, j) => backIndex.get(T(i, j));
+  const centres = top + ring.length;
+  const vert = new Float32Array((centres + 2) * 3);
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) put(vert, T(i, j) * 3, us[i], vs[j], sign * s.depth * field[j * (nx + 1) + i]);
+  ring.forEach(([i, j], q) => put(vert, (top + q) * 3, us[i], vs[j], -s.base));
+  put(vert, centres * 3, (us[0] + us[1]) / 2, 0, -s.base);
+  put(vert, (centres + 1) * 3, (us[nx - 1] + us[nx]) / 2, 0, -s.base);
+  const tri = [];
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      tri.push(T(i, j), T(i + 1, j), T(i + 1, j + 1));
+      tri.push(T(i, j), T(i + 1, j + 1), T(i, j + 1));
+    }
+  }
+  const side = (a, b) => {
+    const [ta, tb, ba, bb] = [T(...a), T(...b), B(...a), B(...b)];
+    tri.push(ba, bb, tb, ba, tb, ta);
+  };
+  for (let i = 0; i < nx; i++) side([i, 0], [i + 1, 0]);
+  for (let j = 0; j < ny; j++) side([nx, j], [nx, j + 1]);
+  for (let i = nx; i > 0; i--) side([i, ny], [i - 1, ny]);
+  for (let j = ny; j > 0; j--) side([0, j], [0, j - 1]);
+  for (let i = 0; i < nx; i++) {
+    const loop = [B(i, 0), B(i + 1, 0)];
+    if (i + 1 === nx) for (let j = 1; j < ny; j++) loop.push(B(nx, j));
+    loop.push(B(i + 1, ny), B(i, ny));
+    if (i === 0) for (let j = ny - 1; j >= 1; j--) loop.push(B(0, j));
+    if (loop.length === 4) {
+      tri.push(loop[0], loop[2], loop[1], loop[0], loop[3], loop[2]);
+    } else {
+      const c = i === 0 ? centres : centres + 1;
+      for (let q = 0; q < loop.length; q++) tri.push(c, loop[(q + 1) % loop.length], loop[q]);
+    }
+  }
+  const made = A.t(new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: vert, triVerts: Uint32Array.from(tri) })));
+  const status = made.status();
+  if (status !== "NoError") throw new Error(`engine bug: the relief "${n.id}" is not a closed solid (${status})`);
+  return A.t(made.simplify(0.1 * tol));
+}
+function reliefImagesOf(root) {
+  const out = [];
+  const walk = (n) => {
+    if (n.op === "relief") {
+      const name = String((n.params ?? {})["image"]);
+      const { image, sha256: sha2562 } = heightImage(name, `${n.id}.params.image`);
+      out.push({ node: n.id, image: name, sha256: sha2562, pixels: [image.width, image.height] });
+    }
+    for (const c of n.children ?? []) walk(c);
+  };
+  walk(root);
+  return out;
+}
+var MAX_PROGRAM_IMAGES = 8;
+function imagesNamedIn(source) {
+  const names = /* @__PURE__ */ new Set();
+  for (const m of source.matchAll(/["'`]([A-Za-z0-9][A-Za-z0-9._-]{0,123}\.png)["'`]/gi)) names.add(m[1]);
+  return [...names];
+}
+function imagesForProgram(source) {
+  const out = {};
+  for (const name of imagesNamedIn(source).slice(0, MAX_PROGRAM_IMAGES)) {
+    try {
+      out[name] = Buffer.from(imageBytes(name, "image")).toString("base64");
+    } catch {
+    }
+  }
+  return out;
+}
+function programImagesReport(source) {
+  const out = [];
+  for (const name of imagesNamedIn(source).slice(0, MAX_PROGRAM_IMAGES)) {
+    try {
+      const { image, sha256: sha2562 } = heightImage(name, "image");
+      out.push({ image: name, sha256: sha2562, pixels: [image.width, image.height] });
+    } catch {
+    }
+  }
+  return out;
+}
+
 // src/library/thicken.ts
 var SURFACES = ["flat", "sphere", "cylinder"];
 var SHEET_AXES = ["x", "y"];
@@ -23576,16 +24022,16 @@ function convexSag(s, xs, ys) {
   if (s.surface === "flat") return 0;
   const R = s.radius, map = surfaceMap(s);
   const nx = xs.length - 1;
-  const at2 = [];
+  const at3 = [];
   for (let j = 0; j < ys.length; j++) {
     for (let i = 0; i <= nx; i++) {
       const p = map(xs[i], ys[j], 0).p;
-      at2.push(s.surface === "sphere" ? [p[0], p[1], p[2] - R] : s.axis === "x" ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
+      at3.push(s.surface === "sphere" ? [p[0], p[1], p[2] - R] : s.axis === "x" ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
     }
   }
   let fMin = 1;
   forEachGridTriangle(nx, ys.length - 1, (a, b, c) => {
-    fMin = Math.min(fMin, nearestOnTriangle(at2[a[1] * (nx + 1) + a[0]], at2[b[1] * (nx + 1) + b[0]], at2[c[1] * (nx + 1) + c[0]]) / R);
+    fMin = Math.min(fMin, nearestOnTriangle(at3[a[1] * (nx + 1) + a[0]], at3[b[1] * (nx + 1) + b[0]], at3[c[1] * (nx + 1) + c[0]]) / R);
   });
   return (R + s.thickness / 2) * (1 / fMin - 1);
 }
@@ -23738,7 +24184,8 @@ var OPERATIONS = [
   "cylinder",
   "box",
   "torus",
-  "thicken"
+  "thicken",
+  "relief"
 ];
 var BLENDABLE = /* @__PURE__ */ new Set(["sphere", "cylinder", "box", "torus", "sweep", "translate", "rotate", "mirror", "union", "smooth_union"]);
 var PARTS = ["ring_shank", "prong_head", "bezel"];
@@ -24138,7 +24585,7 @@ function validateNode(v, path, ids, inBlend) {
   if (op && ["union", "difference", "intersection", "smooth_union", "translate", "rotate", "mirror"].includes(op) && kids === 0) {
     throw new CallError(at(path, "children"), `a ${op} needs at least one child.`);
   }
-  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude", "thicken"].includes(op) && kids > 0) {
+  if (op && ["sphere", "cylinder", "box", "torus", "sweep", "revolve", "extrude", "thicken", "relief"].includes(op) && kids > 0) {
     throw new CallError(at(path, "children"), `a ${op} is a shape and has no children.`);
   }
 }
@@ -24228,7 +24675,8 @@ var OP_PARAMS = {
   extrude: { points: "points2", height: "length" },
   revolve: { points: "points2", degrees: "angle" },
   sweep: { radius: "length", path: "points3", closed: "boolean" },
-  thicken: { outline: "points2", thickness: "length", surface: "word", radius: "length", axis: "word", round_corners: "length" }
+  thicken: { outline: "points2", thickness: "length", surface: "word", radius: "length", axis: "word", round_corners: "length" },
+  relief: { image: "word", width: "length", height: "length", depth: "length", mode: "word", surface: "word", radius: "length", base: "length", smoothing: "length" }
 };
 var OP_HELP = {
   union: "joins its children into one solid.",
@@ -24245,7 +24693,8 @@ var OP_HELP = {
   extrude: 'a closed 2D outline `points` [["x mm", "y mm"], ...] raised `height` along z.',
   revolve: "a closed 2D profile `points` (x the radius, y the height) turned round z, all the way or `degrees`.",
   sweep: 'a round wire of `radius` along the 3D `path` [["x mm", "y mm", "z mm"], ...]; `closed` joins its ends.',
-  thicken: 'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60\xB0). The outline stays within 90\xB0 round a sphere and 150\xB0 round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.'
+  thicken: 'a thin sheet, such as a cupped or curled petal or a leaf, given a `thickness` along its surface, square to it. `outline` is the sheet laid flat, as cut from sheet metal: [["x mm", "y mm"], ...] round its edge. `surface` is "flat", "sphere" (a cup, curved equally every way) or "cylinder" (a curl, curved one way round `axis` "x" or "y"), and `radius` is how tightly it curves: smaller is deeper, at least 5 times the thickness. The surface touches the origin there and opens upward (+z), with the sheet\'s middle on it. Distances from the origin are kept along the surface; on a sphere, widths narrow a little as it curves away (84 % at 60\xB0). The outline stays within 90\xB0 round a sphere and 150\xB0 round a cylinder. `round_corners` rounds every corner of the outline to that radius. A casting needs the wall minimum (0.8 mm); the check measures each sheet square to its surface and names it, by its id, in what to thicken.',
+  relief: `a picture laid onto the piece as a relief: \`image\` names a grayscale HEIGHT image, a PNG kept beside the piece (on flo2, a file the design keeps, by the name list_my_design_files gives), white highest, black lowest (RGB is read by its brightness; transparent is lowest), at most ${MAX_IMAGE_SIDE} pixels a side. It covers \`width\` \xD7 \`height\` (the image is stretched to fill it) and stands \`depth\` at its highest above its surface ("mode": "raised", the default) or is carved that deep into it ("sunk"). It is one solid from its back, \`base\` below its surface (default 1 mm; a sunk relief's default is its depth + 1 mm), to its face. "surface": "flat" (the default) lies in the xy plane, centred on the origin, facing +z, the image's top towards +y: lay it on a plate with translate. "surface": "cylinder" wraps it round the y axis, its surface at \`radius\`, centred on the top (+z), width measured round the band: set radius to the band's outer radius to lay it on the band's top. A raised relief joins the metal its back is buried in; a sunk one is carved into its own back, so make it the face itself (a signet's plate, or a panel on the band). The picture is smoothed so no ridge or hollow is finer than \`smoothing\` (default ${RELIEF_DEFAULT_SMOOTHING_MM} mm, the casting detail limit, and never less) and no slope is steeper than ${RELIEF_MAX_SLOPE_DEG}\xB0, so a deeper relief is a softer one. The engine does not invent detail: a convincing face needs a good height image. The check measures it like any metal and names it by its id.`
 };
 var REQUIRED_OP_PARAMS = {
   smooth_union: ["radius"],
@@ -24257,7 +24706,8 @@ var REQUIRED_OP_PARAMS = {
   extrude: ["points", "height"],
   revolve: ["points"],
   sweep: ["radius", "path"],
-  thicken: ["outline", "thickness"]
+  thicken: ["outline", "thickness"],
+  relief: ["image", "width", "height", "depth"]
 };
 function validateOp(op, p, path) {
   const spec = OP_PARAMS[op];
@@ -24288,6 +24738,7 @@ function validateOp(op, p, path) {
     }
   }
   if (op === "thicken") validateThicken(p, path);
+  if (op === "relief") reliefSpec(p, path);
 }
 function validateThicken(p, path) {
   const surface = p["surface"] ?? "flat";
@@ -24750,12 +25201,12 @@ var BlendField = class {
   }
 };
 var SURFACE_REACH_MM = 0.2;
-function projectOntoSurface(f, p, d, out, at2) {
+function projectOntoSurface(f, p, d, out, at3) {
   const g = (s) => f(p[0] + s * d[0], p[1] + s * d[1], p[2] + s * d[2]);
   const put = (s) => {
-    out[at2] = p[0] + s * d[0];
-    out[at2 + 1] = p[1] + s * d[1];
-    out[at2 + 2] = p[2] + s * d[2];
+    out[at3] = p[0] + s * d[0];
+    out[at3 + 1] = p[1] + s * d[1];
+    out[at3 + 2] = p[2] + s * d[2];
   };
   const g0 = g(0);
   if (Math.abs(g0) <= 1e-9) return put(0);
@@ -24807,9 +25258,9 @@ function gradient(f, x, y, z) {
   const l = Math.hypot(g[0], g[1], g[2]);
   return l > 0 ? [g[0] / l, g[1] / l, g[2] / l] : [0, 0, 0];
 }
-function meetOfPlanes(n, at2, p) {
+function meetOfPlanes(n, at3, p) {
   const G2 = n.map((u) => n.map((v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]));
-  const r = n.map((u, i) => u[0] * (p[0] - at2[i][0]) + u[1] * (p[1] - at2[i][1]) + u[2] * (p[2] - at2[i][2]));
+  const r = n.map((u, i) => u[0] * (p[0] - at3[i][0]) + u[1] * (p[1] - at3[i][1]) + u[2] * (p[2] - at3[i][2]));
   const l = solveSmall(G2, r);
   if (!l) return null;
   const x = [p[0], p[1], p[2]];
@@ -24864,7 +25315,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
   const alive = new Array(T.length / 3).fill(1);
   const born = new Array(T.length / 3).fill(0);
   const pair = (a, b) => a < b ? a * PAIR + b : b * PAIR + a;
-  const at2 = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
+  const at3 = (i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]];
   const dist2 = (a, b) => (P[b * 3] - P[a * 3]) ** 2 + (P[b * 3 + 1] - P[a * 3 + 1]) ** 2 + (P[b * 3 + 2] - P[a * 3 + 2]) ** 2;
   const normal = (a, b, c) => {
     const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2];
@@ -24901,12 +25352,12 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
   const edgeOff = (a, b) => {
     const ax = P[a * 3], ay = P[a * 3 + 1], az = P[a * 3 + 2];
     const dx = P[b * 3] - ax, dy = P[b * 3 + 1] - ay, dz = P[b * 3 + 2] - az;
-    let w = -1, at3 = 0.5, bv = 0;
+    let w = -1, at4 = 0.5, bv = 0;
     for (let i = 1; i <= 3; i++) {
       const s = i / 4, v = f(ax + dx * s, ay + dy * s, az + dz * s);
-      if (Math.abs(v) > w) w = Math.abs(v), at3 = s, bv = v;
+      if (Math.abs(v) > w) w = Math.abs(v), at4 = s, bv = v;
     }
-    return standOffNear(ax + dx * at3, ay + dy * at3, az + dz * at3, bv, a, b, -1);
+    return standOffNear(ax + dx * at4, ay + dy * at4, az + dz * at4, bv, a, b, -1);
   };
   const turned = (a, b, c, from) => {
     const n = normal(a, b, c);
@@ -24941,7 +25392,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
     for (let t = 0; t < nt; t++) if (alive[t]) eachCell(t, (key) => fresh.has(key) && put(key, t));
   };
   const crosses = (a, b, c) => {
-    const A = at2(a), B = at2(b), C = at2(c);
+    const A = at3(a), B = at3(b), C = at3(c);
     const seen = /* @__PURE__ */ new Set();
     let hit = false;
     const lo = [0, 1, 2].map((k) => cellOf(Math.min(A[k], B[k], C[k])));
@@ -24957,7 +25408,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
             seen.add(u);
             const x = T[u * 3], y = T[u * 3 + 1], z = T[u * 3 + 2];
             if (x === a || x === b || x === c || y === a || y === b || y === c || z === a || z === b || z === c) continue;
-            const X = at2(x), Y = at2(y), Z = at2(z);
+            const X = at3(x), Y = at3(y), Z = at3(z);
             if (segmentThrough(A, B, X, Y, Z) || segmentThrough(B, C, X, Y, Z) || segmentThrough(C, A, X, Y, Z) || segmentThrough(X, Y, A, B, C) || segmentThrough(Y, Z, A, B, C) || segmentThrough(Z, X, A, B, C)) {
               hit = true;
               break;
@@ -25079,8 +25530,8 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
         if (!on && found && !before && !turnedOver) crossing = true;
       };
       if (na[0] * nb[0] + na[1] * nb[1] + na[2] * nb[2] < CREASE_COS) {
-        attempt(meetOfPlanes([na, nb], [at2(a), at2(b)], mid), mean);
-        for (const [, , , r] of side) attempt(meetOfPlanes([na, nb, gradient(f, P[r * 3], P[r * 3 + 1], P[r * 3 + 2])], [at2(a), at2(b), at2(r)], mid), mean);
+        attempt(meetOfPlanes([na, nb], [at3(a), at3(b)], mid), mean);
+        for (const [, , , r] of side) attempt(meetOfPlanes([na, nb, gradient(f, P[r * 3], P[r * 3 + 1], P[r * 3 + 2])], [at3(a), at3(b), at3(r)], mid), mean);
       }
       attempt(mid, mean);
       attempt(mid, gradient(f, mid[0], mid[1], mid[2]));
@@ -25203,6 +25654,8 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
       return smoothUnion(k, A, n, tol, ctx);
     case "thicken":
       return buildThicken(k, A, n, tol, ctx);
+    case "relief":
+      return buildRelief(k, A, n, tol);
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }
@@ -25401,14 +25854,14 @@ function bandProfile(profile, rIn, t, w, tol) {
   }
   if (profile === "round") {
     const a = t / 2;
-    const ell = (phi) => [rIn + a + a * Math.cos(phi), hw * Math.sin(phi)];
+    const ell = (phi2) => [rIn + a + a * Math.cos(phi2), hw * Math.sin(phi2)];
     return dedupe([...adaptive(ell, -Math.PI / 2, Math.PI / 2, tol), ...adaptive(ell, Math.PI / 2, 3 * Math.PI / 2, tol)]);
   }
   const d = domeOf(t);
   const dIn = profile === "comfort_fit" ? d * 0.35 : 0;
   const dOut = profile === "comfort_fit" ? d * 0.65 : d;
-  const inner = (phi) => [rIn + dIn * (1 - Math.cos(phi)), hw * Math.sin(phi)];
-  const outer = (phi) => [rIn + t - dOut * (1 - Math.cos(phi)), hw * Math.sin(phi)];
+  const inner = (phi2) => [rIn + dIn * (1 - Math.cos(phi2)), hw * Math.sin(phi2)];
+  const outer = (phi2) => [rIn + t - dOut * (1 - Math.cos(phi2)), hw * Math.sin(phi2)];
   const pts = [...adaptive(inner, Math.PI / 2, -Math.PI / 2, tol), inner(-Math.PI / 2), ...adaptive(outer, -Math.PI / 2, Math.PI / 2, tol), outer(Math.PI / 2)];
   return dedupe(pts);
 }
@@ -25464,7 +25917,7 @@ function prongPlaces(stone, outline, count) {
     const a = Math.atan2(p[0], p[1]);
     return a < 0 ? a + 2 * Math.PI : a;
   };
-  return places.map(({ at: at2, out }) => ({ at: at2, out })).sort((a, b) => angle(a.at) - angle(b.at));
+  return places.map(({ at: at3, out }) => ({ at: at3, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
 function prongPlacesAround(outline, count) {
   const n = outline.length;
@@ -25770,7 +26223,7 @@ function blendSurface(mesh, blends, scale2) {
     const seenEdge = /* @__PURE__ */ new Set();
     const pts = new Float32Array(3 * 7 * tris.length);
     let n = 0;
-    const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
+    const at3 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
     const add = (x, y, z, nrm) => {
       projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
@@ -25782,7 +26235,7 @@ function blendSurface(mesh, blends, scale2) {
     };
     for (const t of tris) {
       const ia = T[t * 3], ib = T[t * 3 + 1], ic = T[t * 3 + 2];
-      const a = at2(ia), bb = at2(ib), c = at2(ic);
+      const a = at3(ia), bb = at3(ib), c = at3(ic);
       const ux = bb[0] - a[0], uy = bb[1] - a[1], uz = bb[2] - a[2];
       const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
       const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -25792,7 +26245,7 @@ function blendSurface(mesh, blends, scale2) {
       for (const i of [ia, ib, ic]) {
         if (seenVert[i]) continue;
         seenVert[i] = 1;
-        const p = at2(i);
+        const p = at3(i);
         add(p[0], p[1], p[2], nrm);
       }
       for (const [i, j] of [
@@ -25804,7 +26257,7 @@ function blendSurface(mesh, blends, scale2) {
         const key = lo * nv + hi;
         if (seenEdge.has(key)) continue;
         seenEdge.add(key);
-        const p = at2(lo), q = at2(hi);
+        const p = at3(lo), q = at3(hi);
         add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
       }
       add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
@@ -25914,8 +26367,8 @@ function validatePiece(v, path = "tree") {
 
 // src/program/run.ts
 import { spawn } from "node:child_process";
-import { existsSync as existsSync2, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname as dirname2, join as join2 } from "node:path";
+import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync } from "node:fs";
+import { basename, dirname as dirname2, join as join3 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/program/library.ts
@@ -26172,13 +26625,13 @@ var ProgramFailed = class extends Error {
 };
 function childEntry() {
   const here = fileURLToPath2(import.meta.url);
-  const built = basename(here) === "run.js" && existsSync2(join2(dirname2(here), "child.js"));
-  const entry = built ? join2(dirname2(here), "child.js") : join2(dirname2(here), "program-child.js");
+  const built = basename(here) === "run.js" && existsSync2(join3(dirname2(here), "child.js"));
+  const entry = built ? join3(dirname2(here), "child.js") : join3(dirname2(here), "program-child.js");
   const codeRoot = built ? dirname2(dirname2(here)) : dirname2(here);
   const read = [codeRoot, kernelDir()];
   let dir = dirname2(entry);
   for (let i = 0; i < 6; i++) {
-    const pj = join2(dir, "package.json");
+    const pj = join3(dir, "package.json");
     if (existsSync2(pj)) {
       read.push(pj);
       break;
@@ -26189,7 +26642,7 @@ function childEntry() {
 }
 function rssOf(pid) {
   try {
-    const m = /VmRSS:\s+(\d+)\s+kB/.exec(readFileSync(`/proc/${pid}/status`, "utf8"));
+    const m = /VmRSS:\s+(\d+)\s+kB/.exec(readFileSync2(`/proc/${pid}/status`, "utf8"));
     return m ? Number(m[1]) * 1024 : null;
   } catch {
     return null;
@@ -26198,6 +26651,7 @@ function rssOf(pid) {
 async function runProgram(source, runs, limits = programLimits()) {
   const t0 = performance.now();
   const { entry, read } = childEntry();
+  const images = imagesForProgram(source);
   const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
   const wasmCap = Math.max(96, limits.memoryMiB - 128) * 2 ** 20;
   const limitBytes = limits.memoryMiB * 2 ** 20;
@@ -26210,7 +26664,7 @@ async function runProgram(source, runs, limits = programLimits()) {
     } catch {
     }
   }
-  const request = { source, runs, deadline_ms: limits.seconds * 1e3, wasm_cap_bytes: wasmCap };
+  const request = { source, runs, deadline_ms: limits.seconds * 1e3, wasm_cap_bytes: wasmCap, images };
   return new Promise((resolve, reject) => {
     const out = [];
     let outBytes = 0;
@@ -26287,14 +26741,14 @@ async function runProgram(source, runs, limits = programLimits()) {
 }
 
 // src/files/png.ts
-import { crc32 as crc322, deflateSync } from "node:zlib";
-var SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+import { crc32 as crc323, deflateSync } from "node:zlib";
+var SIGNATURE2 = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 function chunk(type, data) {
   const head = Buffer.alloc(8);
   head.writeUInt32BE(data.length, 0);
   head.write(type, 4, "ascii");
   const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc322(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
+  crc.writeUInt32BE(crc323(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
   return Buffer.concat([head, data, crc]);
 }
 function encodePng(img) {
@@ -26313,7 +26767,7 @@ function encodePng(img) {
     raw[y * (stride + 1)] = 0;
     raw.set(rgb.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
   }
-  return Buffer.concat([SIGNATURE, chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
+  return Buffer.concat([SIGNATURE2, chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw, { level: 9 })), chunk("IEND", Buffer.alloc(0))]);
 }
 
 // src/render/font.ts
@@ -26581,7 +27035,7 @@ function canonicalJson(v) {
   }
   return JSON.stringify(v);
 }
-var sha256 = (b) => createHash("sha256").update(b).digest("hex");
+var sha256 = (b) => createHash2("sha256").update(b).digest("hex");
 var r2 = (x) => Math.round(x * 100) / 100;
 function limitsFor(metal) {
   return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown };
@@ -26614,28 +27068,28 @@ function acrossText(a, shape) {
 }
 function dimensionLines(d) {
   const b = d.band;
-  const lines = [`- Band: inner diameter ${mm2(b.innerDiameterMm)}, outer diameter ${mm2(b.outerDiameterMm)}, ${mm2(b.widthMm)} wide, ${mm2(b.thicknessMm)} thick.`];
+  const lines2 = [`- Band: inner diameter ${mm2(b.innerDiameterMm)}, outer diameter ${mm2(b.outerDiameterMm)}, ${mm2(b.widthMm)} wide, ${mm2(b.thicknessMm)} thick.`];
   const h = d.head;
-  if (!h) return lines;
+  if (!h) return lines2;
   const stone = acrossText(h.stone, h.shape);
   const seat = `${acrossText(h.seat, h.shape)} across`;
   if (h.bezel) {
     const z = h.bezel;
-    lines.push(`- Seat: ${seat} inside the bezel at the girdle, for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
-    lines.push(
+    lines2.push(`- Seat: ${seat} inside the bezel at the girdle, for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    lines2.push(
       `- Bezel: wall ${mm2(z.wallMm)} thick and ${acrossText(h.outside, h.shape)} across outside; its lip rises ${mm2(z.lipMm)} above the girdle (${z.lipAuto ? "auto" : "set"}: ${Math.round(z.lipMm / h.stone.crownMm * 100)} % of the stone's ${mm2(h.stone.crownMm)} crown); it stands ${mm2(z.heightAboveBandMm)} above the top of the band.`
     );
   } else if (h.prongs) {
     const ps = h.prongs;
-    lines.push(`- Seat: ${seat} at the girdle, cut for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    lines2.push(`- Seat: ${seat} at the girdle, cut for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
     const same = new Set(ps.map((p) => `${r2(p.thicknessMm)}/${r2(p.narrowestMm)}`)).size === 1;
     const reaches = [...new Set(ps.map((p) => r2(p.reachMm)))].sort((a, c) => a - c);
     const reach = reaches.length === 1 ? `each reaches ${mm2(reaches[0])} in over the girdle` : `they reach ${mm2(reaches[0])} to ${mm2(reaches[reaches.length - 1])} in over the girdle`;
     const each = same ? `${ps.length}, each ${mm2(ps[0].thicknessMm)} thick and ${mm2(ps[0].narrowestMm)} at its narrowest, where the seat is cut` : `${ps.length}, each narrowest where the seat is cut: ${ps.map((p) => `${p.label.split(" of ")[0]} at ${p.clock} is ${mm2(p.thicknessMm)} thick and ${mm2(p.narrowestMm)} at its narrowest`).join("; ")}`;
-    lines.push(`- Prongs: ${each}; ${reach}. The head is ${acrossText(h.outside, h.shape)} across at its widest, at its rail.`);
+    lines2.push(`- Prongs: ${each}; ${reach}. The head is ${acrossText(h.outside, h.shape)} across at its widest, at its rail.`);
   }
-  lines.push(`- Culet clearance: ${mm2(h.culetClearanceMm)} from the stone's point down to the top of the band.`);
-  return lines;
+  lines2.push(`- Culet clearance: ${mm2(h.culetClearanceMm)} from the stone's point down to the top of the band.`);
+  return lines2;
 }
 function seatLine(d) {
   const h = d.head;
@@ -26694,7 +27148,7 @@ function fixFor(e, v, metal) {
   switch (e.id) {
     case "prong": {
       if (!h || h.kind !== "prong_head") return null;
-      const lines = (e.failing ?? []).map((f) => {
+      const lines2 = (e.failing ?? []).map((f) => {
         const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
         const cur = h.prongThicknessMm[k - 1] ?? h.nominalProngMm;
         return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm, where the seat for the stone is cut, and it needs ${metal.limits.prong.toFixed(1)} mm. Make that prong at least ${suggestThicker(cur, f.value, metal.limits.prong)} mm thick.`;
@@ -26702,7 +27156,7 @@ function fixFor(e, v, metal) {
       const all = (e.failing ?? []).length === h.prongCount;
       const worst = Math.min(...(e.failing ?? []).map((f) => f.value));
       const suggestion = suggestThicker(h.nominalProngMm, worst, metal.limits.prong);
-      return `${lines.join(" ")} ${all ? `Change: set {"prong_thickness": "${Math.max(suggestion, 1.4)} mm"}.` : `Change: set {"head.prong_overrides": []} to give every prong the head's prong_thickness, or set that prong's own thickness in "head.prong_overrides".`} A prong is joined at one end only, so it needs more metal than a wall.`;
+      return `${lines2.join(" ")} ${all ? `Change: set {"prong_thickness": "${Math.max(suggestion, 1.4)} mm"}.` : `Change: set {"head.prong_overrides": []} to give every prong the head's prong_thickness, or set that prong's own thickness in "head.prong_overrides".`} A prong is joined at one end only, so it needs more metal than a wall.`;
     }
     case "band":
       return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${metal.limits.band.toFixed(1)} mm. Change: set {"band_thickness": "${Math.max(1.6, suggestThicker(v.bandThicknessMm, e.value ?? 0, metal.limits.band))} mm"}.`;
@@ -26720,9 +27174,9 @@ function fixFor(e, v, metal) {
         const cur = sheetThickness(v, f.label) ?? f.nominal ?? f.value;
         return { f, cur, to: Math.max(1, suggestThicker(cur, f.value, metal.limits.wall)) };
       });
-      const lines = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${metal.limits.wall.toFixed(1)} mm.`);
+      const lines2 = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${metal.limits.wall.toFixed(1)} mm.`);
       const set = each.map(({ f, to }) => `"${f.label}.thickness": "${to} mm"`).join(", ");
-      return `${lines.join(" ")} Change: set {${set}}.`;
+      return `${lines2.join(" ")} Change: set {${set}}.`;
     }
     case "prong_grip":
       return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. Change: set {"head.prong_grip": "0.2 mm"}.`;
@@ -26738,6 +27192,9 @@ function fixFor(e, v, metal) {
       if (e.where?.part === "sheet" && sheetNode(v, part)) {
         const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
         return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+      }
+      if (e.where?.part === "added shape" && reliefAmong(v, part)) {
+        return `The relief ${quoteIds(part)} is only ${e.value} mm thick at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Give it more metal under its face: raise its "base" (a sunk relief's floor is its base less its depth), or lay it on thicker metal; a lower "depth" or a larger "smoothing" makes its slopes gentler.`;
       }
       if (e.where?.part === "added shape") {
         return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
@@ -26761,6 +27218,17 @@ function fixFor(e, v, metal) {
       return `The casting file's facets stand ${e.value} mm off the curved surface, over the ${metal.limits.surfaceDeviation} mm limit. This is an engine fault, not the design: report it.`;
   }
   return null;
+}
+function reliefAmong(v, ids) {
+  const holds = (n) => !!n && (n.op === "relief" || (n.children ?? []).some(holds));
+  return ids.split(", ").some((id) => v.extras.some((x) => holds(findNode(x, id))));
+}
+function treeImages(tree) {
+  try {
+    return reliefImagesOf(tree.root);
+  } catch {
+    return [];
+  }
 }
 function couldNotRun(msg) {
   return ["watertight", "wall", "band", "detail", "gap", "surface_deviation"].map((id) => ({
@@ -26840,6 +27308,8 @@ async function checkPiece(piece, mode, limits = programLimits()) {
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
   };
+  const images = treeImages(tree);
+  if (images.length) report["images"] = images;
   let threeMf = null;
   if (built && stl && verdict === "pass" && mode === "export") {
     threeMf = write3mf(built.metal, {
@@ -26902,8 +27372,8 @@ function programDimensionLines(parts) {
       out.push(...dimensionLines({ band: part.band }).map((l) => l.replace("- Band:", "- Band (ringShank):")));
       continue;
     }
-    const lines = dimensionLines({ band: part.onBand ?? NO_BAND, head: part.head }).slice(1);
-    out.push(...lines.map((l) => (part.onBand ? l : l.replace("down to the top of the band", "down to the base it stands on")).replace(/^- (\w+):/, `- $1 (${part.call}):`)));
+    const lines2 = dimensionLines({ band: part.onBand ?? NO_BAND, head: part.head }).slice(1);
+    out.push(...lines2.map((l) => (part.onBand ? l : l.replace("down to the top of the band", "down to the base it stands on")).replace(/^- (\w+):/, `- $1 (${part.call}):`)));
   }
   return out;
 }
@@ -26933,15 +27403,15 @@ function programFixFor(e, metal, parts) {
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   const head = parts.find((x) => x.call !== "ringShank");
   const shank = parts.find((x) => x.call === "ringShank");
-  const at2 = (p) => p ? ` at ${JSON.stringify(p)} mm` : "";
+  const at3 = (p) => p ? ` at ${JSON.stringify(p)} mm` : "";
   switch (e.id) {
     case "prong": {
-      const lines = (e.failing ?? []).map((f) => {
+      const lines2 = (e.failing ?? []).map((f) => {
         const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
         const cur = head?.head.prongs?.[k - 1]?.thicknessMm ?? metal.limits.prong;
         return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm and it needs ${metal.limits.prong.toFixed(1)} mm; make it at least ${suggestThicker(cur, f.value, metal.limits.prong)} mm thick.`;
       });
-      return `${lines.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
+      return `${lines2.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
     }
     case "band":
       return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${metal.limits.band.toFixed(1)} mm. In the program, set band_thickness in its ringShank call to at least ${Math.max(1.6, suggestThicker(shank?.band.thicknessMm ?? metal.limits.band, e.value ?? 0, metal.limits.band))} mm.`;
@@ -26960,10 +27430,10 @@ function programFixFor(e, metal, parts) {
     case "detail": {
       const limit = e.id === "wall" ? metal.limits.wall : metal.limits.detail;
       const where = e.where?.part === "added shape" ? ` in the shape named ${quoteIds(e.where.feature)}` : e.where?.part === "sheet" ? ` on the sheet "${e.where.feature}"` : e.where?.part === "band" ? " in the band" : e.where?.part === "head" ? ` in the setting (${e.where.feature})` : "";
-      return `The metal${where} is only ${e.value} mm${at2(e.where?.point_mm)}, and ${e.id === "wall" ? "a wall" : "the finest detail"} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
+      return `The metal${where} is only ${e.value} mm${at3(e.where?.point_mm)}, and ${e.id === "wall" ? "a wall" : "the finest detail"} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
     }
     case "gap":
-      return `Two surfaces are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
+      return `Two surfaces are only ${e.value} mm apart${at3(e.where?.point_mm)}; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
     case "watertight":
       return `The piece is not one closed solid (${e.measured}). Join every shape to the rest (union them so they overlap), or remove the loose one.`;
     case "surface_deviation":
@@ -27046,6 +27516,8 @@ async function checkProgram(p, mode, limits) {
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
   };
+  const images = programImagesReport(p.program);
+  if (images.length) report["images"] = images;
   let threeMf = null;
   if (mesh && stl && verdict === "pass" && mode === "export") {
     threeMf = write3mf(mesh, {
@@ -27071,6 +27543,7 @@ var PROGRAM_CALLS_GUIDE = [
   "- stone(solid, { name? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal.",
   "- prongHead({ stone, on: band, prong_count, prong_thickness, prong_grip, culet_clearance, prong_overrides }) and bezel({ stone, on: band, wall, lip, culet_clearance }) -> the setting round the stone, on top of the band (leave out `on` for a setting standing on the XY plane, as on a pendant). .dims has the seat, the outside, the bezel or each prong, and the culet clearance, as describe_piece reports them.",
   '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
+  `- relief({ id, image: "lion.png", width, height, depth, mode: "raised" | "sunk", surface: "flat" | "cylinder", radius, base, smoothing }) -> a grayscale height image (a PNG kept beside the piece, named in quotes; white highest) as one solid: from its back, base below its surface (default 1 mm), to its face, raised up to depth or sunk that deep. Flat lies in XY facing +Z, centred; cylinder wraps round the Y axis at radius (the band's outer radius lays it on the band's top). Smoothed so no ridge or hollow is finer than smoothing (default and least 0.35 mm) and no slope is steeper than 45\xB0. The check names it by its id.`,
   "- op(node) -> any operation node of a tree, as JSON with units (describe_piece of a tree lists them): what a tree can hold, a program can hold.",
   "KERNEL (general shapes, numbers in mm and degrees):",
   "- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire).",
@@ -27083,6 +27556,18 @@ var PROGRAM_CALLS_GUIDE = [
 function programGuide(limits) {
   return [...PROGRAM_RULES, `Limits: ${limits.seconds} s and ${limits.memoryMiB} MiB for each evaluation.`, ...PROGRAM_CALLS_GUIDE].join("\n");
 }
+var RELIEF_EXAMPLE = String.raw`// A signet ring, US 8, with a lion's face raised 0.8 mm on its plate, from the
+// height image lion-face.png kept beside the piece (white is highest).
+const band = ringShank({ ring_size: { system: 'US', size: '8' }, band_width: 3, band_thickness: 1.8 });
+const rin = band.dims.innerDiameterMm / 2, rout = band.dims.outerDiameterMm / 2;
+
+// The plate: a 12 x 10 mm block on top of the band, its underside cut clear of the finger.
+const top = rout + 1.5;
+const plate = difference(box(12, 10, 4).translate([0, 0, top - 2]), cylinder(rin, 30, { center: true }).rotate([90, 0, 0]));
+
+// The face, 10 x 8 mm, 0.8 mm at its highest; its 0.5 mm back sinks into the plate.
+const lion = relief({ id: 'lion', image: 'lion-face.png', width: 10, height: 8, depth: 0.8, base: 0.5 }).translate([0, 0, top]);
+return union(band, plate, lion);`;
 var CABOCHON_EXAMPLE = String.raw`// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.
 const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });
 
@@ -27106,7 +27591,7 @@ function treeAsProgram(tree) {
   const band = findNode(tree.root, "band").params;
   const head = findNode(tree.root, "head");
   const extras = (tree.root.children ?? []).filter((c) => c.id !== "band" && c.id !== "head");
-  const lines = [
+  const lines2 = [
     `// "${tree.name}", built from the "${tree.template}" template (revision ${tree.revision}), written as a program.`,
     `const band = ringShank({ ${fields({ ring_size: band["ring_size"], band_width: band["width"], band_thickness: band["thickness"], band_profile: band["profile"] })} });`
   ];
@@ -27114,17 +27599,17 @@ function treeAsProgram(tree) {
     const p = head.params;
     const s = p["stone"];
     const ph = s["placeholder"] ?? [];
-    if (ph.length) lines.push(`// The stone's ${ph.join(", ")} ${ph.length === 1 ? "is a placeholder" : "are placeholders"}: put in the measured ${s["shape"] === "round" ? "diameter and depth" : "length, width and depth"} from its grading report.`);
+    if (ph.length) lines2.push(`// The stone's ${ph.join(", ")} ${ph.length === 1 ? "is a placeholder" : "are placeholders"}: put in the measured ${s["shape"] === "round" ? "diameter and depth" : "length, width and depth"} from its grading report.`);
     const carat = s["carat"] !== void 0 ? { carat: s["carat"] } : {};
-    lines.push(
+    lines2.push(
       s["shape"] === "round" ? `const stone = roundStone({ ${fields({ diameter: s["diameter"], depth: s["depth"], ...carat })} });` : `const stone = emeraldStone({ ${fields({ length: s["length"], width: s["width"], depth: s["depth"], orientation: s["orientation"], ...carat })} });`
     );
     const rest = Object.fromEntries(Object.entries(p).filter(([k]) => k !== "stone"));
-    lines.push(`const head = ${head.part === "bezel" ? "bezel" : "prongHead"}({ stone, on: band, ${fields(rest)} });`);
+    lines2.push(`const head = ${head.part === "bezel" ? "bezel" : "prongHead"}({ stone, on: band, ${fields(rest)} });`);
   }
   const all = ["band", ...head ? ["head"] : [], ...extras.map((e) => `op(${js(e)})`)];
-  lines.push(`return union(${all.join(", ")});`);
-  return lines.join("\n");
+  lines2.push(`return union(${all.join(", ")});`);
+  return lines2.join("\n");
 }
 
 // src/reply.ts
@@ -27227,7 +27712,7 @@ var TREE = {
     shrinkage: { type: "string" },
     root: {
       type: "object",
-      description: 'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.'
+      description: 'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness, and "relief", which lays a grayscale height image (a PNG kept beside the piece) onto a flat or curved patch.'
     },
     units: { const: PROGRAM_UNITS, description: "A program piece only: its bare numbers are millimetres (and degrees for angles)." },
     program: { type: "string", description: "A program piece only: the JavaScript that builds it." }
@@ -27237,7 +27722,7 @@ var PROGRAM = {
   type: "string",
   maxLength: PROGRAM_MAX_CHARS,
   description: [
-    `The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion's face, a ship's hull): it builds the piece from the kernel's general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, op), and ends with "return <the piece>;". describe_piece lists every call with its settings, and shows any template piece written as a program.`,
+    `The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion's face, a ship's hull): it builds the piece from the kernel's general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, relief, op), and ends with "return <the piece>;". relief() lays a grayscale height image (a PNG kept beside the piece, named in quotes) onto a flat or curved patch, for a sculpted face no program draws well by numbers. describe_piece lists every call with its settings, and shows any template piece written as a program.`,
     "Bare numbers are millimetres (degrees for angles); a string carries its unit. A ring shank stands round the Y axis through the origin, a stone setting upright on top of it at +Z.",
     "It runs confined, in its own process with a time and memory limit, reaching nothing but the library: no require, files, network or timers. A program that fails is refused with the line and the reason, and nothing changes.",
     `The program is kept as the piece's file (<name>.tree.json), every version, and checked and exported exactly like any piece. Example: "const band = ringShank({ ring_size: { system: 'US', size: '7' } }); const head = prongHead({ on: band, stone: roundStone({ diameter: 6.5, depth: 4.0 }) }); return union(band, head);"`
@@ -27536,35 +28021,35 @@ var Session = class {
     const base = this.#open(args);
     if (program !== void 0 || isProgramPiece(base)) return this.#changeProgram(base, program, set, wantPreview);
     let next;
-    let lines;
+    let lines2;
     if (set) {
       const r = applySet(base, set);
       next = r.tree;
-      lines = r.changed.map((k) => `${k}: ${fmt(getSetting(base, k))} \u2192 ${fmt(getSetting(next, k))}`);
+      lines2 = r.changed.map((k) => `${k}: ${fmt(getSetting(base, k))} \u2192 ${fmt(getSetting(next, k))}`);
     } else {
       next = structuredClone(base);
       next.revision = base.revision + 1;
-      lines = ["the whole tree, as passed"];
+      lines2 = ["the whole tree, as passed"];
     }
     this.#piece = next;
-    return this.#withPiece(next, `Changed ${lines.join("; ")}.`, wantPreview);
+    return this.#withPiece(next, `Changed ${lines2.join("; ")}.`, wantPreview);
   }
   /** A change to a piece written as a program, or a template piece going on as a program: its program, and its name, metal or shrinkage. */
   async #changeProgram(base, program, set, wantPreview) {
-    const lines = [];
+    const lines2 = [];
     let next;
     if (program !== void 0) {
       const src = checkProgramSource(program, "program");
       if (isProgramPiece(base)) {
         next = { ...base, program: src, revision: base.revision + 1 };
-        lines.push(src === base.program ? "nothing in the program (it is the same)" : "the program");
+        lines2.push(src === base.program ? "nothing in the program (it is the same)" : "the program");
       } else {
         next = { ...programPiece(src, { name: base.name, metal: base.metal, shrinkage: base.shrinkage }), revision: base.revision + 1 };
-        lines.push(`the piece: it is now written as a program (it was built from the "${base.template}" template)`);
+        lines2.push(`the piece: it is now written as a program (it was built from the "${base.template}" template)`);
       }
     } else {
       next = { ...base, revision: base.revision + 1 };
-      if (!set) lines.push("the whole piece, as passed");
+      if (!set) lines2.push("the whole piece, as passed");
     }
     for (const [k, v] of Object.entries(set ?? {})) {
       if (!PROGRAM_PIECE_SETTINGS.includes(k)) {
@@ -27576,12 +28061,12 @@ var Session = class {
       checkParam(PARAM_BY_KEY.get(k), v, `set.${k}`);
       const before = next[k];
       next[k] = v;
-      lines.push(`${k}: ${fmt(before)} \u2192 ${fmt(v)}`);
+      lines2.push(`${k}: ${fmt(before)} \u2192 ${fmt(v)}`);
     }
     validatePiece(next, "tree");
     const view = await this.#evaluate(next, program !== void 0 ? "program" : "tree.program");
     this.#piece = next;
-    return this.#withProgram(next, `Changed ${lines.join("; ")}.`, wantPreview, view);
+    return this.#withProgram(next, `Changed ${lines2.join("; ")}.`, wantPreview, view);
   }
   async preview(args) {
     const tree = this.#open(args);
@@ -27606,9 +28091,9 @@ var Session = class {
   }
   #verdictText(tree, r) {
     const stl = r.report["stl"];
-    const lines = r.entries.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? "not measured"}${c.where ? ` [${c.where.description}]` : ""}`);
+    const lines2 = r.entries.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? "not measured"}${c.where ? ` [${c.where.description}]` : ""}`);
     const head = stl ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${r.report["metal"].name}:` : `Checks for "${tree.name}" revision ${tree.revision}: the casting file could not be made, so no check could run.`;
-    return [head, ...lines].join("\n");
+    return [head, ...lines2].join("\n");
   }
   async check(args) {
     const tree = this.#open(args);

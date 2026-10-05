@@ -86,7 +86,7 @@ const TREE: JsonSchema = {
     root: {
       type: 'object',
       description:
-        'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.',
+        'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness, and "relief", which lays a grayscale height image (a PNG kept beside the piece) onto a flat or curved patch.',
     },
     units: { const: PROGRAM_UNITS, description: 'A program piece only: its bare numbers are millimetres (and degrees for angles).' },
     program: { type: 'string', description: 'A program piece only: the JavaScript that builds it.' },
@@ -97,7 +97,7 @@ const PROGRAM: JsonSchema = {
   type: 'string',
   maxLength: PROGRAM_MAX_CHARS,
   description: [
-    'The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion\'s face, a ship\'s hull): it builds the piece from the kernel\'s general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, op), and ends with "return <the piece>;". describe_piece lists every call with its settings, and shows any template piece written as a program.',
+    'The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion\'s face, a ship\'s hull): it builds the piece from the kernel\'s general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, relief, op), and ends with "return <the piece>;". relief() lays a grayscale height image (a PNG kept beside the piece, named in quotes) onto a flat or curved patch, for a sculpted face no program draws well by numbers. describe_piece lists every call with its settings, and shows any template piece written as a program.',
     'Bare numbers are millimetres (degrees for angles); a string carries its unit. A ring shank stands round the Y axis through the origin, a stone setting upright on top of it at +Z.',
     'It runs confined, in its own process with a time and memory limit, reaching nothing but the library: no require, files, network or timers. A program that fails is refused with the line and the reason, and nothing changes.',
     'The program is kept as the piece\'s file (<name>.tree.json), every version, and checked and exported exactly like any piece. Example: "const band = ringShank({ ring_size: { system: \'US\', size: \'7\' } }); const head = prongHead({ on: band, stone: roundStone({ diameter: 6.5, depth: 4.0 }) }); return union(band, head);"',

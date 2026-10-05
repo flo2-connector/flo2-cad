@@ -32,6 +32,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kernelDir } from '../kernel/manifold.js';
+import { imagesForProgram } from '../library/relief.js';
 import type { ChildRequest, ChildRun, FailKind } from './child.js';
 import { readRun, type RunOut } from './verify.js';
 
@@ -119,6 +120,8 @@ function rssOf(pid: number): number | null {
 export async function runProgram(source: string, runs: ChildRun[], limits: ProgramLimits = programLimits()): Promise<ProgramRun> {
   const t0 = performance.now();
   const { entry, read } = childEntry();
+  // The height images the program names, read here: its child reads no files.
+  const images = imagesForProgram(source);
   const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
   const wasmCap = Math.max(96, limits.memoryMiB - 128) * 2 ** 20;
   const limitBytes = limits.memoryMiB * 2 ** 20;
@@ -132,7 +135,7 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
       /* not Linux, or not allowed: the other limits still hold */
     }
   }
-  const request: ChildRequest = { source, runs, deadline_ms: limits.seconds * 1000, wasm_cap_bytes: wasmCap };
+  const request: ChildRequest = { source, runs, deadline_ms: limits.seconds * 1000, wasm_cap_bytes: wasmCap, images };
 
   return new Promise<ProgramRun>((resolve, reject) => {
     const out: Buffer[] = [];

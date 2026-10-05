@@ -16,6 +16,7 @@ import type { FeatureDecl } from '../checker/features.js';
 import { CallError } from '../errors.js';
 import { kernel } from '../kernel/manifold.js';
 import { Arena, type MeshOut } from '../library/build.js';
+import { useGivenImages } from '../library/relief.js';
 import type { BlendMeshes } from '../library/thicken.js';
 import { ProgramLibrary, type PartReport } from './library.js';
 import { PRELUDE, PRELUDE_FILENAME, PROGRAM_FILENAME } from './prelude.js';
@@ -36,6 +37,8 @@ export interface ChildRequest {
   /** Milliseconds from the child's start that every run together may take. */
   deadline_ms: number;
   wasm_cap_bytes: number;
+  /** The height images the program names, read by the engine (this process reads no files), base64 by name. */
+  images?: Record<string, string>;
 }
 
 /** How a program's evaluation can fail, as the child reports it. */
@@ -106,6 +109,8 @@ async function main(): Promise<void> {
   const blob = blobber(blobs);
   const runs: unknown[] = [];
   let logs: string[] = [];
+  // The only images there are: what the engine read for this program.
+  useGivenImages(new Map(Object.entries(req.images ?? {}).map(([name, b64]) => [name, Buffer.from(b64, 'base64')])));
   for (const run of req.runs) {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail('time', 'the program ran past its time limit', null, logs);

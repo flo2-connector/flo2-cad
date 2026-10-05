@@ -37,6 +37,10 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
    - 2026-07-28, which the hub's standards name.
 
    Keep both. `test/mcp.test.ts` lists the tools in each.
+6. **Images in (a relief's height image).** The engine reads a PNG by its plain name (`[A-Za-z0-9._-]`, `.png`) from
+   `FLO2_CAD_IMAGE_DIR`. The Dockerfile sets it to `/design`, the design's folder that flo2 already mounts read-only,
+   so a relief names a file the design keeps. The engine never writes there, and never reads a path a caller wrote.
+   Telling the agent so in flo2's door and skill is flo2's half.
 
 ## Settled rules (the design's decisions, in short)
 
@@ -114,10 +118,10 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 | `src/piece/program.ts` | a piece written as a program: its file, its validation |
 | `src/program/` | a program's evaluation: the library and kernel calls it reaches (`library.ts`), its context (`prelude.ts`), the child process (`child.ts`), the confinement and limits (`run.ts`), what comes back (`verify.ts`) |
 | `src/kernel/manifold.ts` | loads the vendored kernel |
-| `src/library/` | jewelry parts (band, prong head, bezel, stones) and the general operations |
+| `src/library/` | jewelry parts (band, prong head, bezel, stones) and the general operations, `relief.ts` among them |
 | `src/checker/` | the independent casting checker and its own STL parser |
 | `src/render/` | the software preview renderer and its bitmap font |
-| `src/files/` | PNG, binary STL, ZIP and 3MF writers |
+| `src/files/` | PNG, binary STL, ZIP and 3MF writers, and the PNG height-image reader (`png-read.ts`) |
 | `src/engine.ts` | build, preview, check, export, and what-to-thicken |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package |
 | `dist/` | the committed bundle (`main.js`, and `program-child.js`, where a program is evaluated) and its third-party notices |
