@@ -264,7 +264,8 @@ const PARAM_TARGET: Readonly<Record<string, { node: 'band' | 'head'; field: read
   bezel_lip: { node: 'head', field: ['lip'], part: 'bezel' },
 };
 
-function checkParam(spec: ParamSpec, v: unknown, path: string): void {
+/** Checks one named setting's value as start_piece takes it; a program's library calls check theirs here too. */
+export function checkParam(spec: ParamSpec, v: unknown, path: string): void {
   switch (spec.kind) {
     case 'name':
       if (typeof v !== 'string' || !NAME.test(v)) {
@@ -314,22 +315,30 @@ export function shrinkagePercent(v: unknown, metal: MetalId, path: string): numb
 
 // ------------------------------------------------------------------- templates
 
-const HEAD_DEFAULTS = {
+export const HEAD_DEFAULTS = {
   /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
   prong_grip: '0.2 mm',
   /** Gap between the stone's culet (its point) and the top of the band. */
   culet_clearance: '0.3 mm',
 };
 
+/** A band's width and thickness when they are not given: a round wire is 2.0 mm across both ways. */
+export function bandDefaults(profile: string): { width: string; thickness: string } {
+  return profile === 'round'
+    ? { width: '2.0 mm', thickness: '2.0 mm' }
+    : { width: PARAM_BY_KEY.get('band_width')!.default as string, thickness: PARAM_BY_KEY.get('band_thickness')!.default as string };
+}
+
 function bandNode(o: Record<string, unknown>, profile: string): TreeNode {
+  const d = bandDefaults(profile);
   return {
     id: 'band',
     part: 'ring_shank',
     feature: 'band',
     params: {
       ring_size: o['ring_size'],
-      width: o['band_width'] ?? (profile === 'round' ? '2.0 mm' : PARAM_BY_KEY.get('band_width')!.default),
-      thickness: o['band_thickness'] ?? (profile === 'round' ? '2.0 mm' : PARAM_BY_KEY.get('band_thickness')!.default),
+      width: o['band_width'] ?? d.width,
+      thickness: o['band_thickness'] ?? d.thickness,
       profile,
     },
   };
@@ -485,6 +494,19 @@ export function validateTree(v: unknown, path = 'tree'): PieceTree {
   return v as PieceTree;
 }
 
+/**
+ * Validates one operation subtree on its own, as a tree's added shape is validated: what a
+ * program hands to op(), and what its smoothUnion, sweep and thicken make. Library parts
+ * are not operations, so a node with a "part" is refused here.
+ */
+export function validateOpNode(v: unknown, path: string): TreeNode {
+  if (v !== null && typeof v === 'object' && !Array.isArray(v) && (v as Record<string, unknown>)['part'] !== undefined) {
+    throw new CallError(at(path, 'part'), 'a library part is called as a function in a program (ringShank, prongHead, bezel), not passed to op().');
+  }
+  validateNode(v, path, new Set(), false);
+  return v as TreeNode;
+}
+
 function validateNode(v: unknown, path: string, ids: Set<string>, inBlend: boolean): void {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) {
     throw new CallError(path, 'a tree node is an object with an "id" and either a "part" or an "op".');
@@ -576,15 +598,30 @@ function validateStone(s: unknown, path: string): void {
   }
 }
 
-function headCommon(p: Record<string, unknown>, path: string): void {
-  validateStone(p['stone'], at(path, 'stone'));
-  const cc = lengthMm(p['culet_clearance'], at(path, 'culet_clearance'));
-  if (cc < 0.1 || cc > 5) throw new CallError(at(path, 'culet_clearance'), `${cc} mm is outside what the library builds (0.1 to 5 mm).`);
-}
-
 function validateProngHead(p: Record<string, unknown>, path: string): void {
   only(p, path, ['stone', 'prong_count', 'prong_thickness', 'prong_grip', 'culet_clearance', 'prong_overrides']);
-  headCommon(p, path);
+  validateStone(p['stone'], at(path, 'stone'));
+  checkHeadSettings('prong_head', p, path);
+}
+
+function validateBezel(p: Record<string, unknown>, path: string): void {
+  only(p, path, ['stone', 'wall', 'lip', 'culet_clearance']);
+  validateStone(p['stone'], at(path, 'stone'));
+  checkHeadSettings('bezel', p, path);
+}
+
+/**
+ * A head's own settings, everything but its stone: a tree's head part, and a program's
+ * prongHead or bezel call, are checked here alike.
+ */
+export function checkHeadSettings(kind: 'prong_head' | 'bezel', p: Record<string, unknown>, path: string): void {
+  const cc = lengthMm(p['culet_clearance'], at(path, 'culet_clearance'));
+  if (cc < 0.1 || cc > 5) throw new CallError(at(path, 'culet_clearance'), `${cc} mm is outside what the library builds (0.1 to 5 mm).`);
+  if (kind === 'bezel') {
+    checkParam(PARAM_BY_KEY.get('bezel_wall')!, p['wall'], at(path, 'wall'));
+    checkParam(PARAM_BY_KEY.get('bezel_lip')!, p['lip'], at(path, 'lip'));
+    return;
+  }
   checkParam(PARAM_BY_KEY.get('prong_count')!, p['prong_count'], at(path, 'prong_count'));
   checkParam(PARAM_BY_KEY.get('prong_thickness')!, p['prong_thickness'], at(path, 'prong_thickness'));
   const grip = lengthMm(p['prong_grip'], at(path, 'prong_grip'));
@@ -602,13 +639,6 @@ function validateProngHead(p: Record<string, unknown>, path: string): void {
     }
     checkParam(PARAM_BY_KEY.get('prong_thickness')!, r['thickness'], at(op, 'thickness'));
   });
-}
-
-function validateBezel(p: Record<string, unknown>, path: string): void {
-  only(p, path, ['stone', 'wall', 'lip', 'culet_clearance']);
-  headCommon(p, path);
-  checkParam(PARAM_BY_KEY.get('bezel_wall')!, p['wall'], at(path, 'wall'));
-  checkParam(PARAM_BY_KEY.get('bezel_lip')!, p['lip'], at(path, 'lip'));
 }
 
 /** Each operation's settings, with the unit each takes. */
@@ -887,7 +917,8 @@ function setStoneShape(t: PieceTree, shape: 'round' | 'emerald', path: string): 
 // ------------------------------------------------------------------ the view
 
 export interface StoneView {
-  shape: 'round' | 'emerald';
+  /** A tree's stone is round or emerald cut; 'custom' is a stone a program made itself (a cabochon). */
+  shape: 'round' | 'emerald' | 'custom';
   lengthMm: number;
   widthMm: number;
   depthMm: number;
@@ -914,7 +945,7 @@ export interface PieceView {
   extras: TreeNode[];
 }
 
-function stoneView(s: Record<string, unknown>): StoneView {
+export function stoneView(s: Record<string, unknown>): StoneView {
   const shape = s['shape'] as 'round' | 'emerald';
   const depthMm = lengthMm(s['depth'], 'stone.depth');
   const v: StoneView =
@@ -948,30 +979,32 @@ export function readPiece(tree: PieceTree): PieceView {
     extras: (tree.root.children ?? []).filter((c) => c.id !== 'band' && c.id !== 'head'),
   };
   const head = findNode(tree.root, 'head');
-  if (head && head.part === 'prong_head') {
-    const hp = head.params!;
+  if (head && (head.part === 'prong_head' || head.part === 'bezel')) view.head = headView(head.part, head.params!, stoneView(head.params!['stone'] as Record<string, unknown>));
+  return view;
+}
+
+/** A head's view from its checked settings (checkHeadSettings) and its stone: a tree's head part, or a program's prongHead or bezel call. */
+export function headView(kind: 'prong_head' | 'bezel', hp: Record<string, unknown>, stone: StoneView): HeadView {
+  if (kind === 'prong_head') {
     const count = hp['prong_count'] as number;
     const base = lengthMm(hp['prong_thickness'], 'head.prong_thickness');
     const each = Array.from({ length: count }, () => base);
     for (const o of (hp['prong_overrides'] as { prong: number; thickness: string }[] | undefined) ?? []) each[o.prong - 1] = lengthMm(o.thickness, 'head.prong_overrides');
-    view.head = {
+    return {
       kind: 'prong_head',
-      stone: stoneView(hp['stone'] as Record<string, unknown>),
+      stone,
       prongCount: count,
       prongThicknessMm: each,
       nominalProngMm: base,
       gripMm: lengthMm(hp['prong_grip'], 'head.prong_grip'),
       culetClearanceMm: lengthMm(hp['culet_clearance'], 'head.culet_clearance'),
     };
-  } else if (head && head.part === 'bezel') {
-    const hp = head.params!;
-    view.head = {
-      kind: 'bezel',
-      stone: stoneView(hp['stone'] as Record<string, unknown>),
-      wallMm: lengthMm(hp['wall'], 'head.wall'),
-      lipMm: hp['lip'] === 'auto' ? 'auto' : lengthMm(hp['lip'], 'head.lip'),
-      culetClearanceMm: lengthMm(hp['culet_clearance'], 'head.culet_clearance'),
-    };
   }
-  return view;
+  return {
+    kind: 'bezel',
+    stone,
+    wallMm: lengthMm(hp['wall'], 'head.wall'),
+    lipMm: hp['lip'] === 'auto' ? 'auto' : lengthMm(hp['lip'], 'head.lip'),
+    culetClearanceMm: lengthMm(hp['culet_clearance'], 'head.culet_clearance'),
+  };
 }

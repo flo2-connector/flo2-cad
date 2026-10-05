@@ -46,10 +46,21 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
   - An upgrade goes through ver:manifold-upgrade-gives-same-results.
 - **Licences.** Take ideas only from GPL sources (OpenSCAD, Blender, JewelCraft, 3D Print Toolbox), never code.
   Kiln's MIT code may be copied, keeping its notice.
-- **A piece is a tree of data. No agent code runs.**
+- **A piece is a tree of data, or a program run confined.**
   - The tree holds the library parts (ring_shank, prong_head, bezel) and the operations, including `sweep`,
     `smooth_union` and `thicken` (a curved sheet, such as a cupped petal, given a thickness along its surface; it
     declares itself to the checker, which measures it square to its surface).
+  - A program (`src/program/`, third increment) is JavaScript the agent writes over the kernel and the library,
+    kept as the piece's file (format `flo2-cad.program/1`). It is evaluated ONLY in a separate child process
+    (`src/program/run.ts`): time and memory limits, an empty environment, Node's permission model, a fresh V8 context
+    holding only the library, and handles instead of objects. Only a mesh and the library's declarations come back;
+    the checker and the exporter run in the engine's process on them. Never evaluate a program in the engine's own
+    process, and never let an object of the engine's realm reach the program's context (`src/program/prelude.ts`).
+  - The design differs here, and says so: `dec:idea-how-flo2-cad-becomes-general-enough-to-model-anything`
+    (accepted 2026-10-05) chose programs, but `con:no-agent-code-runs-on-the-server` and
+    `dec:how-a-piece-is-described` are not yet withdrawn, and how a program is confined
+    (`dec:idea-how-a-program-is-confined`) is only PROPOSED. Until the owner's word, the program work stays on its
+    branch.
   - A head is a choice: prongs or a full bezel.
   - Stones are round or emerald cut, sized from their MEASURED dimensions. A carat weight is for reference only.
   - The stone is never in a casting file.
@@ -100,6 +111,8 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 | `src/tools.ts` | **the published tool list and argument schemas** |
 | `src/units.ts`, `src/metals.ts` | unit enforcement, ring sizes, and the metals with their cited limits |
 | `src/piece/tree.ts` | the piece tree: templates, settings, validation |
+| `src/piece/program.ts` | a piece written as a program: its file, its validation |
+| `src/program/` | a program's evaluation: the library and kernel calls it reaches (`library.ts`), its context (`prelude.ts`), the child process (`child.ts`), the confinement and limits (`run.ts`), what comes back (`verify.ts`) |
 | `src/kernel/manifold.ts` | loads the vendored kernel |
 | `src/library/` | jewelry parts (band, prong head, bezel, stones) and the general operations |
 | `src/checker/` | the independent casting checker and its own STL parser |
@@ -107,5 +120,5 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 | `src/files/` | PNG, binary STL, ZIP and 3MF writers |
 | `src/engine.ts` | build, preview, check, export, and what-to-thicken |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package |
-| `dist/` | the committed bundle and its third-party notices |
+| `dist/` | the committed bundle (`main.js`, and `program-child.js`, where a program is evaluated) and its third-party notices |
 | `vendor/` | the unmodified kernel and its provenance |

@@ -101,7 +101,7 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpCo
       if (!rest.length) return keep;
       // What is cut away is not metal, so a sheet inside it declares nothing; a blend's
       // surface cut into the piece is the piece's surface, so it still declares itself.
-      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m, ...(inner.blends ? { blends: inner.blends } : {}), ...(inner.blendMeshes ? { blendMeshes: inner.blendMeshes } : {}) }));
+      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m, ...(inner.blends ? { blends: inner.blends } : {}), ...(inner.blendMeshes ? { blendMeshes: inner.blendMeshes } : {}), ...(inner.moveReachMm ? { moveReachMm: inner.moveReachMm } : {}) }));
       return A.t(keep.subtract(A.t(Manifold.union(cutters))));
     }
     case 'intersection': {

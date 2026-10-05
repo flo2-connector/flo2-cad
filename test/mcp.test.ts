@@ -146,3 +146,61 @@ describe('reply shapes over MCP (contract §1, §3, §4)', () => {
     assert.match(texts(noSystem), /ring_size\.system: a ring size must name its system/);
   });
 });
+
+describe('a piece written as a program, over MCP (cap:the-agent-writes-a-piece-as-a-program)', () => {
+  let client: Client;
+  before(async () => {
+    client = await connect('legacy');
+  });
+  after(async () => {
+    await client.close();
+  });
+  const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args })) as Reply;
+  const fixture = JSON.parse(readFileSync(`${ROOT}test/fixtures/cabochon-in-bezel.tree.json`, 'utf8')) as { program: string };
+
+  it('start_piece and change_piece take a "program"; the tool list is still the same six names', async () => {
+    const { tools } = await client.listTools();
+    assert.deepEqual(tools.map((t) => t.name), SIX);
+    for (const name of ['start_piece', 'change_piece']) {
+      const t = tools.find((x) => x.name === name)!;
+      assert.equal((t.inputSchema.properties as Record<string, { type: string }>)['program']!.type, 'string', `${name} takes a program`);
+    }
+  });
+
+  it('a cabochon in a bezel, from its program: kept as the piece file, checked and exported like any piece', async () => {
+    const started = await call('start_piece', { program: fixture.program, name: 'moon' });
+    assert.equal(started.isError, false, texts(started));
+    assert.deepEqual(Object.keys(files(started)).sort(), ['cadfile:///moon.preview.png', 'cadfile:///moon.tree.json']);
+    const piece = JSON.parse(bytes(started, 'cadfile:///moon.tree.json').toString('utf8'));
+    assert.deepEqual(piece, { format: 'flo2-cad.program/1', name: 'moon', revision: 1, metal: 'sterling_silver_925', shrinkage: 'off', units: 'mm', program: fixture.program });
+    assert.match(texts(started), /a full bezel .* holding one 8\.00 × 8\.00 mm stone of its own shape \("moonstone"\)/);
+    const exported = await call('export_for_casting', {});
+    assert.equal(exported.isError, false);
+    assert.deepEqual(Object.keys(files(exported)), ['cadfile:///moon.stl', 'cadfile:///moon.3mf', 'cadfile:///moon.check.json']);
+    const report = JSON.parse(bytes(exported, 'cadfile:///moon.check.json').toString('utf8'));
+    assert.equal(report.verdict, 'pass');
+    assert.equal(report.stone.in_casting_file, false);
+  });
+
+  it('the piece file carries a program piece into a fresh session, and describe_piece gives its parts and what a program can call', async () => {
+    const other = await connect('modern');
+    try {
+      const tree = { format: 'flo2-cad.program/1', name: 'moon', revision: 3, metal: 'gold_14k_yellow', shrinkage: 'on', units: 'mm', program: fixture.program };
+      const d = (await other.callTool({ name: 'describe_piece', arguments: { tree } })) as Reply;
+      assert.equal(d.isError, false, texts(d));
+      assert.match(texts(d), /- Bezel \(bezel\): wall 1\.00 mm thick/);
+      assert.match(texts(d), /ringShank\(\{ ring_size/);
+      assert.match(texts(d), /Limits: \d+ s and \d+ MiB for each evaluation/);
+    } finally {
+      await other.close();
+    }
+  });
+
+  it('a program that fails is a malformed call naming "program" and its line, and changes nothing', async () => {
+    const r = await call('change_piece', { program: "const band = ringShank({ ring_size: { system: 'US', size: '7' } });\nreturn band.rotate([0, 0, 30]);", preview: false });
+    assert.equal(r.isError, true);
+    assert.match(texts(r), /^Malformed call\. program: line 2: rotate\(\[0, 0, 30\]\): would move the ring band off the finger's axis/);
+    const still = await call('describe_piece', {});
+    assert.match(texts(still), /"revision":1/);
+  });
+});

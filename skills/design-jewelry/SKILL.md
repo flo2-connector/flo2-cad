@@ -1,6 +1,6 @@
 ---
 name: design-jewelry
-description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, or a ring with petals, leaves or a flower on it, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, refusals and what to thicken, and platinum.
+description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, a ring with petals, leaves or a flower on it, or any other shape (a cabochon, a signet, a sculpted piece) written as a program, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, writing a piece as a program, refusals and what to thicken, and platinum.
 compatibility: Needs the flo2-cad MCP server, which provides start_piece, change_piece, preview_piece, check_piece, export_for_casting and describe_piece.
 ---
 
@@ -76,6 +76,8 @@ design that way.
 - A carat weight is written like `"2.00 ct"`. It is kept for reference only.
 - If a call comes back as a malformed call, the message names the exact field and how to fix it. Fix that field and
   call again.
+- In a **program** (below), a bare number is a length in millimetres (or an angle in degrees); the piece file says
+  `"units": "mm"`. A string still carries its unit, and inches are still refused: convert them yourself.
 
 ## Stones are sized from what was measured
 
@@ -187,6 +189,58 @@ silver and exports.
   the other metal squarely.
 - Where two petals meet in a thin wedge, the reply names both. Move or turn them apart, or overlap them squarely.
 
+## Any other shape: write the piece as a program
+
+The templates, parts and operations above cover bands, solitaires and petals. For anything else (a cabochon, a
+signet, a lion's face, a ship) do not wait for a new feature: write the piece as a short JavaScript program. The
+engine runs it confined, keeps it as the piece's file, and previews, checks and exports it like any piece.
+
+- **How.** `start_piece` with `"program"` (and `"name"`, `"metal"`, `"shrinkage"` if you like) instead of a
+  template. `change_piece` with the whole edited `"program"` makes the next version. A template piece can go on as a
+  program: `describe_piece` shows it written as one, ready to edit.
+- **What it can call.** `describe_piece` lists everything, with settings. In short:
+  - the **library**, today's parts: `ringShank`, `roundStone`, `emeraldStone`, `stone` (a stone of your own shape),
+    `prongHead`, `bezel`, `thicken`, and `op` (any operation node a tree can hold). They take the same settings and
+    defaults as `start_piece`, and each reads back its dimensions as `.dims` (the seat, the bezel, each prong, the
+    band), so a fit is worked from the engine's numbers;
+  - the **kernel**: `sphere`, `cylinder`, `box`, `torus`, `sweep`; `circle`, `rect` and `polygon` (2D, with
+    `.offset`); `extrude`, `revolve`, `hull`; `union`, `difference`, `intersection`, `smoothUnion` (a fillet); and on
+    a solid `.translate`, `.rotate`, `.mirror`, `.scale`, `.named("...")`, `.bounds()`, `.volume()`. `segments(r)`
+    says how finely to draw a curve you compute, so the casting file is smooth enough.
+- **Rules.** End with `return <the piece>;`. The ring's frame is fixed: the band stands round the Y axis through the
+  origin, and the setting upright on top of it at +Z. The checker measures them there, so the band only turns about
+  Y and the setting only moves or turns about Z. A piece holds one band and one setting from the library; build
+  anything more from the kernel. A stone is never metal.
+- **When it fails**, the reply names the line and what to fix ("program: line 3: rotate([20, 0, 0]): would tip the
+  stone setting off upright"), and nothing changes. A program that runs too long or uses too much memory is stopped
+  and refused, with the limit it hit. `console.log` lines come back with the reply.
+- **Name the shapes you add** (`.named("crest")`), so a refusal can say "the shape named "crest"".
+
+**A worked example: a cabochon in a bezel.** No engine feature makes a cabochon; the program does, in a few lines.
+
+```js
+// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.
+const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });
+
+// The cabochon: a quarter ellipse from its edge up to its top, turned round the Z axis.
+const r = 4, h = 2.6, n = Math.ceil(segments(r) / 4);
+const profile = [[0, 0]];
+for (let i = 0; i <= n; i++) {
+  const a = (i / n) * Math.PI / 2;
+  profile.push([r * Math.cos(a), h * Math.sin(a)]);
+}
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+
+// The bezel seats it on a flat ledge and rises over its curve.
+const setting = bezel({ stone: moonstone, on: band, wall: 1.0 });
+return union(band, setting);
+```
+
+It passes every casting check in silver and exports. `stone()` reads the girdle where the dome is widest (its flat
+base), so its crown is its full 2.6 mm height, and the bezel's lip is worked from that. The lip check is the
+faceted stone's rule (50 % to 75 % of the crown), so a lower bezel over a cabochon is refused today; if the person
+wants one, say so rather than forcing it.
+
 ## Platinum
 
 - Platinum 950 melts at about 1780 to 1795 °C and is cast at about 1850 to 2200 °C, with special investment and an
@@ -204,7 +258,8 @@ silver and exports.
 
 ## Picking up later
 
-- Each change returns the ring's recipe (its tree), and flo2 keeps every version as `<name>.tree.json`.
-- To continue in a new conversation, pass that tree as `tree` to any tool.
+- Each change returns the ring's recipe (its tree), and flo2 keeps every version as `<name>.tree.json`. A piece
+  written as a program is kept the same way: its file holds the program.
+- To continue in a new conversation, pass that file as `tree` to any tool.
 - `describe_piece` reads the piece back in jeweler's terms: its size, weight in each metal, the dimensions it is built
   to (the seat, the bezel or prongs, the band), and every setting you can change.

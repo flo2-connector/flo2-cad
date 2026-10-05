@@ -317,14 +317,14 @@ function promiseAllObject(promisesObj) {
 }
 function randomString(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz";
-  let str = "";
+  let str2 = "";
   for (let i = 0; i < length; i++) {
-    str += chars[Math.floor(Math.random() * chars.length)];
+    str2 += chars[Math.floor(Math.random() * chars.length)];
   }
-  return str;
+  return str2;
 }
-function esc(str) {
-  return JSON.stringify(str);
+function esc(str2) {
+  return JSON.stringify(str2);
 }
 function slugify(input) {
   return input.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -438,8 +438,8 @@ var primitiveTypes = /* @__PURE__ */ new Set([
   "symbol",
   "undefined"
 ]);
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegex(str2) {
+  return str2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function clone(inst, def, params) {
   const cl = new inst._zod.constr(def ?? inst._zod.def);
@@ -693,13 +693,13 @@ function getSizableOrigin(input) {
   return "unknown";
 }
 var highSurrogate = /[\uD800-\uDBFF]/;
-function codePointLength(str) {
-  const units = str.length;
-  if (!highSurrogate.test(str))
+function codePointLength(str2) {
+  const units = str2.length;
+  if (!highSurrogate.test(str2))
     return units;
   let count = units;
   for (let i = 0; i < units - 1; i++) {
-    if ((str.charCodeAt(i) & 64512) === 55296 && (str.charCodeAt(i + 1) & 64512) === 56320) {
+    if ((str2.charCodeAt(i) & 64512) === 55296 && (str2.charCodeAt(i + 1) & 64512) === 56320) {
       count--;
       i++;
     }
@@ -12418,7 +12418,7 @@ function validateToolName(name) {
   if (name.startsWith("-") || name.endsWith("-")) warnings.push("Tool name starts or ends with a dash, which may cause parsing issues in some contexts");
   if (name.startsWith(".") || name.endsWith(".")) warnings.push("Tool name starts or ends with a dot, which may cause parsing issues in some contexts");
   if (!TOOL_NAME_REGEX.test(name)) {
-    const invalidChars = [...name].filter((char) => !/[A-Za-z0-9._-]/.test(char)).filter((char, index, arr) => arr.indexOf(char) === index);
+    const invalidChars = [...name].filter((char) => !/[A-Za-z0-9._-]/.test(char)).filter((char, index, arr2) => arr2.indexOf(char) === index);
     warnings.push(`Tool name contains invalid characters: ${invalidChars.map((c) => `"${c}"`).join(", ")}`, "Allowed characters are: A-Z, a-z, 0-9, underscore (_), dash (-), and dot (.)");
     return {
       isValid: false,
@@ -12528,7 +12528,7 @@ var require_code$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
   }
   exports._ = _;
   const plus = new _Code("+");
-  function str(strs, ...args) {
+  function str2(strs, ...args) {
     const expr = [safeStringify(strs[0])];
     let i = 0;
     while (i < args.length) {
@@ -12539,7 +12539,7 @@ var require_code$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
     optimize(expr);
     return new _Code(expr);
   }
-  exports.str = str;
+  exports.str = str2;
   function addCodeArg(code, arg2) {
     if (arg2 instanceof _Code) code.push(...arg2._items);
     else if (arg2 instanceof Name) code.push(arg2);
@@ -12572,7 +12572,7 @@ var require_code$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
     if (typeof b == "string" && b[0] === '"' && !(a instanceof Name)) return `"${a}${b.slice(1)}`;
   }
   function strConcat(c1, c2) {
-    return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
+    return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str2`${c1}${c2}`;
   }
   exports.strConcat = strConcat;
   function interpolate(x) {
@@ -13245,9 +13245,9 @@ var require_codegen = /* @__PURE__ */ __commonJSMin(((exports) => {
     forOf(nameOrPrefix, iterable, forBody, varKind = scope_1.varKinds.const) {
       const name = this._scope.toName(nameOrPrefix);
       if (this.opts.es5) {
-        const arr = iterable instanceof code_1.Name ? iterable : this.var("_arr", iterable);
-        return this.forRange("_i", 0, (0, code_1._)`${arr}.length`, (i) => {
-          this.var(name, (0, code_1._)`${arr}[${i}]`);
+        const arr2 = iterable instanceof code_1.Name ? iterable : this.var("_arr", iterable);
+        return this.forRange("_i", 0, (0, code_1._)`${arr2}.length`, (i) => {
+          this.var(name, (0, code_1._)`${arr2}[${i}]`);
           forBody(name);
         });
       }
@@ -13410,9 +13410,9 @@ var require_util = /* @__PURE__ */ __commonJSMin(((exports) => {
   exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
   const codegen_1 = require_codegen();
   const code_1 = require_code$1();
-  function toHash(arr) {
+  function toHash(arr2) {
     const hash = {};
-    for (const item of arr) hash[item] = true;
+    for (const item of arr2) hash[item] = true;
     return hash;
   }
   exports.toHash = toHash;
@@ -13451,21 +13451,21 @@ var require_util = /* @__PURE__ */ __commonJSMin(((exports) => {
     return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
   }
   exports.schemaRefOrVal = schemaRefOrVal;
-  function unescapeFragment(str) {
-    return unescapeJsonPointer(decodeURIComponent(str));
+  function unescapeFragment(str2) {
+    return unescapeJsonPointer(decodeURIComponent(str2));
   }
   exports.unescapeFragment = unescapeFragment;
-  function escapeFragment(str) {
-    return encodeURIComponent(escapeJsonPointer(str));
+  function escapeFragment(str2) {
+    return encodeURIComponent(escapeJsonPointer(str2));
   }
   exports.escapeFragment = escapeFragment;
-  function escapeJsonPointer(str) {
-    if (typeof str == "number") return `${str}`;
-    return str.replace(/~/g, "~0").replace(/\//g, "~1");
+  function escapeJsonPointer(str2) {
+    if (typeof str2 == "number") return `${str2}`;
+    return str2.replace(/~/g, "~0").replace(/\//g, "~1");
   }
   exports.escapeJsonPointer = escapeJsonPointer;
-  function unescapeJsonPointer(str) {
-    return str.replace(/~1/g, "/").replace(/~0/g, "~");
+  function unescapeJsonPointer(str2) {
+    return str2.replace(/~1/g, "/").replace(/~0/g, "~");
   }
   exports.unescapeJsonPointer = unescapeJsonPointer;
   function eachItem(xs, f) {
@@ -14351,8 +14351,8 @@ var require_json_schema_traverse = /* @__PURE__ */ __commonJSMin(((exports, modu
       post(schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema, keyIndex);
     }
   }
-  function escapeJsonPtr(str) {
-    return str.replace(/~/g, "~0").replace(/\//g, "~1");
+  function escapeJsonPtr(str2) {
+    return str2.replace(/~/g, "~0").replace(/\//g, "~1");
   }
 }));
 var require_resolve = /* @__PURE__ */ __commonJSMin(((exports) => {
@@ -15244,9 +15244,9 @@ var require_utils = /* @__PURE__ */ __commonJSMin(((exports, module) => {
       isIPV6: false
     };
   }
-  function findToken(str, token) {
+  function findToken(str2, token) {
     let ind = 0;
-    for (let i = 0; i < str.length; i++) if (str[i] === token) ind++;
+    for (let i = 0; i < str2.length; i++) if (str2[i] === token) ind++;
     return ind;
   }
   function removeDotSegments(path) {
@@ -15761,7 +15761,7 @@ var require_core$3 = /* @__PURE__ */ __commonJSMin(((exports) => {
   const util_1 = require_util();
   const $dataRefSchema = require_data();
   const uri_1 = require_uri();
-  const defaultRegExp = (str, flags) => new RegExp(str, flags);
+  const defaultRegExp = (str2, flags) => new RegExp(str2, flags);
   defaultRegExp.code = "new RegExp";
   const META_IGNORE_OPTIONS = [
     "removeAdditional",
@@ -16467,16 +16467,16 @@ var require_multipleOf = /* @__PURE__ */ __commonJSMin(((exports) => {
 }));
 var require_ucs2length = /* @__PURE__ */ __commonJSMin(((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
-  function ucs2length(str) {
-    const len2 = str.length;
+  function ucs2length(str2) {
+    const len2 = str2.length;
     let length = 0;
     let pos = 0;
     let value;
     while (pos < len2) {
       length++;
-      value = str.charCodeAt(pos++);
+      value = str2.charCodeAt(pos++);
       if (value >= 55296 && value <= 56319 && pos < len2) {
-        value = str.charCodeAt(pos);
+        value = str2.charCodeAt(pos);
         if ((value & 64512) === 56320) pos++;
       }
     }
@@ -19187,8 +19187,8 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports) => {
     30,
     31
   ];
-  function date4(str) {
-    const matches = DATE.exec(str);
+  function date4(str2) {
+    const matches = DATE.exec(str2);
     if (!matches) return false;
     const year = +matches[1];
     const month = +matches[2];
@@ -19203,8 +19203,8 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports) => {
   }
   const TIME = /^(\d\d):(\d\d):(\d\d(?:\.\d+)?)(z|([+-])(\d\d)(?::?(\d\d))?)?$/i;
   function getTime(strictTimeZone) {
-    return function time3(str) {
-      const matches = TIME.exec(str);
+    return function time3(str2) {
+      const matches = TIME.exec(str2);
       if (!matches) return false;
       const hr = +matches[1];
       const min = +matches[2];
@@ -19241,8 +19241,8 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports) => {
   const DATE_TIME_SEPARATOR = /t|\s/i;
   function getDateTime(strictTimeZone) {
     const time3 = getTime(strictTimeZone);
-    return function date_time(str) {
-      const dateTime = str.split(DATE_TIME_SEPARATOR);
+    return function date_time(str2) {
+      const dateTime = str2.split(DATE_TIME_SEPARATOR);
       return dateTime.length === 2 && date4(dateTime[0]) && time3(dateTime[1]);
     };
   }
@@ -19263,13 +19263,13 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports) => {
   }
   const NOT_URI_FRAGMENT = /\/|:/;
   const URI = /^(?:[a-z][a-z0-9+\-.]*:)(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|[Vv][0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?|(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i;
-  function uri(str) {
-    return NOT_URI_FRAGMENT.test(str) && URI.test(str);
+  function uri(str2) {
+    return NOT_URI_FRAGMENT.test(str2) && URI.test(str2);
   }
   const BYTE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/gm;
-  function byte(str) {
+  function byte(str2) {
     BYTE.lastIndex = 0;
-    return BYTE.test(str);
+    return BYTE.test(str2);
   }
   const MIN_INT32 = -(2 ** 31);
   const MAX_INT32 = 2 ** 31 - 1;
@@ -19283,10 +19283,10 @@ var require_formats = /* @__PURE__ */ __commonJSMin(((exports) => {
     return true;
   }
   const Z_ANCHOR = /[^\\]\\Z/;
-  function regex(str) {
-    if (Z_ANCHOR.test(str)) return false;
+  function regex(str2) {
+    if (Z_ANCHOR.test(str2)) return false;
     try {
-      new RegExp(str);
+      new RegExp(str2);
       return true;
     } catch (e) {
       return false;
@@ -22190,7 +22190,7 @@ function runChecks(stl, decl, L3, reference) {
   guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3));
   guard("surface_deviation", "Surface smoothness", mm(L3.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
-    return surfaceEntry(bvh, L3, readBinaryStl(reference), decl);
+    return surfaceEntry(bvh, L3, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
@@ -23119,11 +23119,18 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 var KERNEL_DIR_NAME = "manifold-3d-3.5.4";
+function readable(p) {
+  try {
+    return existsSync(p);
+  } catch {
+    return false;
+  }
+}
 function kernelDir() {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     const candidate = join(dir, "vendor", KERNEL_DIR_NAME);
-    if (existsSync(join(candidate, "manifold.js"))) return candidate;
+    if (readable(join(candidate, "manifold.js"))) return candidate;
     dir = dirname(dir);
   }
   throw new Error(`the geometry kernel (vendor/${KERNEL_DIR_NAME}/manifold.js) was not found next to the engine`);
@@ -23579,8 +23586,8 @@ function convexSag(s, xs, ys) {
   return (R + s.thickness / 2) * (1 / fMin - 1);
 }
 var FLOAT_ALLOWANCE = 2 ** -22;
-function floatAllowance(reach, m) {
-  return FLOAT_ALLOWANCE * (Math.hypot(m[3], m[7], m[11]) + reach);
+function floatAllowance(reach, m, later = 0) {
+  return FLOAT_ALLOWANCE * (Math.hypot(m[3], m[7], m[11]) + later + reach);
 }
 function divide(polys, step) {
   return polys.map((poly) => {
@@ -23611,7 +23618,7 @@ function buildThicken(k, A, n, tol, ctx) {
   const far = Math.max(...[bb.min[0], bb.max[0]].flatMap((x) => [bb.min[1], bb.max[1]].map((y) => Math.hypot(x, y))));
   let solid;
   if (s.surface === "flat") {
-    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY);
+    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY, ctx?.moveReachMm);
     solid = A.t(A.t(Manifold.extrude(cs, t + 2 * eps)).translate([0, 0, -(t / 2 + eps)]));
   } else {
     const map = surfaceMap(s);
@@ -23626,7 +23633,7 @@ function buildThicken(k, A, n, tol, ctx) {
     const h = gridSpacing(s, tol);
     const xs = gridLines(bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, h), ys = gridLines(bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h);
     const sag = convexSag(s, xs, ys);
-    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY);
+    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY, ctx?.moveReachMm);
     const zb = -(t / 2 + sag + eps), zt = t / 2 + eps;
     const slab = A.t(A.t(gridSlab(k, xs, ys, zb, zt)).warpBatch(warp));
     const m = Math.min(0.3, (s.radius - t / 2) / 2);
@@ -23924,15 +23931,19 @@ var HEAD_DEFAULTS = {
   /** Gap between the stone's culet (its point) and the top of the band. */
   culet_clearance: "0.3 mm"
 };
+function bandDefaults(profile) {
+  return profile === "round" ? { width: "2.0 mm", thickness: "2.0 mm" } : { width: PARAM_BY_KEY.get("band_width").default, thickness: PARAM_BY_KEY.get("band_thickness").default };
+}
 function bandNode(o, profile) {
+  const d = bandDefaults(profile);
   return {
     id: "band",
     part: "ring_shank",
     feature: "band",
     params: {
       ring_size: o["ring_size"],
-      width: o["band_width"] ?? (profile === "round" ? "2.0 mm" : PARAM_BY_KEY.get("band_width").default),
-      thickness: o["band_thickness"] ?? (profile === "round" ? "2.0 mm" : PARAM_BY_KEY.get("band_thickness").default),
+      width: o["band_width"] ?? d.width,
+      thickness: o["band_thickness"] ?? d.thickness,
       profile
     }
   };
@@ -24162,14 +24173,24 @@ function validateStone(s, path) {
     throw new CallError(at(path, "placeholder"), `lists which of the stone's dimensions are still template placeholders, e.g. ["depth"].`);
   }
 }
-function headCommon(p, path) {
-  validateStone(p["stone"], at(path, "stone"));
-  const cc = lengthMm(p["culet_clearance"], at(path, "culet_clearance"));
-  if (cc < 0.1 || cc > 5) throw new CallError(at(path, "culet_clearance"), `${cc} mm is outside what the library builds (0.1 to 5 mm).`);
-}
 function validateProngHead(p, path) {
   only(p, path, ["stone", "prong_count", "prong_thickness", "prong_grip", "culet_clearance", "prong_overrides"]);
-  headCommon(p, path);
+  validateStone(p["stone"], at(path, "stone"));
+  checkHeadSettings("prong_head", p, path);
+}
+function validateBezel(p, path) {
+  only(p, path, ["stone", "wall", "lip", "culet_clearance"]);
+  validateStone(p["stone"], at(path, "stone"));
+  checkHeadSettings("bezel", p, path);
+}
+function checkHeadSettings(kind, p, path) {
+  const cc = lengthMm(p["culet_clearance"], at(path, "culet_clearance"));
+  if (cc < 0.1 || cc > 5) throw new CallError(at(path, "culet_clearance"), `${cc} mm is outside what the library builds (0.1 to 5 mm).`);
+  if (kind === "bezel") {
+    checkParam(PARAM_BY_KEY.get("bezel_wall"), p["wall"], at(path, "wall"));
+    checkParam(PARAM_BY_KEY.get("bezel_lip"), p["lip"], at(path, "lip"));
+    return;
+  }
   checkParam(PARAM_BY_KEY.get("prong_count"), p["prong_count"], at(path, "prong_count"));
   checkParam(PARAM_BY_KEY.get("prong_thickness"), p["prong_thickness"], at(path, "prong_thickness"));
   const grip = lengthMm(p["prong_grip"], at(path, "prong_grip"));
@@ -24187,12 +24208,6 @@ function validateProngHead(p, path) {
     }
     checkParam(PARAM_BY_KEY.get("prong_thickness"), r["thickness"], at(op, "thickness"));
   });
-}
-function validateBezel(p, path) {
-  only(p, path, ["stone", "wall", "lip", "culet_clearance"]);
-  headCommon(p, path);
-  checkParam(PARAM_BY_KEY.get("bezel_wall"), p["wall"], at(path, "wall"));
-  checkParam(PARAM_BY_KEY.get("bezel_lip"), p["lip"], at(path, "lip"));
 }
 var OP_PARAMS = {
   union: {},
@@ -24463,32 +24478,32 @@ function readPiece(tree) {
     extras: (tree.root.children ?? []).filter((c) => c.id !== "band" && c.id !== "head")
   };
   const head = findNode(tree.root, "head");
-  if (head && head.part === "prong_head") {
-    const hp = head.params;
+  if (head && (head.part === "prong_head" || head.part === "bezel")) view.head = headView(head.part, head.params, stoneView(head.params["stone"]));
+  return view;
+}
+function headView(kind, hp, stone) {
+  if (kind === "prong_head") {
     const count = hp["prong_count"];
     const base = lengthMm(hp["prong_thickness"], "head.prong_thickness");
     const each = Array.from({ length: count }, () => base);
     for (const o of hp["prong_overrides"] ?? []) each[o.prong - 1] = lengthMm(o.thickness, "head.prong_overrides");
-    view.head = {
+    return {
       kind: "prong_head",
-      stone: stoneView(hp["stone"]),
+      stone,
       prongCount: count,
       prongThicknessMm: each,
       nominalProngMm: base,
       gripMm: lengthMm(hp["prong_grip"], "head.prong_grip"),
       culetClearanceMm: lengthMm(hp["culet_clearance"], "head.culet_clearance")
     };
-  } else if (head && head.part === "bezel") {
-    const hp = head.params;
-    view.head = {
-      kind: "bezel",
-      stone: stoneView(hp["stone"]),
-      wallMm: lengthMm(hp["wall"], "head.wall"),
-      lipMm: hp["lip"] === "auto" ? "auto" : lengthMm(hp["lip"], "head.lip"),
-      culetClearanceMm: lengthMm(hp["culet_clearance"], "head.culet_clearance")
-    };
   }
-  return view;
+  return {
+    kind: "bezel",
+    stone,
+    wallMm: lengthMm(hp["wall"], "head.wall"),
+    lipMm: hp["lip"] === "auto" ? "auto" : lengthMm(hp["lip"], "head.lip"),
+    culetClearanceMm: lengthMm(hp["culet_clearance"], "head.culet_clearance")
+  };
 }
 
 // src/library/field.ts
@@ -24845,7 +24860,7 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
       const [first, ...rest] = n.children ?? [];
       const keep = buildOp(k, A, first, tol, inner);
       if (!rest.length) return keep;
-      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m, ...inner.blends ? { blends: inner.blends } : {}, ...inner.blendMeshes ? { blendMeshes: inner.blendMeshes } : {} }));
+      const cutters = rest.map((ch) => buildOp(k, A, ch, tol, { m: inner.m, ...inner.blends ? { blends: inner.blends } : {}, ...inner.blendMeshes ? { blendMeshes: inner.blendMeshes } : {}, ...inner.moveReachMm ? { moveReachMm: inner.moveReachMm } : {} }));
       return A.t(keep.subtract(A.t(Manifold.union(cutters))));
     }
     case "intersection": {
@@ -25106,9 +25121,28 @@ function prongPlaces(stone, outline, count) {
   };
   return places.map(({ at: at2, out }) => ({ at: at2, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
+function prongPlacesAround(outline, count) {
+  const n = outline.length;
+  return Array.from({ length: count }, (_, i) => {
+    const a = (i + 0.5) * 360 / count * (Math.PI / 180);
+    const dir = [Math.sin(a), Math.cos(a)];
+    let best = { s: 0, out: dir };
+    for (let j = 0; j < n; j++) {
+      const p = outline[j], q = outline[(j + 1) % n];
+      const ex = q[0] - p[0], ey = q[1] - p[1];
+      const det = dir[0] * -ey - dir[1] * -ex;
+      if (Math.abs(det) < 1e-12) continue;
+      const s = (p[0] * -ey - p[1] * -ex) / det;
+      const u = (dir[0] * p[1] - dir[1] * p[0]) / det;
+      if (s > best.s && u >= -1e-9 && u <= 1 + 1e-9) best = { s, out: edgeNormal(p, q) };
+    }
+    return { at: [dir[0] * best.s, dir[1] * best.s], out: best.out };
+  });
+}
 var SEAT_CLEARANCE = 0.03;
 var BEZEL_CLEARANCE = 0.05;
 function stoneSpec(sv) {
+  if (sv.shape === "custom") throw new Error("engine bug: a stone of its own shape has no round or emerald-cut spec");
   return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
 }
 function narrowestSection(p, r, outside) {
@@ -25129,15 +25163,14 @@ function narrowestSection(p, r, outside) {
   }
   return Math.max(0, 2 * best.v);
 }
-function pieceDims(v) {
+function pieceDims(v, custom) {
   const rIn = v.innerDiameterMm / 2;
   const t = v.bandThicknessMm;
   const rOut = rIn + t;
   const dims = { band: { innerDiameterMm: v.innerDiameterMm, outerDiameterMm: 2 * rOut, widthMm: v.bandWidthMm, thicknessMm: t } };
   if (!v.head) return dims;
   const sv = v.head.stone;
-  const spec = stoneSpec(sv);
-  const shape = stoneShape(spec, PREVIEW_TOL);
+  const shape = custom ?? stoneShape(stoneSpec(sv), PREVIEW_TOL);
   const culetZ = rOut + v.head.culetClearanceMm;
   const zGb = culetZ + shape.pavilion;
   const zGt = zGb + shape.girdle;
@@ -25165,7 +25198,8 @@ function pieceDims(v) {
     const hv = v.head;
     const rail = { offMm: hv.nominalProngMm / 2 - hv.gripMm, widthMm: Math.max(hv.nominalProngMm, 1.2) + 0.3, heightMm: Math.max(hv.nominalProngMm, 1.2) + 0.2 };
     head.rail = rail;
-    const prongs = prongPlaces(spec, shape.outline, hv.prongCount).map((pl, i) => {
+    const places = custom ? prongPlacesAround(shape.outline, hv.prongCount) : prongPlaces(stoneSpec(sv), shape.outline, hv.prongCount);
+    const prongs = places.map((pl, i) => {
       const tk = hv.prongThicknessMm[i];
       const off = tk / 2 - hv.gripMm;
       const axis = [pl.at[0] + pl.out[0] * off, pl.at[1] + pl.out[1] * off];
@@ -25219,103 +25253,135 @@ function meshOut(mesh) {
   }
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
-function buildWith(k, A, tree, opts) {
-  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error("a build that declares blend surfaces builds its own level sets");
+function buildBand(k, A, dims, profileName, tol) {
   const { Manifold, CrossSection } = k;
-  const tol = opts.tol;
-  const v = readPiece(tree);
-  const dims = pieceDims(v);
   const rIn = dims.band.innerDiameterMm / 2;
   const t = dims.band.thicknessMm;
   const rOut = dims.band.outerDiameterMm / 2;
   const w = dims.band.widthMm;
-  const profile = bandProfile(v.profile, rIn, t, w, tol);
+  const profile = bandProfile(profileName, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
+  return { band, decl: { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 } };
+}
+function buildHead(k, A, v, dims, tol, shape, onBand) {
+  const { Manifold, CrossSection } = k;
+  if (!v.head || !dims.head) throw new Error("engine bug: a head was asked for a piece with none");
+  const rIn = dims.band.innerDiameterMm / 2;
+  const rOut = dims.band.outerDiameterMm / 2;
+  const w = dims.band.widthMm;
+  const hd = dims.head;
+  const sv = v.head.stone;
+  const zGb = hd.girdleBottomZ;
+  const zGt = hd.girdleTopZ;
+  const zTable = hd.tableZ;
+  const decl = { stone: { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm }, prongs: [] };
+  const stone = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
+  const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
+  let head;
+  if (v.head.kind === "prong_head" && hd.prongs && hd.rail) {
+    const railW = hd.rail.widthMm;
+    const railH = hd.rail.heightMm;
+    const railOff = hd.rail.offMm;
+    const girdleCs = A.t(new CrossSection([shape.outline]));
+    const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
+    const railOuter = A.t(girdleCs.offset(railOff + railW / 2, "Round", 2, ringSeg));
+    const railInner = A.t(girdleCs.offset(railOff - railW / 2, "Round", 2, ringSeg));
+    const railCs = A.t(railOuter.subtract(railInner));
+    const railMid = A.t(girdleCs.offset(railOff, "Round", 2, ringSeg)).toPolygons()[0];
+    const xCross = Math.max(...crossingsX(railMid, w / 2));
+    const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
+    const parts = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
+    hd.prongs.forEach((pd) => {
+      const tk = pd.thicknessMm;
+      const [cx, cy] = pd.axis;
+      const r = tk / 2;
+      const colH = zTable - zRail;
+      const arc = (u) => [r * Math.cos(u), colH + r * Math.sin(u)];
+      const prof = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
+      const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
+      parts.push(A.t(col.translate([cx, cy, zRail])));
+      const prong = {
+        label: pd.label,
+        clock: pd.clock,
+        axis: [cx, cy],
+        nominalDiameter: tk,
+        sectionFromZ: zRail + railH / 2 + 0.1,
+        sectionToZ: zTable - 0.02
+      };
+      decl.prongs.push(prong);
+    });
+    head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
+  } else if (v.head.kind === "bezel" && hd.bezel) {
+    const c = hd.seat.clearanceMm;
+    const zTop = hd.bezel.topZ;
+    const girdleCs = A.t(new CrossSection([shape.outline]));
+    const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
+    const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, "Round", 2, seg));
+    const innerCs = A.t(girdleCs.offset(c, "Round", 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
+    const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
+    const holeCs = A.t(girdleCs.offset(-ledge, "Round", 2, seg));
+    const outerPts = outerCs.toPolygons()[0];
+    const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
+    const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
+    const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
+    const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
+    const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
+    head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
+    decl.bezel = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
+  } else {
+    throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
+  }
+  if (onBand) {
+    const nBand = segmentsFor(rOut, tol, 48);
+    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
+    head = A.t(head.subtract(finger));
+  }
+  return { head, stone, decl };
+}
+function buildWith(k, A, tree, opts) {
+  if (opts.blendSurface && opts.blendMeshes?.reuse) throw new Error("a build that declares blend surfaces builds its own level sets");
+  const tol = opts.tol;
+  const v = readPiece(tree);
+  const dims = pieceDims(v);
+  const b = buildBand(k, A, dims, v.profile, tol);
+  const band = b.band;
   const decl = { prongs: [], scale: 1 };
-  const bandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
-  decl.band = bandDecl;
+  decl.band = b.decl;
   let metal = band;
   let stoneSolid;
   if (v.head && dims.head) {
-    const hd = dims.head;
     const sv = v.head.stone;
-    const shape = stoneShape(stoneSpec(sv), tol);
-    const zGb = hd.girdleBottomZ;
-    const zGt = hd.girdleTopZ;
-    const zTable = hd.tableZ;
-    const stoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm };
-    decl.stone = stoneDecl;
-    stoneSolid = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-    const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
-    let head;
-    if (v.head.kind === "prong_head" && hd.prongs && hd.rail) {
-      const railW = hd.rail.widthMm;
-      const railH = hd.rail.heightMm;
-      const railOff = hd.rail.offMm;
-      const girdleCs = A.t(new CrossSection([shape.outline]));
-      const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
-      const railOuter = A.t(girdleCs.offset(railOff + railW / 2, "Round", 2, ringSeg));
-      const railInner = A.t(girdleCs.offset(railOff - railW / 2, "Round", 2, ringSeg));
-      const railCs = A.t(railOuter.subtract(railInner));
-      const railMid = A.t(girdleCs.offset(railOff, "Round", 2, ringSeg)).toPolygons()[0];
-      const xCross = Math.max(...crossingsX(railMid, w / 2));
-      const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
-      const parts = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
-      hd.prongs.forEach((pd) => {
-        const tk = pd.thicknessMm;
-        const [cx, cy] = pd.axis;
-        const r = tk / 2;
-        const colH = zTable - zRail;
-        const arc = (u) => [r * Math.cos(u), colH + r * Math.sin(u)];
-        const prof = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
-        const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
-        parts.push(A.t(col.translate([cx, cy, zRail])));
-        const prong = {
-          label: pd.label,
-          clock: pd.clock,
-          axis: [cx, cy],
-          nominalDiameter: tk,
-          sectionFromZ: zRail + railH / 2 + 0.1,
-          sectionToZ: zTable - 0.02
-        };
-        decl.prongs.push(prong);
-      });
-      head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
-    } else if (v.head.kind === "bezel" && hd.bezel) {
-      const c = hd.seat.clearanceMm;
-      const zTop = hd.bezel.topZ;
-      const girdleCs = A.t(new CrossSection([shape.outline]));
-      const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
-      const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, "Round", 2, seg));
-      const innerCs = A.t(girdleCs.offset(c, "Round", 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
-      const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
-      const holeCs = A.t(girdleCs.offset(-ledge, "Round", 2, seg));
-      const outerPts = outerCs.toPolygons()[0];
-      const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
-      const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
-      const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
-      const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
-      const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
-      head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
-      const bezelDecl = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
-      decl.bezel = bezelDecl;
-    } else {
-      throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
-    }
-    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
-    metal = A.t(A.t(head.subtract(finger)).add(band));
+    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true);
+    decl.stone = h.decl.stone;
+    decl.prongs.push(...h.decl.prongs);
+    if (h.decl.bezel) decl.bezel = h.decl.bezel;
+    stoneSolid = h.stone;
+    metal = A.t(h.head.add(band));
   }
   const sheets = [];
   const blends = [];
   for (const extra of v.extras) {
     const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets, blends, ...opts.blendMeshes ? { blendMeshes: opts.blendMeshes } : {} }));
-    const bb2 = shape.boundingBox();
-    (decl.added ??= []).push({ id: extra.id, min: [...bb2.min], max: [...bb2.max] });
+    const bb = shape.boundingBox();
+    (decl.added ??= []).push({ id: extra.id, min: [...bb.min], max: [...bb.max] });
     metal = A.t(metal.add(shape));
   }
   if (sheets.length) decl.sheets = sheets;
   const scale2 = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
+  const done = finishMetal(A, metal, decl, blends, scale2, !!opts.blendSurface);
+  return {
+    view: v,
+    metal: done.mesh,
+    ...stoneSolid ? { stone: polygonsToMesh(scale2 !== 1 ? A.t(stoneSolid.scale(scale2)) : stoneSolid) } : {},
+    decl,
+    volumeMm3: done.volumeMm3,
+    bbox: done.bbox,
+    dims
+  };
+}
+function finishMetal(A, solid, decl, blends, scale2, withBlendSurface) {
+  let metal = solid;
   if (scale2 !== 1) {
     metal = A.t(metal.scale(scale2));
     scaleDecl(decl, scale2);
@@ -25326,16 +25392,8 @@ function buildWith(k, A, tree, opts) {
   if (status !== "NoError") throw new Error(`the kernel reported ${status} while building the piece`);
   const bb = metal.boundingBox();
   const mesh = metal.getMesh();
-  if (opts.blendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale2);
-  return {
-    view: v,
-    metal: meshOut(mesh),
-    ...stoneSolid ? { stone: polygonsToMesh(scale2 !== 1 ? A.t(stoneSolid.scale(scale2)) : stoneSolid) } : {},
-    decl,
-    volumeMm3: metal.volume(),
-    bbox: { min: [...bb.min], max: [...bb.max] },
-    dims
-  };
+  if (withBlendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale2);
+  return { mesh: meshOut(mesh), volumeMm3: metal.volume(), bbox: { min: [...bb.min], max: [...bb.max] } };
 }
 function atFilePrecision(A, m) {
   const snapped = A.t(
@@ -25456,6 +25514,431 @@ function scaleDecl(d, s) {
     sh.nominalThickness *= s;
     sh.spacing *= s;
   }
+}
+
+// src/piece/program.ts
+var PROGRAM_FORMAT = "flo2-cad.program/1";
+var PROGRAM_UNITS = "mm";
+var PROGRAM_MAX_CHARS = 1e5;
+function isProgramPiece(p) {
+  return p.format === PROGRAM_FORMAT;
+}
+var NAME2 = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+var FIELDS = ["format", "name", "revision", "metal", "shrinkage", "units", "program"];
+function checkProgramSource(v, path) {
+  if (typeof v !== "string" || !v.trim()) {
+    throw new CallError(path, 'a program is JavaScript text that builds the piece and returns it, for example "const band = ringShank({ ring_size: { system: \\"US\\", size: \\"7\\" } }); return band;". describe_piece lists what a program can call.');
+  }
+  if (v.length > PROGRAM_MAX_CHARS) throw new CallError(path, `the program is ${v.length} characters; a piece's program may be at most ${PROGRAM_MAX_CHARS}. Use loops and functions rather than long lists of numbers.`);
+  return v;
+}
+function validateProgramPiece(v, path = "tree") {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) throw new CallError(path, `a piece file is a JSON object with its "format", as a previous reply or the saved <name>.tree.json gave it.`);
+  const t = v;
+  if (t["format"] !== PROGRAM_FORMAT) throw new CallError(at(path, "format"), `must be "${PROGRAM_FORMAT}"; got ${JSON.stringify(t["format"])}.`);
+  for (const k of Object.keys(t)) if (!FIELDS.includes(k)) throw new CallError(at(path, k), `is not a field of a program piece; its fields are ${FIELDS.join(", ")}.`);
+  if (typeof t["name"] !== "string" || !NAME2.test(t["name"])) {
+    throw new CallError(at(path, "name"), 'a piece name is 1 to 64 letters, digits, "-" or "_", starting with a letter or digit, for example "moon-cabochon".');
+  }
+  if (!Number.isInteger(t["revision"]) || t["revision"] < 1) throw new CallError(at(path, "revision"), "must be a whole number, 1 or more (it counts the changes, so it has no unit).");
+  if (!METAL_IDS.includes(t["metal"])) throw new CallError(at(path, "metal"), `must be one of ${METAL_IDS.join(", ")}.`);
+  shrinkagePercent(t["shrinkage"], t["metal"], at(path, "shrinkage"));
+  if (t["units"] !== PROGRAM_UNITS) throw new CallError(at(path, "units"), `must be "${PROGRAM_UNITS}": a program's bare numbers are millimetres (and degrees where an angle is asked for).`);
+  checkProgramSource(t["program"], at(path, "program"));
+  return v;
+}
+function programPiece(program, o) {
+  return {
+    format: PROGRAM_FORMAT,
+    name: o.name ?? "piece",
+    revision: 1,
+    metal: o.metal ?? "sterling_silver_925",
+    shrinkage: o.shrinkage ?? "off",
+    units: PROGRAM_UNITS,
+    program
+  };
+}
+function validatePiece(v, path = "tree") {
+  const format = v !== null && typeof v === "object" && !Array.isArray(v) ? v["format"] : void 0;
+  if (format === PROGRAM_FORMAT) return validateProgramPiece(v, path);
+  if (format !== void 0 && format !== TREE_FORMAT) {
+    throw new CallError(at(path, "format"), `must be "${TREE_FORMAT}" (a piece built from a template) or "${PROGRAM_FORMAT}" (a piece written as a program); got ${JSON.stringify(format)}.`);
+  }
+  return validateTree(v, path);
+}
+
+// src/program/run.ts
+import { spawn } from "node:child_process";
+import { existsSync as existsSync2, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname as dirname2, join as join2 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+
+// src/program/library.ts
+var MAX_REACH_MM = 1e3;
+
+// src/program/verify.ts
+var MAX_TRIANGLES = 6e6;
+var isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+function fin(v, what, lo = -Infinity, hi = Infinity) {
+  if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi) throw new Error(`${what} is not a number in range`);
+  return v;
+}
+function str(v, what, max = 80) {
+  if (typeof v !== "string" || v.length > max) throw new Error(`${what} is not a short text`);
+  return v;
+}
+function arr(v, what, max) {
+  if (!Array.isArray(v) || v.length > max) throw new Error(`${what} is not a list of at most ${max}`);
+  return v;
+}
+var p2 = (v, what) => {
+  const a = arr(v, what, 2);
+  return [fin(a[0], what, -MAX_REACH_MM * 2, MAX_REACH_MM * 2), fin(a[1], what, -MAX_REACH_MM * 2, MAX_REACH_MM * 2)];
+};
+var p3 = (v, what) => {
+  const a = arr(v, what, 3);
+  return [fin(a[0], what, -MAX_REACH_MM * 2, MAX_REACH_MM * 2), fin(a[1], what, -MAX_REACH_MM * 2, MAX_REACH_MM * 2), fin(a[2], what, -MAX_REACH_MM * 2, MAX_REACH_MM * 2)];
+};
+function blobOf(blobs, i, what, kind) {
+  if (!Number.isInteger(i) || i < 0 || i >= blobs.length) throw new Error(`${what} names no data`);
+  const b = blobs[i];
+  if (b.length % 4) throw new Error(`${what} is not whole numbers`);
+  const ab = b.buffer.slice(b.byteOffset, b.byteOffset + b.length);
+  return kind === "f32" ? new Float32Array(ab) : new Uint32Array(ab);
+}
+function readMesh(v, blobs, what, scale2, positionsOnly) {
+  if (!isObj(v)) throw new Error(`${what} is missing`);
+  const positions = blobOf(blobs, v["positions"], `${what} vertices`, "f32");
+  if (positions.length % 3) throw new Error(`${what} vertices are not in threes`);
+  const reach = MAX_REACH_MM * Math.max(1, scale2) + 1;
+  for (const x of positions) if (!(Math.abs(x) <= reach)) throw new Error(`${what} has a vertex out of reach (${x})`);
+  if (positionsOnly) return { positions, triangles: new Uint32Array(0) };
+  const triangles = blobOf(blobs, v["triangles"], `${what} triangles`, "u32");
+  if (triangles.length % 3 || triangles.length / 3 > MAX_TRIANGLES) throw new Error(`${what} triangles are not in threes, or too many`);
+  const nv = positions.length / 3;
+  for (const t of triangles) if (t >= nv) throw new Error(`${what} has a triangle naming no vertex`);
+  return { positions, triangles };
+}
+var LABEL = /^prong \d{1,2} of \d{1,2}$/;
+var ID = /^[a-z][a-z0-9_]{0,39}$/;
+function readDecl(v, blobs, scale2) {
+  if (!isObj(v)) throw new Error("the declarations are missing");
+  const s = Math.max(1, scale2);
+  const d = { prongs: [], scale: fin(v["scale"], "the scale", 1, 1.05 + 1e-9) };
+  if (Math.abs(d.scale - scale2) > 1e-9) throw new Error("the declarations are at another scale than asked");
+  if (v["band"] !== void 0) {
+    const b = v["band"];
+    if (!isObj(b)) throw new Error("the band is malformed");
+    const band = { innerRadius: fin(b["innerRadius"], "the band", 1, 60 * s), outerRadius: fin(b["outerRadius"], "the band", 1, 70 * s), halfWidth: fin(b["halfWidth"], "the band", 0.25, 6 * s) };
+    if (!(band.outerRadius > band.innerRadius)) throw new Error("the band is inside out");
+    d.band = band;
+  }
+  for (const [i, p] of arr(v["prongs"], "the prongs", 12).entries()) {
+    if (!isObj(p)) throw new Error("a prong is malformed");
+    const pr = {
+      label: str(p["label"], "a prong"),
+      clock: str(p["clock"], "a prong", 8),
+      axis: p2(p["axis"], "a prong"),
+      nominalDiameter: fin(p["nominalDiameter"], `prong ${i + 1}`, 0.3 - 1e-9, 3 * s + 1e-9),
+      sectionFromZ: fin(p["sectionFromZ"], "a prong", -MAX_REACH_MM * s, MAX_REACH_MM * s),
+      sectionToZ: fin(p["sectionToZ"], "a prong", -MAX_REACH_MM * s, MAX_REACH_MM * s)
+    };
+    if (!LABEL.test(pr.label) || !(pr.sectionToZ > pr.sectionFromZ) || pr.sectionToZ - pr.sectionFromZ > 40 * s) throw new Error(`${pr.label} is malformed`);
+    d.prongs.push(pr);
+  }
+  if (v["stone"] !== void 0) {
+    const st = v["stone"];
+    if (!isObj(st)) throw new Error("the stone is malformed");
+    const stone = {
+      outline: arr(st["outline"], "the stone", 4096).map((q) => p2(q, "the stone")),
+      girdleBottomZ: fin(st["girdleBottomZ"], "the stone", -MAX_REACH_MM * s, MAX_REACH_MM * s),
+      girdleTopZ: fin(st["girdleTopZ"], "the stone", -MAX_REACH_MM * s, MAX_REACH_MM * s),
+      crownHeight: fin(st["crownHeight"], "the stone", 0.01, 20 * s)
+    };
+    const xs = stone.outline.map((q) => q[0]), ys = stone.outline.map((q) => q[1]);
+    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    if (stone.outline.length < 3 || !(span >= 0.9 && span <= 31 * s) || stone.girdleTopZ < stone.girdleBottomZ) throw new Error("the stone is out of the range the library sets");
+    d.stone = stone;
+  }
+  if (v["bezel"] !== void 0) {
+    const bz = v["bezel"];
+    if (!isObj(bz) || !d.stone) throw new Error("the bezel is malformed, or holds no stone");
+    const bezel = { outer: arr(bz["outer"], "the bezel", 8192).map((q) => p2(q, "the bezel")), zBottom: fin(bz["zBottom"], "the bezel", -MAX_REACH_MM * s, MAX_REACH_MM * s), nominalWall: fin(bz["nominalWall"], "the bezel", 0.3 - 1e-9, 3 * s + 1e-9) };
+    if (bezel.outer.length < 3) throw new Error("the bezel has no outline");
+    d.bezel = bezel;
+  }
+  if (d.prongs.length && !d.stone) throw new Error("prongs hold no stone");
+  if (v["sheets"] !== void 0) {
+    d.sheets = arr(v["sheets"], "the sheets", 256).map((x) => {
+      if (!isObj(x)) throw new Error("a sheet is malformed");
+      const points = arr(x["points"], "a sheet", 2e6).map((q) => p3(q, "a sheet"));
+      const normals = arr(x["normals"], "a sheet", 2e6).map((q) => p3(q, "a sheet"));
+      if (points.length !== normals.length) throw new Error("a sheet has points without normals");
+      const label = str(x["label"], "a sheet", 40);
+      if (!ID.test(label)) throw new Error("a sheet has no proper name");
+      return { label, nominalThickness: fin(x["nominalThickness"], "a sheet", 0.1 - 1e-9, 5 * s + 1e-9), spacing: fin(x["spacing"], "a sheet", 1e-6, 10 * s), points, normals };
+    });
+  }
+  if (v["blends"] !== void 0) {
+    d.blends = arr(v["blends"], "the blends", 256).map((x) => {
+      if (!isObj(x)) throw new Error("a blend is malformed");
+      const label = str(x["label"], "a blend", 40);
+      if (!ID.test(label)) throw new Error("a blend has no proper name");
+      const points = blobOf(blobs, x["points"], "a blend", "f32");
+      if (points.length % 3) throw new Error("a blend's points are not in threes");
+      for (const q of points) if (!Number.isFinite(q)) throw new Error("a blend has a point that is not a number");
+      return { label, points };
+    });
+  }
+  if (v["added"] !== void 0) {
+    d.added = arr(v["added"], "the named shapes", 4096).map((x) => {
+      if (!isObj(x)) throw new Error("a named shape is malformed");
+      const id = str(x["id"], "a named shape", 40);
+      if (!ID.test(id)) throw new Error("a named shape has no proper name");
+      return { id, min: p3(x["min"], "a named shape"), max: p3(x["max"], "a named shape") };
+    });
+  }
+  return d;
+}
+function readParts(v) {
+  const clean = (x, depth) => {
+    if (depth > 6) throw new Error("a part report is nested too deep");
+    if (typeof x === "number") return fin(x, "a dimension");
+    if (typeof x === "string") return str(x, "a word", 40);
+    if (typeof x === "boolean" || x === null) return x;
+    if (Array.isArray(x)) return arr(x, "a part report", 64).map((y) => clean(y, depth + 1));
+    if (isObj(x)) return Object.fromEntries(Object.entries(x).slice(0, 64).map(([k, y]) => [str(k, "a key", 40), clean(y, depth + 1)]));
+    throw new Error("a part report holds something that is not a number or a word");
+  };
+  return arr(v ?? [], "the parts", 64).map((p) => {
+    const c = clean(p, 0);
+    if (!isObj(c) || !["ringShank", "prongHead", "bezel"].includes(c["call"])) throw new Error("a part report names no part");
+    return c;
+  });
+}
+function readRun(v, blobs, spec) {
+  if (!isObj(v)) throw new Error("a run is missing");
+  const metal = readMesh(v["metal"], blobs, "the piece", spec.scale, !!spec.positionsOnly);
+  if (spec.positionsOnly) return { metal };
+  const out = { metal, decl: readDecl(v["decl"], blobs, spec.scale), parts: readParts(v["parts"]) };
+  if (spec.wantStone && v["stone"] !== void 0) out.stone = readMesh(v["stone"], blobs, "the stone", spec.scale, false);
+  return out;
+}
+function insideMesh(m, p) {
+  const P = m.positions, T = m.triangles;
+  let votes = 0;
+  for (const axis of [0, 1, 2]) {
+    const u = (axis + 1) % 3, w = (axis + 2) % 3;
+    const pu = p[u] + 13e-7 * (axis + 1), pw = p[w] + 7e-7 * (axis + 2);
+    let crossings = 0;
+    for (let t = 0; t < T.length; t += 3) {
+      const a = T[t] * 3, b = T[t + 1] * 3, c = T[t + 2] * 3;
+      const au = P[a + u], aw = P[a + w], bu = P[b + u], bw = P[b + w], cu = P[c + u], cw = P[c + w];
+      if (pu < au && pu < bu && pu < cu || pu > au && pu > bu && pu > cu || pw < aw && pw < bw && pw < cw || pw > aw && pw > bw && pw > cw) continue;
+      const det = (bu - au) * (cw - aw) - (cu - au) * (bw - aw);
+      if (Math.abs(det) < 1e-18) continue;
+      const s1 = ((pu - au) * (cw - aw) - (cu - au) * (pw - aw)) / det;
+      const s2 = ((bu - au) * (pw - aw) - (pu - au) * (bw - aw)) / det;
+      if (s1 < 0 || s2 < 0 || s1 + s2 > 1) continue;
+      const along = P[a + axis] + s1 * (P[b + axis] - P[a + axis]) + s2 * (P[c + axis] - P[a + axis]);
+      if (along > p[axis]) crossings++;
+    }
+    if (crossings % 2 === 1) votes++;
+  }
+  return votes >= 2;
+}
+function declarationProblems(m, d) {
+  const problems = [];
+  if (d.band) {
+    const r = (d.band.innerRadius + d.band.outerRadius) / 2;
+    for (let deg = 0; deg < 360; deg += 45) {
+      const a = deg * Math.PI / 180;
+      if (!insideMesh(m, [Math.sin(a) * r, 0, Math.cos(a) * r])) {
+        problems.push(`the ring band (ringShank) has no metal ${deg}\xB0 round from the top: something cut it there. A band that is open or cut away is built with your own shapes, not ringShank.`);
+        break;
+      }
+    }
+  }
+  for (const p of d.prongs) {
+    const z = p.sectionFromZ + Math.min(0.1, (p.sectionToZ - p.sectionFromZ) / 4);
+    if (!insideMesh(m, [p.axis[0], p.axis[1], z])) problems.push(`${p.label} (prongHead) at ${p.clock} has no metal in its column: something cut it away.`);
+  }
+  if (d.bezel && d.stone) {
+    const o = d.bezel.outer;
+    const cx = o.reduce((s, q) => s + q[0], 0) / o.length, cy = o.reduce((s, q) => s + q[1], 0) / o.length;
+    const half = d.bezel.nominalWall / 2;
+    for (let k = 0; k < 8; k++) {
+      const q = o[Math.floor(k * o.length / 8)];
+      const l = Math.hypot(cx - q[0], cy - q[1]) || 1;
+      if (!insideMesh(m, [q[0] + (cx - q[0]) * half / l, q[1] + (cy - q[1]) * half / l, d.stone.girdleTopZ])) {
+        problems.push("the bezel (bezel) has no metal in its wall at the girdle: something cut it away.");
+        break;
+      }
+    }
+  }
+  for (const sh of d.sheets ?? []) {
+    const n = sh.points.length;
+    const step = Math.max(1, Math.floor(n / 16));
+    let any2 = false;
+    for (let i = 0; i < n && !any2; i += step) any2 = insideMesh(m, sh.points[i]);
+    if (!any2) problems.push(`the sheet "${sh.label}" (thicken) has no metal where it was made: something cut it away.`);
+  }
+  if (d.added?.length) {
+    const P = m.positions;
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < P.length; i += 3) for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], P[i + k]);
+      hi[k] = Math.max(hi[k], P[i + k]);
+    }
+    for (const a of d.added) {
+      if ([0, 1, 2].some((k) => a.max[k] < lo[k] - 0.01 || a.min[k] > hi[k] + 0.01)) problems.push(`the shape named "${a.id}" lies outside the piece.`);
+    }
+  }
+  return problems;
+}
+
+// src/program/run.ts
+var DEFAULT_SECONDS = 20;
+var DEFAULT_MEMORY_MIB = 512;
+var MAX_OUTPUT_BYTES = 256 * 2 ** 20;
+function programLimits(env = process.env) {
+  const s = Number(env["FLO2_CAD_PROGRAM_SECONDS"] ?? DEFAULT_SECONDS);
+  const m = Number(env["FLO2_CAD_PROGRAM_MEMORY_MIB"] ?? DEFAULT_MEMORY_MIB);
+  return {
+    seconds: Number.isFinite(s) && s > 0 && s <= 600 ? s : DEFAULT_SECONDS,
+    memoryMiB: Number.isFinite(m) && m >= 128 && m <= 65536 ? m : DEFAULT_MEMORY_MIB
+  };
+}
+var ProgramFailed = class extends Error {
+  kind;
+  line;
+  logs;
+  constructor(kind, line, message, logs = []) {
+    super(message);
+    this.name = "ProgramFailed";
+    this.kind = kind;
+    this.line = line;
+    this.logs = logs;
+  }
+  /** "line 7: ...", or the limit that was hit. */
+  get plain() {
+    return this.line !== null ? `line ${this.line}: ${this.message}` : this.message;
+  }
+};
+function childEntry() {
+  const here = fileURLToPath2(import.meta.url);
+  const built = basename(here) === "run.js" && existsSync2(join2(dirname2(here), "child.js"));
+  const entry = built ? join2(dirname2(here), "child.js") : join2(dirname2(here), "program-child.js");
+  const codeRoot = built ? dirname2(dirname2(here)) : dirname2(here);
+  const read = [codeRoot, kernelDir()];
+  let dir = dirname2(entry);
+  for (let i = 0; i < 6; i++) {
+    const pj = join2(dir, "package.json");
+    if (existsSync2(pj)) {
+      read.push(pj);
+      break;
+    }
+    dir = dirname2(dir);
+  }
+  return { entry, read };
+}
+function rssOf(pid) {
+  try {
+    const m = /VmRSS:\s+(\d+)\s+kB/.exec(readFileSync(`/proc/${pid}/status`, "utf8"));
+    return m ? Number(m[1]) * 1024 : null;
+  } catch {
+    return null;
+  }
+}
+async function runProgram(source, runs, limits = programLimits()) {
+  const t0 = performance.now();
+  const { entry, read } = childEntry();
+  const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
+  const wasmCap = Math.max(96, limits.memoryMiB - 128) * 2 ** 20;
+  const limitBytes = limits.memoryMiB * 2 ** 20;
+  const args = [`--max-old-space-size=${heapMiB}`, "--disallow-code-generation-from-strings", "--permission", ...read.map((p) => `--allow-fs-read=${p}`), entry];
+  const child = spawn(process.execPath, args, { stdio: ["pipe", "pipe", "pipe"], env: {}, windowsHide: true });
+  const pid = child.pid;
+  if (pid !== void 0) {
+    try {
+      writeFileSync(`/proc/${pid}/oom_score_adj`, "1000");
+    } catch {
+    }
+  }
+  const request = { source, runs, deadline_ms: limits.seconds * 1e3, wasm_cap_bytes: wasmCap };
+  return new Promise((resolve, reject) => {
+    const out = [];
+    let outBytes = 0;
+    let err = "";
+    let stopped = null;
+    let peak = null;
+    const stop = (f) => {
+      if (stopped) return;
+      stopped = f;
+      child.kill("SIGKILL");
+    };
+    const hard = setTimeout(() => stop(new ProgramFailed("time", null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1e3 + 1500);
+    const watch = setInterval(() => {
+      if (pid === void 0) return;
+      const rss = rssOf(pid);
+      if (rss === null) return;
+      peak = Math.max(peak ?? 0, rss);
+      if (rss > limitBytes) stop(new ProgramFailed("memory", null, `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
+    }, 20);
+    child.stdout.on("data", (c) => {
+      outBytes += c.length;
+      if (outBytes > MAX_OUTPUT_BYTES) stop(new ProgramFailed("output", null, `the program's piece came to more than ${MAX_OUTPUT_BYTES / 2 ** 20} MiB of mesh; make it simpler`));
+      else out.push(c);
+    });
+    child.stderr.on("data", (c) => {
+      if (err.length < 65536) err += c.toString("utf8");
+    });
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(JSON.stringify(request));
+    child.on("error", (e) => stop(new ProgramFailed("engine", null, `the program could not be started: ${e.message}`)));
+    child.on("close", (code, signal) => {
+      clearTimeout(hard);
+      clearInterval(watch);
+      const ms = performance.now() - t0;
+      const peakMiB = peak === null ? null : Math.round(peak / 2 ** 20);
+      if (stopped) return reject(stopped);
+      const buf = Buffer.concat(out);
+      if (buf.length < 4) {
+        if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(new ProgramFailed("memory", null, `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
+        if (signal === "SIGKILL") return reject(new ProgramFailed("memory", null, `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));
+        return reject(new ProgramFailed("engine", null, `the program's evaluation ended with no answer (exit ${code ?? signal}): ${err.trim().split("\n").slice(-3).join(" ").slice(0, 400) || "no message"}`));
+      }
+      try {
+        const len2 = buf.readUInt32LE(0);
+        if (len2 > buf.length - 4 || len2 > 64 * 2 ** 20) throw new Error("its answer is malformed");
+        const header = JSON.parse(buf.subarray(4, 4 + len2).toString("utf8"));
+        const logs = Array.isArray(header["logs"]) ? header["logs"].filter((x) => typeof x === "string").map((x) => x.slice(0, 300)).slice(0, 50) : [];
+        if (header["ok"] !== true) {
+          const kind = ["program", "time", "memory", "engine"].find((k) => k === header["kind"]) ?? "engine";
+          const line = typeof header["line"] === "number" && Number.isInteger(header["line"]) ? header["line"] : null;
+          const msg = String(header["message"] ?? "the program failed").slice(0, 1e3);
+          const said = kind === "time" ? `${msg} (${limits.seconds} s)` : kind === "memory" ? `${msg} (${limits.memoryMiB} MiB)` : msg;
+          return reject(new ProgramFailed(kind, line, said, logs));
+        }
+        const sizes = header["blobs"];
+        if (!Array.isArray(sizes) || sizes.length > 1e4) throw new Error("its answer lists no files");
+        const blobs = [];
+        let off = 4 + len2;
+        for (const n of sizes) {
+          if (!Number.isInteger(n) || n < 0 || off + n > buf.length) throw new Error("its answer is cut short");
+          blobs.push(Buffer.from(buf.subarray(off, off + n)));
+          off += n;
+        }
+        const raw = header["runs"];
+        if (!Array.isArray(raw) || raw.length !== runs.length) throw new Error("its answer has the wrong number of runs");
+        const done = raw.map((r, i) => readRun(r, blobs, runs[i]));
+        resolve({ runs: done, logs, ms, peakRssMiB: peakMiB });
+      } catch (e) {
+        reject(new ProgramFailed("engine", null, `the program's answer could not be read: ${e instanceof Error ? e.message : String(e)}`));
+      }
+    });
+  });
 }
 
 // src/files/png.ts
@@ -25945,7 +26428,9 @@ function couldNotRun(msg) {
     method: "the piece could not be built, so the check could not run"
   }));
 }
-async function checkPiece(tree, mode) {
+async function checkPiece(piece, mode, limits = programLimits()) {
+  if (isProgramPiece(piece)) return checkProgram(piece, mode, limits);
+  const tree = piece;
   const t0 = performance.now();
   const v = readPiece(tree);
   const metal = METALS[v.metal];
@@ -26025,6 +26510,276 @@ async function describeNumbers(tree) {
   const size = [0, 1, 2].map((k) => r2(built.bbox.max[k] - built.bbox.min[k]));
   const weights = Object.values(METALS).map((m) => ({ metal: m.name, grams: r2(built.volumeMm3 / 1e3 * m.density) }));
   return { volumeMm3: r2(built.volumeMm3), size, weights, dims: built.dims };
+}
+async function evaluateProgram(p, limits = programLimits()) {
+  const r = await runProgram(p.program, [{ tol: PREVIEW_TOL, scale: 1, wantStone: true }], limits);
+  return { run: r.runs[0], logs: r.logs, ms: r.ms, peakRssMiB: r.peakRssMiB };
+}
+function meshVolume(m) {
+  const P = m.positions, T = m.triangles;
+  let v = 0;
+  for (let t = 0; t < T.length; t += 3) {
+    const a = T[t] * 3, b = T[t + 1] * 3, c = T[t + 2] * 3;
+    v += P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c]);
+  }
+  return v / 6;
+}
+function meshSize(m) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < m.positions.length; i += 3) for (let k = 0; k < 3; k++) {
+    lo[k] = Math.min(lo[k], m.positions[i + k]);
+    hi[k] = Math.max(hi[k], m.positions[i + k]);
+  }
+  return [0, 1, 2].map((k) => m.positions.length ? r2(hi[k] - lo[k]) : 0);
+}
+var NO_BAND = { innerDiameterMm: 0, outerDiameterMm: 0, widthMm: 0, thicknessMm: 0 };
+function stoneOfPart(part) {
+  const s = part.head.stone;
+  const own2 = part.stone.shape === "custom" ? ` stone of its own shape${part.stone.name ? ` ("${part.stone.name}")` : ""}` : part.stone.shape === "round" ? " round brilliant" : " emerald cut";
+  return `${part.stone.shape === "round" ? `${mm2(s.lengthMm)}` : `${r2(s.lengthMm).toFixed(2)} \xD7 ${mm2(s.widthMm)}`}${own2}, ${mm2(s.depthMm)} deep`;
+}
+function programPartsWords(parts) {
+  const words = parts.map((part) => {
+    if (part.call === "ringShank") return `a ring shank, ${part.ringSize.system} size ${part.ringSize.size} (inner diameter ${part.band.innerDiameterMm.toFixed(2)} mm), ${part.band.widthMm} mm wide and ${part.band.thicknessMm} mm thick`;
+    const how = part.call === "bezel" ? `a full bezel (wall ${mm2(part.head.bezel.wallMm)}, lip ${mm2(part.head.bezel.lipMm)} above the girdle)` : `a ${part.head.prongs.length}-prong head`;
+    return `${how} holding one ${stoneOfPart(part)}`;
+  });
+  return words.length ? words.join("; ") : "shapes of its own (no library part)";
+}
+function programSummary(p, view) {
+  const parts = view?.run.parts;
+  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${METALS[p.metal].name}${parts ? `: ${programPartsWords(parts)}` : ""}. Shrinkage allowance: ${p.shrinkage}.`;
+}
+function programDimensionLines(parts) {
+  const out = [];
+  for (const part of parts) {
+    if (part.call === "ringShank") {
+      out.push(...dimensionLines({ band: part.band }).map((l) => l.replace("- Band:", "- Band (ringShank):")));
+      continue;
+    }
+    const lines = dimensionLines({ band: part.onBand ?? NO_BAND, head: part.head }).slice(1);
+    out.push(...lines.map((l) => (part.onBand ? l : l.replace("down to the top of the band", "down to the base it stands on")).replace(/^- (\w+):/, `- $1 (${part.call}):`)));
+  }
+  return out;
+}
+function programSeatLines(parts) {
+  return parts.flatMap((part) => part.call === "ringShank" ? [] : [seatLine({ band: part.onBand ?? NO_BAND, head: part.head })].filter((x) => !!x));
+}
+async function previewProgram(p, views, view, limits = programLimits()) {
+  const v = view ?? await evaluateProgram(p, limits);
+  const items = [{ positions: v.run.metal.positions, triangles: v.run.metal.triangles, kind: "metal", color: METAL_COLOR[p.metal] ?? [200, 200, 200] }];
+  if (v.run.stone) items.push({ positions: v.run.stone.positions, triangles: v.run.stone.triangles, kind: "stone", color: STONE_COLOR });
+  const parts = v.run.parts ?? [];
+  const shank = parts.find((x) => x.call === "ringShank");
+  const setting = parts.some((x) => x.call !== "ringShank");
+  const png = renderPreview(items, views, {
+    header: [`${p.name} rev ${p.revision} - ${METALS[p.metal].name} - written as a program`, parts.length ? programPartsWords(parts).replace(/×/g, "x") : "shapes of its own"],
+    warnings: [],
+    focusAboveZ: shank && setting ? shank.band.outerDiameterMm / 2 - 1.2 : void 0
+  });
+  return { png, view: v };
+}
+async function describeProgram(p, view) {
+  const volumeMm3 = meshVolume(view.run.metal);
+  return { volumeMm3: r2(volumeMm3), size: meshSize(view.run.metal), weights: Object.values(METALS).map((m) => ({ metal: m.name, grams: r2(volumeMm3 / 1e3 * m.density) })) };
+}
+function programFixFor(e, metal, parts) {
+  if (e.result === "pass") return null;
+  if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
+  const head = parts.find((x) => x.call !== "ringShank");
+  const shank = parts.find((x) => x.call === "ringShank");
+  const at2 = (p) => p ? ` at ${JSON.stringify(p)} mm` : "";
+  switch (e.id) {
+    case "prong": {
+      const lines = (e.failing ?? []).map((f) => {
+        const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
+        const cur = head?.head.prongs?.[k - 1]?.thicknessMm ?? metal.limits.prong;
+        return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm and it needs ${metal.limits.prong.toFixed(1)} mm; make it at least ${suggestThicker(cur, f.value, metal.limits.prong)} mm thick.`;
+      });
+      return `${lines.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
+    }
+    case "band":
+      return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${metal.limits.band.toFixed(1)} mm. In the program, set band_thickness in its ringShank call to at least ${Math.max(1.6, suggestThicker(shank?.band.thicknessMm ?? metal.limits.band, e.value ?? 0, metal.limits.band))} mm.`;
+    case "bezel_wall":
+      return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1, suggestThicker(head?.head.bezel?.wallMm ?? metal.limits.wall, e.value ?? 0, metal.limits.wall))} mm.`;
+    case "bezel_lip": {
+      const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
+      const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
+      return `${(e.value ?? 0) < lo ? "Raise" : "Lower"} the bezel lip: it rises ${e.value} mm above the girdle. In the program, set lip in its bezel call to ${r2((lo + hi) / 2)} mm (or "auto").`;
+    }
+    case "sheet":
+      return `${(e.failing ?? []).map((f) => `The sheet "${f.label}" is ${f.value} mm measured square to its surface; a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set thickness in the thicken call named "${f.label}" to at least ${Math.max(1, suggestThicker(f.nominal ?? f.value, f.value, metal.limits.wall))} mm.`).join(" ")}`;
+    case "prong_grip":
+      return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. In the program, set prong_grip in its prongHead call to 0.2 mm or more.`;
+    case "wall":
+    case "detail": {
+      const limit = e.id === "wall" ? metal.limits.wall : metal.limits.detail;
+      const where = e.where?.part === "added shape" ? ` in the shape named ${quoteIds(e.where.feature)}` : e.where?.part === "sheet" ? ` on the sheet "${e.where.feature}"` : e.where?.part === "band" ? " in the band" : e.where?.part === "head" ? ` in the setting (${e.where.feature})` : "";
+      return `The metal${where} is only ${e.value} mm${at2(e.where?.point_mm)}, and ${e.id === "wall" ? "a wall" : "the finest detail"} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
+    }
+    case "gap":
+      return `Two surfaces are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
+    case "watertight":
+      return `The piece is not one closed solid (${e.measured}). Join every shape to the rest (union them so they overlap), or remove the loose one.`;
+    case "surface_deviation":
+      return `The casting file's facets stand ${e.value} mm off the program's finer surface, over the ${metal.limits.surfaceDeviation} mm limit. Draw curves the program computes itself with segments(radius) points a circle, so a finer build makes a finer curve.`;
+  }
+  return null;
+}
+async function checkProgram(p, mode, limits) {
+  const t0 = performance.now();
+  const metal = METALS[p.metal];
+  const pct = shrinkagePercent(p.shrinkage, p.metal, "tree.shrinkage");
+  const scale2 = 1 + pct / 100;
+  let stl = null;
+  let mesh = null;
+  let decl;
+  let parts = [];
+  let entries;
+  let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
+  let tBuild = 0, tCheck = 0;
+  let evaluated = null;
+  try {
+    const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale: scale2, blendSurface: true }, { tol: REFERENCE_TOL, scale: scale2, reuseBlends: true, positionsOnly: true }], limits);
+    tBuild = performance.now() - t0;
+    evaluated = { ms: Math.round(r.ms), peak_memory_mib: r.peakRssMiB };
+    const exp = r.runs[0];
+    mesh = exp.metal;
+    decl = exp.decl;
+    parts = exp.parts ?? [];
+    stl = writeBinaryStl(mesh, `${ENGINE_NAME} ${ENGINE_VERSION} ${p.name} r${p.revision} ${p.metal} mm shrinkage ${pct > 0 ? `${pct}%` : "off"} program`);
+    const problems = declarationProblems(mesh, decl);
+    if (problems.length) {
+      entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(" ")}`);
+    } else {
+      const run = runChecks(stl, decl, limitsFor(metal), { positions: r.runs[1].metal.positions });
+      entries = run.entries;
+      meshInfo = run.mesh;
+      tCheck = run.ms;
+    }
+  } catch (err) {
+    entries = couldNotRun(err instanceof ProgramFailed ? `the program could not run: ${err.plain}` : `the piece could not be built: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const withFix = entries.map((e) => ({ ...e, fix: programFixFor(e, metal, parts) }));
+  const failingProngs = new Set((withFix.find((e) => e.id === "prong" && e.result === "fail")?.failing ?? []).map((f) => f.label));
+  const bezelFails = withFix.some((e) => e.id === "bezel_wall" && e.result === "fail");
+  const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
+  for (const e of withFix) {
+    if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
+      const f = e.where?.feature;
+      if (f && failingProngs.has(f) || f === "bezel" && bezelFails || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
+    }
+  }
+  const verdict = withFix.every((e) => e.result === "pass") ? "pass" : "fail";
+  const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
+  const headPart = parts.find((x) => x.call !== "ringShank");
+  const hs = headPart?.head.stone;
+  const report = {
+    format: "flo2-cad.check-report/1",
+    piece: p.name,
+    revision: p.revision,
+    tree_sha256: sha256(canonicalJson(p)),
+    program: { sha256: sha256(p.program), lines: p.program.split("\n").length, evaluated: evaluated ?? "did not run" },
+    verdict,
+    export: mode === "check" ? "not_requested" : verdict === "pass" ? "released" : "refused",
+    metal: { id: metal.id, name: metal.name, density_g_cm3: metal.density, casting_note: metal.castingNote },
+    stl: stl ? { file: `${p.name}.stl`, sha256: sha256(stl), bytes: stl.length, triangles: meshInfo.triangles, units: "mm" } : null,
+    shrinkage: { applied: pct > 0, allowance: pct > 0 ? `${pct} %` : "off" },
+    stone: headPart && hs ? {
+      in_casting_file: false,
+      shape: headPart.stone.shape,
+      measured_mm: headPart.stone.shape === "round" ? { diameter: hs.lengthMm, depth: hs.depthMm } : { length: hs.lengthMm, width: hs.widthMm, depth: hs.depthMm },
+      orientation: null,
+      carat_for_reference: null,
+      placeholder: []
+    } : null,
+    volume_mm3: r2(meshInfo.volumeMm3),
+    weight_g: r2(meshInfo.volumeMm3 / 1e3 * metal.density),
+    checks: withFix,
+    limits: { ...limitsFor(metal), units: "mm", sources: [...metal.sources, ...SETTING.sources] },
+    engine: { name: ENGINE_NAME, version: ENGINE_VERSION },
+    kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
+    timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
+  };
+  let threeMf = null;
+  if (mesh && stl && verdict === "pass" && mode === "export") {
+    threeMf = write3mf(mesh, {
+      Title: p.name,
+      Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
+      Description: `revision ${p.revision}; ${metal.name}; shrinkage ${pct > 0 ? `${pct} % applied` : "not applied"}; stone not included; written as a program`
+    });
+  }
+  return { verdict, report, entries: withFix, fixes, stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+}
+
+// src/program/guide.ts
+var PROGRAM_RULES = [
+  'A program is JavaScript (strict mode) that builds the piece and ends with `return <solid>;`. Every bare number is a length in mm, or an angle in degrees where an angle is asked for; a string carries its unit ("1.2 mm"), and inches or any other unit are refused: convert them yourself.',
+  "It runs confined, in a separate process with a time and memory limit, and can reach nothing but the calls below: no require or import, no process, files, network or timers. It cannot wait for anything (no await). console.log lines come back with the reply. It is run once for a picture and twice for a check, so it must build the same piece every time; Math.random is seeded the same on every run.",
+  "Frame: X across the hand, Y along the finger, Z up through the stone. A ring shank stands round the Y axis through the origin, and a stone setting stands upright on top of it at +Z. The checker measures them there, so a band may only turn about Y, and a setting may move anywhere and turn only about Z: anything else is refused, naming the part. scale() and hull() refuse a solid holding a library part.",
+  "A piece holds at most one ring shank and one stone setting; build anything beyond that from the kernel. A stone is never metal and never in a casting file."
+];
+var PROGRAM_CALLS_GUIDE = [
+  "LIBRARY (today's parts; each takes start_piece's settings and its defaults, checked the same way, and reads back its dimensions as `.dims`):",
+  '- ringShank({ ring_size: {system: "US", size: "7"}, band_width, band_thickness, band_profile }) -> the band; .dims has innerDiameterMm, outerDiameterMm, widthMm, thicknessMm.',
+  "- roundStone({ diameter, depth, carat? }), emeraldStone({ length, width, depth, orientation?, carat? }) -> a stone, sized from its MEASURED dimensions.",
+  "- stone(solid, { name? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal.",
+  "- prongHead({ stone, on: band, prong_count, prong_thickness, prong_grip, culet_clearance, prong_overrides }) and bezel({ stone, on: band, wall, lip, culet_clearance }) -> the setting round the stone, on top of the band (leave out `on` for a setting standing on the XY plane, as on a pendant). .dims has the seat, the outside, the bezel or each prong, and the culet clearance, as describe_piece reports them.",
+  '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
+  "- op(node) -> any operation node of a tree, as JSON with units (describe_piece of a tree lists them): what a tree can hold, a program can hold.",
+  "KERNEL (general shapes, numbers in mm and degrees):",
+  "- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire).",
+  '- circle(r), rect(x, y, { center }), polygon([[x, y], ...]) -> 2D profiles, with .offset(d, { join: "round" | "square" | "miter" }), .add, .subtract, .intersect, .translate([x, y]), .rotate(deg), .scale(f), .mirror([x, y]), .hull(), .bounds(), .area().',
+  "- extrude(profile, h, { twist, scale_top, center }), revolve(profile, { degrees }) (x is the distance from the Z axis, y the height).",
+  "- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions).",
+  '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
+  "- segments(r): how many straight pieces a circle of radius r gets at this build's fineness. Draw curves you compute yourself with it, so the casting file is as smooth as the check asks."
+];
+function programGuide(limits) {
+  return [...PROGRAM_RULES, `Limits: ${limits.seconds} s and ${limits.memoryMiB} MiB for each evaluation.`, ...PROGRAM_CALLS_GUIDE].join("\n");
+}
+var CABOCHON_EXAMPLE = String.raw`// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.
+const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });
+
+// The cabochon: a quarter ellipse from its edge up to its top, turned round the Z axis.
+const r = 4, h = 2.6, n = Math.ceil(segments(r) / 4);
+const profile = [[0, 0]];
+for (let i = 0; i <= n; i++) {
+  const a = (i / n) * Math.PI / 2;
+  profile.push([r * Math.cos(a), h * Math.sin(a)]);
+}
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+
+// The bezel seats it on a flat ledge and rises over its curve.
+const setting = bezel({ stone: moonstone, on: band, wall: 1.0 });
+return union(band, setting);`;
+
+// src/program/from-tree.ts
+var js = (v) => JSON.stringify(v);
+var fields = (o) => js(o).slice(1, -1).replace(/,"/g, ', "').replace(/":/g, '": ');
+function treeAsProgram(tree) {
+  const band = findNode(tree.root, "band").params;
+  const head = findNode(tree.root, "head");
+  const extras = (tree.root.children ?? []).filter((c) => c.id !== "band" && c.id !== "head");
+  const lines = [
+    `// "${tree.name}", built from the "${tree.template}" template (revision ${tree.revision}), written as a program.`,
+    `const band = ringShank({ ${fields({ ring_size: band["ring_size"], band_width: band["width"], band_thickness: band["thickness"], band_profile: band["profile"] })} });`
+  ];
+  if (head) {
+    const p = head.params;
+    const s = p["stone"];
+    const ph = s["placeholder"] ?? [];
+    if (ph.length) lines.push(`// The stone's ${ph.join(", ")} ${ph.length === 1 ? "is a placeholder" : "are placeholders"}: put in the measured ${s["shape"] === "round" ? "diameter and depth" : "length, width and depth"} from its grading report.`);
+    const carat = s["carat"] !== void 0 ? { carat: s["carat"] } : {};
+    lines.push(
+      s["shape"] === "round" ? `const stone = roundStone({ ${fields({ diameter: s["diameter"], depth: s["depth"], ...carat })} });` : `const stone = emeraldStone({ ${fields({ length: s["length"], width: s["width"], depth: s["depth"], orientation: s["orientation"], ...carat })} });`
+    );
+    const rest = Object.fromEntries(Object.entries(p).filter(([k]) => k !== "stone"));
+    lines.push(`const head = ${head.part === "bezel" ? "bezel" : "prongHead"}({ stone, on: band, ${fields(rest)} });`);
+  }
+  const all = ["band", ...head ? ["head"] : [], ...extras.map((e) => `op(${js(e)})`)];
+  lines.push(`return union(${all.join(", ")});`);
+  return lines.join("\n");
 }
 
 // src/reply.ts
@@ -26116,19 +26871,32 @@ function paramSchema(p) {
 var PIECE_PROPERTIES = Object.fromEntries(PARAMS.map((p) => [p.key, paramSchema(p)]));
 var TREE = {
   type: "object",
-  description: `The piece's tree (format "${TREE_FORMAT}"): the saved recipe for one piece, exactly as an earlier reply or the person's saved <name>.tree.json file gave it. Pass it to pick a piece up in a new conversation, or to work on a different piece; leave it out to work on the piece already open in this conversation. Every measurement in it carries its unit.`,
-  required: ["format", "name", "revision", "template", "shrinkage", "root"],
+  description: `The piece's file, exactly as an earlier reply or the person's saved <name>.tree.json gave it: a tree (format "${TREE_FORMAT}", built from a template's parts and operations) or a program piece (format "${PROGRAM_FORMAT}", holding the JavaScript that builds it). Pass it to pick a piece up in a new conversation, or to work on a different piece; leave it out to work on the piece already open in this conversation. Every measurement in a tree carries its unit; a program's bare numbers are millimetres.`,
+  required: ["format", "name", "revision"],
   properties: {
-    format: { const: TREE_FORMAT },
+    format: { type: "string", enum: [TREE_FORMAT, PROGRAM_FORMAT] },
     name: { type: "string" },
     revision: { type: "integer", minimum: 1 },
-    template: { type: "string", enum: [...TEMPLATES] },
+    template: { type: "string", enum: [...TEMPLATES], description: "A tree only: the template it was started from." },
+    metal: { type: "string" },
     shrinkage: { type: "string" },
     root: {
       type: "object",
-      description: 'The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.'
-    }
+      description: 'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.'
+    },
+    units: { const: PROGRAM_UNITS, description: "A program piece only: its bare numbers are millimetres (and degrees for angles)." },
+    program: { type: "string", description: "A program piece only: the JavaScript that builds it." }
   }
+};
+var PROGRAM = {
+  type: "string",
+  maxLength: PROGRAM_MAX_CHARS,
+  description: [
+    `The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion's face, a ship's hull): it builds the piece from the kernel's general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, op), and ends with "return <the piece>;". describe_piece lists every call with its settings, and shows any template piece written as a program.`,
+    "Bare numbers are millimetres (degrees for angles); a string carries its unit. A ring shank stands round the Y axis through the origin, a stone setting upright on top of it at +Z.",
+    "It runs confined, in its own process with a time and memory limit, reaching nothing but the library: no require, files, network or timers. A program that fails is refused with the line and the reason, and nothing changes.",
+    `The program is kept as the piece's file (<name>.tree.json), every version, and checked and exported exactly like any piece. Example: "const band = ringShank({ ring_size: { system: 'US', size: '7' } }); const head = prongHead({ on: band, stone: roundStone({ diameter: 6.5, depth: 4.0 }) }); return union(band, head);"`
+  ].join(" ")
 };
 var PREVIEW_FLAG = {
   type: "boolean",
@@ -26144,26 +26912,27 @@ var TOOLS = [
     name: "start_piece",
     title: "Start a piece",
     description: [
-      "Start a new piece of jewelry from a ready-made design, sized to the wearer.",
+      'Start a new piece of jewelry from a ready-made design, sized to the wearer, or from a program you write (pass "program" instead of "template": any shape at all, see below).',
       `"solitaire_ring" is a band with one round stone in a 4- or 6-prong head; "plain_band" is the band alone; "emerald_bezel_solitaire" is Emily's design: an emerald-cut stone in a full platinum 950 bezel, set east-west, on a plain round band.`,
       "The head (prong_head or bezel), the stone (round or emerald cut), the metal (silver, 14k or 18k gold, platinum 950) and every size are settings, so any template can become any of these.",
       "Size the stone from its MEASURED dimensions on its grading report (length, width and depth in mm, or diameter and depth for a round), never from a carat chart. Until you give them, the stone's size is a placeholder and the replies and picture say so.",
       "Only the template and the ring size are needed; everything you leave out gets a safe default that sits comfortably above the casting limits.",
       'Every measurement is in millimetres and must be written with its unit ("1.6 mm"). A ring size must name its system: US, UK or EU.',
       "Returns a picture of the piece, a plain-language summary, and the piece's tree: its saved recipe, kept as <name>.tree.json.",
-      "Starting a piece replaces the one open in this conversation (the old one is still saved)."
+      "Starting a piece replaces the one open in this conversation (the old one is still saved).",
+      'Give EITHER "template" with "ring_size" (and any settings), OR "program" (with "name", "metal" and "shrinkage" if you like; the program sets everything else).'
     ].join(" "),
     inputSchema: {
       type: "object",
-      required: ["template", "ring_size"],
       additionalProperties: false,
       properties: {
         template: {
           type: "string",
           enum: [...TEMPLATES],
-          description: `The starting design: "solitaire_ring" (a band and one round stone in prongs), "plain_band", or "emerald_bezel_solitaire" (Emily's design: an emerald cut in a full platinum bezel, east-west, on a round band).`
+          description: `The starting design: "solitaire_ring" (a band and one round stone in prongs), "plain_band", or "emerald_bezel_solitaire" (Emily's design: an emerald cut in a full platinum bezel, east-west, on a round band). Needed unless you pass "program".`
         },
         ...PIECE_PROPERTIES,
+        program: PROGRAM,
         preview: PREVIEW_FLAG
       }
     },
@@ -26177,6 +26946,7 @@ var TOOLS = [
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
       'Or pass a whole edited `tree`, with or without `set`. That is how you add shapes of your own: add operation nodes to the root\'s children, such as a cupped or curled petal or leaf ("thicken"), a wire ("sweep") or a fillet ("smooth_union"); describe_piece lists every operation and its settings. Then "<id>.<setting>" in `set` reaches any of them, e.g. {"petal_1.thickness": "1.0 mm"}.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
+      'Or pass "program": the whole piece written as a program, for any shape the settings and operations cannot make. A template piece then goes on as a program (describe_piece shows it written as one), and a piece already written as a program takes its next version this way; its set takes only name, metal and shrinkage.',
       "Returns the new picture, what changed, and the updated tree; the piece's revision number goes up by one."
     ].join(" "),
     inputSchema: {
@@ -26184,6 +26954,7 @@ var TOOLS = [
       additionalProperties: false,
       properties: {
         tree: TREE,
+        program: PROGRAM,
         set: {
           type: "object",
           description: 'The settings to change, by name, each in the same form start_piece takes it. Keys of the form "<part>.<setting>" reach any setting of any part.',
@@ -26253,7 +27024,7 @@ var TOOLS = [
     description: [
       "Read back what the piece is now, in a jeweler's terms: the ring size (with its system and the inner diameter in mm), the band's width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.",
       "It also gives the dimensions the piece is built to, in mm, each the figure the engine itself uses: the band's inner and outer diameter, width and thickness; the stone's seat (its size across at the girdle and the clearance a side); a bezel's wall, its outside size, the lip height it works out, and how far it stands above the band; each prong's thickness, its narrowest section where the seat is cut, and how far it reaches over the girdle; and the room under the stone's point. Work a fit, a weight or a cost from these, never from an assumed size.",
-      "Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece's tree.",
+      "Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece's tree. It also lists what a program can call, and shows a template piece written as a program, ready to change. For a piece written as a program, it gives the dimensions each library part in it was built to.",
       "Changes nothing and makes no files."
     ].join(" "),
     inputSchema: { type: "object", additionalProperties: false, properties: { tree: TREE } },
@@ -26262,6 +27033,7 @@ var TOOLS = [
 ];
 
 // src/session.ts
+var PROGRAM_PIECE_SETTINGS = ["name", "metal", "shrinkage"];
 var ALLOWED_ARGS = Object.fromEntries(
   TOOLS.map((t) => [t.name, new Set(Object.keys(t.inputSchema.properties ?? {}))])
 );
@@ -26278,11 +27050,20 @@ function treeFile(tree) {
   return { name: `${tree.name}.tree.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(tree, null, 2) + "\n", "utf8") };
 }
 function treeText(tree) {
-  return `The piece's tree, revision ${tree.revision} (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):
+  return isProgramPiece(tree) ? `The piece's file, revision ${tree.revision}, holding its program (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):
+${JSON.stringify(tree)}` : `The piece's tree, revision ${tree.revision} (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):
 ${JSON.stringify(tree)}`;
+}
+function logText(logs) {
+  return logs.length ? [`The program logged:
+${logs.map((l) => `  ${l}`).join("\n")}`] : [];
 }
 var Session = class {
   #piece;
+  #limits;
+  constructor(limits = programLimits()) {
+    this.#limits = limits;
+  }
   /** The tools/call entry point. Malformed calls come back as isError replies naming the field path. */
   async call(name, args) {
     try {
@@ -26312,7 +27093,7 @@ var Session = class {
   }
   #open(args) {
     if (args["tree"] !== void 0) {
-      this.#piece = validateTree(args["tree"], "tree");
+      this.#piece = validatePiece(args["tree"], "tree");
       return this.#piece;
     }
     if (!this.#piece) {
@@ -26343,7 +27124,34 @@ var Session = class {
     texts.push(treeText(tree));
     return reply(texts, files);
   }
+  /** A program piece evaluated for a picture or a description; a program that cannot run is a malformed call naming `path`. */
+  async #evaluate(p, path) {
+    try {
+      return await evaluateProgram(p, this.#limits);
+    } catch (e) {
+      if (e instanceof ProgramFailed) {
+        const logs = e.logs.length ? ` It logged: ${e.logs.join(" | ")}` : "";
+        throw new CallError(path, `${e.plain.replace(/\.$/, "")}. Nothing was changed.${logs}`);
+      }
+      throw e;
+    }
+  }
+  async #withProgram(p, lead, wantPreview, view) {
+    const files = [];
+    if (wantPreview) {
+      const { png } = await previewProgram(p, [...DEFAULT_VIEWS], view, this.#limits);
+      files.push({ name: `${p.name}.preview.png`, mimeType: MIME.png, bytes: png });
+    }
+    files.push(treeFile(p));
+    const parts = view.run.parts ?? [];
+    const texts = [`${lead} ${programSummary(p, view)}`, ...programSeatLines(parts), ...logText(view.logs)];
+    const note = METALS[p.metal].castingNote;
+    if (note) texts.push(note);
+    texts.push(treeText(p));
+    return reply(texts, files);
+  }
   async start(args) {
+    if (args["program"] !== void 0) return this.#startProgram(args);
     const template = checkStartArgs(args);
     const wantPreview = this.#previewFlag(args);
     const tree = treeFromTemplate(template, args);
@@ -26351,16 +27159,37 @@ var Session = class {
     this.#piece = tree;
     return this.#withPiece(tree, "Started.", wantPreview);
   }
+  async #startProgram(args) {
+    for (const k of Object.keys(args)) {
+      if (k === "program" || k === "preview" || PROGRAM_PIECE_SETTINGS.includes(k)) continue;
+      throw new CallError(
+        k,
+        k === "template" ? 'start_piece takes a template or a program, not both. To start from a template and go on as a program, start the template, then pass "program" to change_piece (describe_piece shows the template as a program).' : 'a piece written as a program sets its band, stone and setting in the program (ringShank, prongHead, bezel ...); start_piece takes only "program", "name", "metal" and "shrinkage" with it.'
+      );
+    }
+    for (const k of PROGRAM_PIECE_SETTINGS) if (args[k] !== void 0) checkParam(PARAM_BY_KEY.get(k), args[k], k);
+    const wantPreview = this.#previewFlag(args);
+    const p = programPiece(checkProgramSource(args["program"], "program"), {
+      ...args["name"] !== void 0 ? { name: args["name"] } : {},
+      ...args["metal"] !== void 0 ? { metal: args["metal"] } : {},
+      ...args["shrinkage"] !== void 0 ? { shrinkage: args["shrinkage"] } : {}
+    });
+    const view = await this.#evaluate(p, "program");
+    this.#piece = p;
+    return this.#withProgram(p, "Started.", wantPreview, view);
+  }
   async change(args) {
     const wantPreview = this.#previewFlag(args);
     const set = args["set"];
-    if (args["tree"] === void 0 && set === void 0) {
-      throw new CallError("set", 'say what to change, e.g. {"prong_count": 6}, or pass an edited "tree".');
+    const program = args["program"];
+    if (args["tree"] === void 0 && set === void 0 && program === void 0) {
+      throw new CallError("set", 'say what to change, e.g. {"prong_count": 6}, or pass an edited "tree", or a new "program".');
     }
     if (set !== void 0 && (set === null || typeof set !== "object" || Array.isArray(set) || Object.keys(set).length === 0)) {
       throw new CallError("set", 'must be an object naming at least one setting, e.g. {"prong_thickness": "1.5 mm"}.');
     }
     const base = this.#open(args);
+    if (program !== void 0 || isProgramPiece(base)) return this.#changeProgram(base, program, set, wantPreview);
     let next;
     let lines;
     if (set) {
@@ -26375,6 +27204,40 @@ var Session = class {
     this.#piece = next;
     return this.#withPiece(next, `Changed ${lines.join("; ")}.`, wantPreview);
   }
+  /** A change to a piece written as a program, or a template piece going on as a program: its program, and its name, metal or shrinkage. */
+  async #changeProgram(base, program, set, wantPreview) {
+    const lines = [];
+    let next;
+    if (program !== void 0) {
+      const src = checkProgramSource(program, "program");
+      if (isProgramPiece(base)) {
+        next = { ...base, program: src, revision: base.revision + 1 };
+        lines.push(src === base.program ? "nothing in the program (it is the same)" : "the program");
+      } else {
+        next = { ...programPiece(src, { name: base.name, metal: base.metal, shrinkage: base.shrinkage }), revision: base.revision + 1 };
+        lines.push(`the piece: it is now written as a program (it was built from the "${base.template}" template)`);
+      }
+    } else {
+      next = { ...base, revision: base.revision + 1 };
+      if (!set) lines.push("the whole piece, as passed");
+    }
+    for (const [k, v] of Object.entries(set ?? {})) {
+      if (!PROGRAM_PIECE_SETTINGS.includes(k)) {
+        throw new CallError(
+          `set.${k}`,
+          PARAM_BY_KEY.has(k) || /\./.test(k) ? `this piece is written as a program, so "${k}" is changed in its program (the call that makes that part); pass the edited program as "program". set takes only ${PROGRAM_PIECE_SETTINGS.join(", ")} here.` : `"${k}" is not a setting; a piece written as a program takes ${PROGRAM_PIECE_SETTINGS.join(", ")} in set, and everything else in its program.`
+        );
+      }
+      checkParam(PARAM_BY_KEY.get(k), v, `set.${k}`);
+      const before = next[k];
+      next[k] = v;
+      lines.push(`${k}: ${fmt(before)} \u2192 ${fmt(v)}`);
+    }
+    validatePiece(next, "tree");
+    const view = await this.#evaluate(next, program !== void 0 ? "program" : "tree.program");
+    this.#piece = next;
+    return this.#withProgram(next, `Changed ${lines.join("; ")}.`, wantPreview, view);
+  }
   async preview(args) {
     const tree = this.#open(args);
     const views = args["views"] ?? [...DEFAULT_VIEWS];
@@ -26383,6 +27246,12 @@ var Session = class {
       if (!PREVIEW_VIEWS.includes(v2)) throw new CallError(`views[${i}]`, `"${String(v2)}" is not a view; the views are ${PREVIEW_VIEWS.join(", ")}.`);
       if (views.indexOf(v2) !== i) throw new CallError(`views[${i}]`, `"${v2}" is asked for twice.`);
     });
+    if (isProgramPiece(tree)) {
+      const view = await this.#evaluate(tree, "tree.program");
+      const { png: png2 } = await previewProgram(tree, views, view, this.#limits);
+      const texts2 = [`Preview of ${programSummary(tree, view)} Views: ${views.join(", ")}. Any stone is drawn for the picture only; it is never part of a casting file.`, ...logText(view.logs)];
+      return reply(texts2, [{ name: `${tree.name}.preview.png`, mimeType: MIME.png, bytes: png2 }]);
+    }
     const { png } = await preview(tree, views);
     const v = readPiece(tree);
     const texts = [`Preview of ${summary(tree, v)} Views: ${views.join(", ")}. The stone is drawn for the picture only; it is never part of a casting file.`];
@@ -26398,24 +27267,22 @@ var Session = class {
   }
   async check(args) {
     const tree = this.#open(args);
-    const r = await checkPiece(tree, "check");
-    const v = readPiece(tree);
+    const r = await checkPiece(tree, "check", this.#limits);
     const head = r.verdict === "pass" ? "Every casting check passes on the file as an export would write it; export_for_casting will release it." : `It would NOT cast as it is. What to thicken and where:
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
     const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${r.report["shrinkage"].allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`];
-    const ph = placeholderNote(v);
+    const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
     if (ph) texts.push(`PLACEHOLDER: ${ph} The checks are only as true as the stone's size.`);
     return reply(texts, [{ name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + "\n", "utf8") }]);
   }
   async export(args) {
     const tree = this.#open(args);
-    const r = await checkPiece(tree, "export");
-    const v = readPiece(tree);
+    const r = await checkPiece(tree, "export", this.#limits);
     const report = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + "\n", "utf8") };
     const sh = r.report["shrinkage"];
     const shrink = `Shrinkage allowance: ${sh.applied ? `APPLIED, ${sh.allowance}` : "not applied (off)"}.`;
-    const note = METALS[v.metal].castingNote;
-    const ph = placeholderNote(v);
+    const note = METALS[tree.metal].castingNote;
+    const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
     if (r.verdict !== "pass" || !r.stl || !r.threeMf) {
       const texts2 = [
         `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:
@@ -26426,7 +27293,7 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
       return reply(texts2, [report]);
     }
     const texts = [
-      `EXPORTED "${tree.name}" revision ${tree.revision} in ${METALS[v.metal].name}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
+      `EXPORTED "${tree.name}" revision ${tree.revision} in ${METALS[tree.metal].name}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
       this.#verdictText(tree, r),
       shrink
     ];
@@ -26440,6 +27307,7 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
   }
   async describe(args) {
     const tree = this.#open(args);
+    if (isProgramPiece(tree)) return this.#describeProgram(tree);
     const v = readPiece(tree);
     const n = await describeNumbers(tree);
     const catalog = PARAMS.map((p) => {
@@ -26460,10 +27328,35 @@ ${catalog.join("\n")}
 Any part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
       `A tree's parts: ${PARTS.join(", ")}. To add a shape of your own, add a node {"id", "op", "params", "children"} to the root's children (ids are lower-case letters, digits and "_", unique in the piece) and pass the edited tree to change_piece. The operations, with their settings:
 ${operationGuide()}`,
+      `A shape the parts and operations above cannot make (a cabochon, a lion's face, a ship's hull) is written as a PROGRAM: pass "program" to change_piece and the piece goes on as a program. This piece, written as one (the same piece):
+${treeAsProgram(tree)}
+What a program can call:
+${programGuide(this.#limits)}`,
       treeText(tree)
     ];
     const ph = placeholderNote(v);
     if (ph) texts.splice(1, 0, `PLACEHOLDER: ${ph}`);
+    return reply(texts);
+  }
+  async #describeProgram(p) {
+    const view = await this.#evaluate(p, "tree.program");
+    const n = await describeProgram(p, view);
+    const parts = view.run.parts ?? [];
+    const metal = METALS[p.metal];
+    const dims = programDimensionLines(parts);
+    const texts = [
+      programSummary(p, view),
+      ...dims.length ? [`Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:
+${dims.join("\n")}`] : [],
+      `Overall size ${n.size[0]} \xD7 ${n.size[1]} \xD7 ${n.size[2]} mm (across the hand \xD7 along the finger \xD7 height). Metal volume about ${n.volumeMm3} mm\xB3 (any stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join("; ")}.`,
+      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ""}`,
+      `This piece is written as a program. Change it by passing the whole edited program as "program" to change_piece; set takes only ${PROGRAM_PIECE_SETTINGS.join(", ")}. What a program can call:
+${programGuide(this.#limits)}
+An example, a cabochon in a bezel:
+${CABOCHON_EXAMPLE}`,
+      ...logText(view.logs),
+      treeText(p)
+    ];
     return reply(texts);
   }
 };
@@ -26490,7 +27383,8 @@ var INSTRUCTIONS = [
   'Every measurement is in millimetres written with its unit ("1.2 mm"); a ring size names its system (US, UK or EU). If the person gives inches or another unit, convert it yourself and show them the conversion.',
   "Size a stone from its MEASURED dimensions on its grading report, never from a carat chart; until then its size is a placeholder.",
   "export_for_casting releases the STL and 3MF only when every casting check passes on the written file; if it refuses, tell the person what to thicken and where, and offer the change. Platinum goes to a specialist caster.",
-  'Each reply that changes the piece returns its tree; pass it back as "tree" to pick the piece up in a new conversation.'
+  'Each reply that changes the piece returns its tree; pass it back as "tree" to pick the piece up in a new conversation.',
+  `For a shape the templates and operations do not make (a cabochon, a lion's face, a ship), write the piece as a short JavaScript program and pass it as "program" to start_piece or change_piece; describe_piece lists what a program can call. It runs confined, and is checked and exported like any piece.`
 ].join(" ");
 function createServer() {
   const server = new Server({ name: ENGINE_NAME, version: ENGINE_VERSION }, { capabilities: { tools: {} }, instructions: INSTRUCTIONS });
