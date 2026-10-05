@@ -123,6 +123,11 @@ function readDecl(v: unknown, blobs: Buffer[], scale: number): FeatureDecl {
       girdleTopZ: fin(st['girdleTopZ'], 'the stone', -MAX_REACH_MM * s, MAX_REACH_MM * s),
       crownHeight: fin(st['crownHeight'], 'the stone', 0.01, 20 * s),
     };
+    // Only the library declares a stone a cabochon; it is that word or nothing.
+    if (st['kind'] !== undefined) {
+      if (st['kind'] !== 'cabochon') throw new Error("the stone's kind is malformed");
+      stone.kind = 'cabochon';
+    }
     const xs = stone.outline.map((q) => q[0]), ys = stone.outline.map((q) => q[1]);
     const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
     if (stone.outline.length < 3 || !(span >= 0.9 && span <= 31 * s) || stone.girdleTopZ < stone.girdleBottomZ) throw new Error('the stone is out of the range the library sets');

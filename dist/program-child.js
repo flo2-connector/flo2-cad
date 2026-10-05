@@ -139,6 +139,26 @@ var STRICTEST = Object.keys(METALS).reduce(
   },
   { wall: 0, band: 0, prong: 0, detail: 0, gap: 0, surfaceDeviation: Infinity }
 );
+var SETTING = {
+  /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
+  gripMin: 0.15,
+  /** Bezel lip on a FACETED stone: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
+  lipMinOfCrown: 0.5,
+  lipMaxOfCrown: 0.75,
+  /**
+   * Bezel lip on a CABOCHON (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference):
+   * at least a third of the stone's height, its dome above the girdle. Cogswell gives "a
+   * third to a quarter ... depending on the wall thickness", and never less than a quarter;
+   * he names no wall thickness that earns the quarter, so the stricter third is used
+   * (owner, round 1, Q4). He gives no upper limit, so none is applied.
+   */
+  lipMinOfCabochon: 1 / 3,
+  sources: [
+    "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+    'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/',
+    `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
+  ]
+};
 
 // src/units.ts
 var QUANTITY = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(\S.*?)?\s*$/;
@@ -2854,6 +2874,7 @@ var PROGRAM_CALLS = [
   "ringShank",
   "roundStone",
   "emeraldStone",
+  "cabochon",
   "stone",
   "prongHead",
   "bezel",
@@ -3002,7 +3023,7 @@ var ProgramLibrary = class {
   #stone(v, path) {
     const r = this.#ref(v, path);
     if (r?.kind === "stone") return r;
-    throw new CallError(path, "must be a stone, made by roundStone, emeraldStone or stone().");
+    throw new CallError(path, "must be a stone, made by roundStone, emeraldStone, cabochon or stone().");
   }
   #id(prefix) {
     this.#nextId++;
@@ -3318,6 +3339,8 @@ var ProgramLibrary = class {
       case "roundStone":
       case "emeraldStone":
         return this.#cutStone(name, a[0]);
+      case "cabochon":
+        return this.#cabochon(a[0]);
       case "stone":
         return this.#ownStone(a[0], a[1]);
       case "prongHead":
@@ -3437,36 +3460,85 @@ var ProgramLibrary = class {
     if (o["carat"] !== void 0) s["carat"] = caratText(o["carat"], at(name, "carat"));
     const view = stoneView(s);
     const shape = stoneShape({ shape: view.shape, lengthMm: view.lengthMm, widthMm: view.widthMm, depthMm: view.depthMm, orientation: view.orientation }, this.#tol);
-    return { kind: "stone", view, shape, custom: false };
+    return { kind: "stone", view, shape, custom: false, cabochon: false };
   }
   /**
-   * A stone of the program's own shape (a cabochon, a pear): never metal. Seen from above,
-   * its girdle is the convex hull of its outline; the girdle runs where its slices are
-   * widest, the crown above and the pavilion below. It is
-   * moved so its outline is centred on the z axis and its girdle's bottom is at z = 0,
-   * as the library's own stones are, and a setting places it from there.
+   * A stone of the program's own shape (a cabochon, a pear): never metal. `kind: 'cabochon'`
+   * DECLARES it a cabochon, whose bezel lip is held to the cabochon's rule; the engine never
+   * guesses that from the shape, so left out it is a faceted stone
+   * (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference).
    */
   #ownStone(solidArg, optsArg) {
     const r = this.#plain(this.#solid(solidArg, "stone"), "stone", "turn metal into a stone");
-    const o = this.#opts(optsArg, "stone.options", ["name"]);
+    const o = this.#opts(optsArg, "stone.options", ["name", "kind"]);
     const name = o["name"] === void 0 ? void 0 : nameId(o["name"], "stone.options.name");
+    if (o["kind"] !== void 0 && o["kind"] !== "cabochon" && o["kind"] !== "faceted") {
+      throw new CallError("stone.options.kind", `is "cabochon" (a domed stone; its bezel lip is held to the cabochon's rule) or "faceted" (the default).`);
+    }
+    return this.#stoneOf(r.m, "stone", name, o["kind"] === "cabochon");
+  }
+  /**
+   * A cabochon from the person's own measurements: its flat base, round (diameter) or oval
+   * (length and width), and its dome's height from the base to the top. Its dome rises
+   * from the base's edge to the top as a quarter ellipse, as the worked example's does: a
+   * modelling assumption that only cuts the seat and draws the stone, since the lip rule
+   * reads the height alone. Declared a cabochon.
+   */
+  #cabochon(arg) {
+    const o = this.#opts(arg, "cabochon", ["diameter", "length", "width", "height", "orientation", "name"]);
+    const round2 = o["diameter"] !== void 0;
+    if (round2 && (o["length"] !== void 0 || o["width"] !== void 0 || o["orientation"] !== void 0)) {
+      throw new CallError("cabochon", "give a round cabochon its diameter, or an oval one its length and width (and orientation), not both.");
+    }
+    for (const k of round2 ? [] : ["length", "width"]) {
+      if (o[k] === void 0) throw new CallError(at("cabochon", k), 'give the flat base measured across: a diameter for a round cabochon, or a length and width for an oval one, e.g. "8 mm".');
+    }
+    if (o["height"] === void 0) throw new CallError(at("cabochon", "height"), `give the dome's height, measured from the flat base to the top of the dome, e.g. "3 mm".`);
+    const L3 = this.#len(o[round2 ? "diameter" : "length"], at("cabochon", round2 ? "diameter" : "length"), { positive: true });
+    const W = round2 ? L3 : this.#len(o["width"], at("cabochon", "width"), { positive: true });
+    if (W > L3) throw new CallError(at("cabochon", "width"), "the width is the SHORT side of an oval; it cannot be more than its length.");
+    const h = this.#len(o["height"], at("cabochon", "height"), { positive: true });
+    const orientation = o["orientation"] ?? "east_west";
+    if (!round2) checkParam(PARAM_BY_KEY.get("stone_orientation"), orientation, at("cabochon", "orientation"));
+    const name = o["name"] === void 0 ? void 0 : nameId(o["name"], "cabochon.name");
+    const { Manifold, CrossSection } = this.#k;
     const A = this.#A;
-    const bb = r.m.boundingBox();
+    const r = L3 / 2;
+    const q = Math.ceil(segmentsFor(r, this.#tol, 12) / 4);
+    const profile = [[0, 0]];
+    for (let i = 0; i <= q; i++) {
+      const a = i / q * Math.PI / 2;
+      profile.push([r * Math.cos(a), h * Math.sin(a)]);
+    }
+    let m = A.t(Manifold.revolve(A.t(new CrossSection([ccw2(profile)])), segmentsFor(Math.max(r, this.#tol), this.#tol, 32)));
+    if (W < L3) m = A.t(m.scale([1, W / L3, 1]));
+    if (orientation === "north_south" && !round2) m = A.t(m.rotate([0, 0, 90]));
+    return this.#stoneOf(m, "cabochon", name, true);
+  }
+  /**
+   * A stone from a solid. Seen from above, its girdle is the convex hull of its outline; the
+   * girdle runs where its slices are widest, the crown above and the pavilion below. It is
+   * moved so its outline is centred on the z axis and its girdle's bottom is at z = 0,
+   * as the library's own stones are, and a setting places it from there.
+   */
+  #stoneOf(m, path, name, cabochon) {
+    const A = this.#A;
+    const bb = m.boundingBox();
     const zMin = bb.min[2], zMax = bb.max[2];
-    if (!(zMax - zMin > 0.2)) throw new CallError("stone", "the stone is less than 0.2 mm deep.");
-    const proj = A.t(A.t(r.m.project()).hull());
+    if (!(zMax - zMin > 0.2)) throw new CallError(path, "the stone is less than 0.2 mm deep.");
+    const proj = A.t(A.t(m.project()).hull());
     const polys = proj.toPolygons();
     const outline0 = polys.sort((p, q) => Math.abs(area2(q)) - Math.abs(area2(p)))[0];
-    if (!outline0 || outline0.length < 3) throw new CallError("stone", "the stone has no outline seen from above.");
+    if (!outline0 || outline0.length < 3) throw new CallError(path, "the stone has no outline seen from above.");
     const ob = proj.bounds();
     const cx = (ob.min[0] + ob.max[0]) / 2, cy = (ob.min[1] + ob.max[1]) / 2;
     const L3 = ob.max[0] - ob.min[0], W = ob.max[1] - ob.min[1];
-    if (Math.min(L3, W) < 1 || Math.max(L3, W) > 30) throw new CallError("stone", `the stone is ${fixed(L3)} \xD7 ${fixed(W)} mm seen from above; the library sets stones 1 to 30 mm across.`);
+    if (Math.min(L3, W) < 1 || Math.max(L3, W) > 30) throw new CallError(path, `the stone is ${fixed(L3)} \xD7 ${fixed(W)} mm seen from above; the library sets stones 1 to 30 mm across.`);
     const outline = ccw2(outline0.map(([x, y]) => [x - cx, y - cy]));
     const N = 96;
     const areas = Array.from({ length: N }, (_, i) => {
       const z = zMin + (i + 0.5) * (zMax - zMin) / N;
-      return A.t(r.m.slice(z)).area();
+      return A.t(m.slice(z)).area();
     });
     const amax = Math.max(...areas);
     const wide = areas.map((x, i) => x >= (1 - 1e-4) * amax ? i : -1).filter((i) => i >= 0);
@@ -3475,8 +3547,8 @@ var ProgramLibrary = class {
     const zGb = at3(lo);
     const zGt = lo === hi ? zGb : at3(hi);
     const pavilion = zGb - zMin, girdle = zGt - zGb, crown = zMax - zGt;
-    if (!(crown > 0.05)) throw new CallError("stone", "the stone has no crown above its widest place; a setting holds a stone over its crown.");
-    const mesh = A.t(r.m.hull()).getMesh();
+    if (!(crown > 0.05)) throw new CallError(path, "the stone has no crown above its widest place; a setting holds a stone over its crown.");
+    const mesh = A.t(m.hull()).getMesh();
     const verts = [];
     for (let i = 0; i < mesh.vertProperties.length; i += mesh.numProp) verts.push([mesh.vertProperties[i] - cx, mesh.vertProperties[i + 1] - cy, mesh.vertProperties[i + 2] - zGb]);
     const mid = [0, 0, (zMax + zMin) / 2 - zGb];
@@ -3508,13 +3580,13 @@ var ProgramLibrary = class {
       }
     };
     const view = { shape: "custom", lengthMm: L3, widthMm: W, depthMm: zMax - zMin, orientation: "east_west", placeholder: [] };
-    return { kind: "stone", view, shape, custom: true, ...name ? { name } : {} };
+    return { kind: "stone", view, shape, custom: true, cabochon, ...name ? { name } : {} };
   }
   #head(name, arg) {
     const kind = name === "prongHead" ? "prong_head" : "bezel";
     const keys = kind === "prong_head" ? ["stone", "on", "prong_count", "prong_thickness", "prong_grip", "culet_clearance", "prong_overrides"] : ["stone", "on", "wall", "lip", "culet_clearance"];
     const o = this.#opts(arg, name, keys);
-    if (o["stone"] === void 0) throw new CallError(at(name, "stone"), "give the stone it holds: roundStone({...}), emeraldStone({...}) or stone(yourShape).");
+    if (o["stone"] === void 0) throw new CallError(at(name, "stone"), "give the stone it holds: roundStone({...}), emeraldStone({...}), cabochon({...}) or stone(yourShape).");
     const st = this.#stone(o["stone"], at(name, "stone"));
     let band = null;
     let ringSize = { system: "US", size: "7" };
@@ -3551,10 +3623,10 @@ var ProgramLibrary = class {
     const dims = pieceDims(v, st.custom ? st.shape : void 0);
     const h = buildHead(this.#k, this.#A, v, dims, this.#tol, st.shape, band !== null);
     const d = emptyDecls();
-    d.stone = h.decl.stone;
+    d.stone = st.cabochon ? { ...h.decl.stone, kind: "cabochon" } : h.decl.stone;
     d.prongs = h.decl.prongs;
     if (h.decl.bezel) d.bezel = h.decl.bezel;
-    const report = { call: name, onBand: band, head: dims.head, stone: { shape: st.view.shape, ...st.name ? { name: st.name } : {} } };
+    const report = { call: name, onBand: band, head: dims.head, stone: { shape: st.view.shape, ...st.name ? { name: st.name } : {}, ...st.cabochon ? { kind: "cabochon" } : {} } };
     return this.#newSolid(h.head, d, { stones: [this.#A.t(h.stone)], parts: [report], dims: dims.head });
   }
 };
@@ -3571,7 +3643,7 @@ function nameId(v, path) {
   return v;
 }
 function stoneDimsOf(r) {
-  return { shape: r.view.shape, lengthMm: r.view.lengthMm, widthMm: r.view.widthMm, depthMm: r.view.depthMm, girdleMm: r.shape.girdle, crownMm: r.shape.crown, pavilionMm: r.shape.pavilion };
+  return { shape: r.view.shape, ...r.cabochon ? { kind: "cabochon" } : {}, lengthMm: r.view.lengthMm, widthMm: r.view.widthMm, depthMm: r.view.depthMm, girdleMm: r.shape.girdle, crownMm: r.shape.crown, pavilionMm: r.shape.pavilion };
 }
 function boxThrough(b, M) {
   const pts = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => applyPoint2(M, [i & 1 ? b.max[0] : b.min[0], i & 2 ? b.max[1] : b.min[1], i & 4 ? b.max[2] : b.min[2]]));
@@ -3730,6 +3802,7 @@ var PRELUDE = String.raw`(function (bridge) {
     ringShank: (o) => call('ringShank', [o]),
     roundStone: (o) => call('roundStone', [o]),
     emeraldStone: (o) => call('emeraldStone', [o]),
+    cabochon: (o) => call('cabochon', [o]),
     stone: (s, o) => call('stone', [s, o]),
     prongHead: (o) => call('prongHead', [o]),
     bezel: (o) => call('bezel', [o]),

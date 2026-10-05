@@ -67,6 +67,9 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
     branch.
   - A head is a choice: prongs or a full bezel.
   - Stones are round or emerald cut, sized from their MEASURED dimensions. A carat weight is for reference only.
+  - A program may also make a cabochon, DECLARED as one (`cabochon({...})`, or `stone(..., { kind: 'cabochon' })`),
+    never guessed from its shape. Its bezel lip is held to its own cited rule, at least a third of the dome
+    (`dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference`); a faceted stone's stays 50-75 % of the crown.
   - The stone is never in a casting file.
 - **Units are enforced.**
   - Lengths are written like `"1.2 mm"`, angles like `"30 deg"`, carats like `"2.00 ct"`, and shrinkage like

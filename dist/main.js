@@ -22184,7 +22184,7 @@ function runChecks(stl, decl, L3, reference) {
   }
   if (decl.bezel && decl.stone) {
     guard("bezel_wall", "Bezel wall thickness", mm(L3.wall), () => bezelWallEntry(bvh, samples, decl, L3));
-    guard("bezel_lip", "Bezel lip height", `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L3));
+    guard("bezel_lip", "Bezel lip height", decl.stone.kind === "cabochon" ? "at least a third of the cabochon's dome" : `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L3));
   }
   if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L3.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L3));
   guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3));
@@ -22884,6 +22884,19 @@ function bezelLipEntry(bvh, decl, L3) {
   }
   const lip = top - st.girdleTopZ;
   const share = lip / st.crownHeight;
+  if (st.kind === "cabochon") {
+    const need = L3.lipMinOfCabochon * st.crownHeight;
+    return {
+      id: "bezel_lip",
+      name: "Bezel lip height",
+      limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
+      result: share >= L3.lipMinOfCabochon - 1e-6 ? "pass" : "fail",
+      measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
+      value: r3(lip),
+      where: { part: "head", feature: "bezel", point_mm: pt(at3), description: "the top of the bezel, measured from the top of the girdle" },
+      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule"
+    };
+  }
   const ok = share >= L3.lipMinOfCrown - 1e-6 && share <= L3.lipMaxOfCrown + 1e-6;
   return {
     id: "bezel_lip",
@@ -23240,12 +23253,21 @@ var STRICTEST = Object.keys(METALS).reduce(
 var SETTING = {
   /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
   gripMin: 0.15,
-  /** Bezel lip: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
+  /** Bezel lip on a FACETED stone: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
   lipMinOfCrown: 0.5,
   lipMaxOfCrown: 0.75,
+  /**
+   * Bezel lip on a CABOCHON (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference):
+   * at least a third of the stone's height, its dome above the girdle. Cogswell gives "a
+   * third to a quarter ... depending on the wall thickness", and never less than a quarter;
+   * he names no wall thickness that earns the quarter, so the stricter third is used
+   * (owner, round 1, Q4). He gives no upper limit, so none is applied.
+   */
+  lipMinOfCabochon: 1 / 3,
   sources: [
     "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
-    'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/'
+    'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/',
+    `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
   ]
 };
 
@@ -26453,6 +26475,10 @@ function readDecl(v, blobs, scale2) {
       girdleTopZ: fin(st["girdleTopZ"], "the stone", -MAX_REACH_MM * s, MAX_REACH_MM * s),
       crownHeight: fin(st["crownHeight"], "the stone", 0.01, 20 * s)
     };
+    if (st["kind"] !== void 0) {
+      if (st["kind"] !== "cabochon") throw new Error("the stone's kind is malformed");
+      stone.kind = "cabochon";
+    }
     const xs = stone.outline.map((q) => q[0]), ys = stone.outline.map((q) => q[1]);
     const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
     if (stone.outline.length < 3 || !(span >= 0.9 && span <= 31 * s) || stone.girdleTopZ < stone.girdleBottomZ) throw new Error("the stone is out of the range the library sets");
@@ -27038,8 +27064,15 @@ function canonicalJson(v) {
 var sha256 = (b) => createHash2("sha256").update(b).digest("hex");
 var r2 = (x) => Math.round(x * 100) / 100;
 function limitsFor(metal) {
-  return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown };
+  return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown, lipMinOfCabochon: SETTING.lipMinOfCabochon };
 }
+function cabochonLipFix(e) {
+  const m = /cabochon's ([\d.]+) mm dome \(at least ([\d.]+) mm for this stone/.exec(e.limit);
+  if (!m) return null;
+  const need = Number(m[2]);
+  return { dome: Number(m[1]), need, to: Math.ceil((need + 0.01) * 10) / 10 };
+}
+var cabochonLipWords = (e, c) => `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
 function stoneWords(v) {
   const h = v.head;
   if (!h) return "no stone (a plain band)";
@@ -27165,6 +27198,8 @@ function fixFor(e, v, metal) {
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1, suggestThicker(h.wallMm, e.value ?? 0, metal.limits.wall))} mm"}.`;
     case "bezel_lip": {
       if (!h || h.kind !== "bezel") return null;
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} Change: set {"bezel_lip": "${cab.to} mm"} (or "auto").`;
       const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
       const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
       return (e.value ?? 0) < lo ? `Raise the bezel lip: it rises ${e.value} mm above the girdle, too little to be pushed over the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").` : `Lower the bezel lip: it rises ${e.value} mm above the girdle and would cover too much of the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`;
@@ -27350,7 +27385,8 @@ function meshSize(m) {
 var NO_BAND = { innerDiameterMm: 0, outerDiameterMm: 0, widthMm: 0, thicknessMm: 0 };
 function stoneOfPart(part) {
   const s = part.head.stone;
-  const own2 = part.stone.shape === "custom" ? ` stone of its own shape${part.stone.name ? ` ("${part.stone.name}")` : ""}` : part.stone.shape === "round" ? " round brilliant" : " emerald cut";
+  const named = part.stone.name ? ` ("${part.stone.name}")` : "";
+  const own2 = part.stone.kind === "cabochon" ? ` cabochon${named}` : part.stone.shape === "custom" ? ` stone of its own shape${named}` : part.stone.shape === "round" ? " round brilliant" : " emerald cut";
   return `${part.stone.shape === "round" ? `${mm2(s.lengthMm)}` : `${r2(s.lengthMm).toFixed(2)} \xD7 ${mm2(s.widthMm)}`}${own2}, ${mm2(s.depthMm)} deep`;
 }
 function programPartsWords(parts) {
@@ -27418,6 +27454,8 @@ function programFixFor(e, metal, parts) {
     case "bezel_wall":
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1, suggestThicker(head?.head.bezel?.wallMm ?? metal.limits.wall, e.value ?? 0, metal.limits.wall))} mm.`;
     case "bezel_lip": {
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} In the program, set lip in its bezel call to ${cab.to} mm or more (or "auto").`;
       const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
       const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
       return `${(e.value ?? 0) < lo ? "Raise" : "Lower"} the bezel lip: it rises ${e.value} mm above the girdle. In the program, set lip in its bezel call to ${r2((lo + hi) / 2)} mm (or "auto").`;
@@ -27540,7 +27578,8 @@ var PROGRAM_CALLS_GUIDE = [
   "LIBRARY (today's parts; each takes start_piece's settings and its defaults, checked the same way, and reads back its dimensions as `.dims`):",
   '- ringShank({ ring_size: {system: "US", size: "7"}, band_width, band_thickness, band_profile }) -> the band; .dims has innerDiameterMm, outerDiameterMm, widthMm, thicknessMm.',
   "- roundStone({ diameter, depth, carat? }), emeraldStone({ length, width, depth, orientation?, carat? }) -> a stone, sized from its MEASURED dimensions.",
-  "- stone(solid, { name? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal.",
+  "- cabochon({ diameter, height, name? }) or cabochon({ length, width, height, orientation?, name? }) -> a cabochon from its MEASURED flat base (round or oval) and dome height, base to top. A bezel round it is checked by the cabochon's lip rule: it rises at least a third of the dome (J. Cogswell, Creative Stonesetting).",
+  `- stone(solid, { name?, kind? }) -> a stone of your own shape (a cabochon, a pear): its girdle is where it is widest; it is never metal. kind: "cabochon" declares a domed stone, checked by the cabochon's lip rule; left out, the stone is faceted and its lip covers 50-75 % of its crown. The engine never guesses which from the shape.`,
   "- prongHead({ stone, on: band, prong_count, prong_thickness, prong_grip, culet_clearance, prong_overrides }) and bezel({ stone, on: band, wall, lip, culet_clearance }) -> the setting round the stone, on top of the band (leave out `on` for a setting standing on the XY plane, as on a pendant). .dims has the seat, the outside, the bezel or each prong, and the culet clearance, as describe_piece reports them.",
   '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
   `- relief({ id, image: "lion.png", width, height, depth, mode: "raised" | "sunk", surface: "flat" | "cylinder", radius, base, smoothing }) -> a grayscale height image (a PNG kept beside the piece, named in quotes; white highest) as one solid: from its back, base below its surface (default 1 mm), to its face, raised up to depth or sunk that deep. Flat lies in XY facing +Z, centred; cylinder wraps round the Y axis at radius (the band's outer radius lays it on the band's top). Smoothed so no ridge or hollow is finer than smoothing (default and least 0.35 mm) and no slope is steeper than 45\xB0. The check names it by its id.`,
@@ -27578,7 +27617,7 @@ for (let i = 0; i <= n; i++) {
   const a = (i / n) * Math.PI / 2;
   profile.push([r * Math.cos(a), h * Math.sin(a)]);
 }
-const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone' });
+const moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });
 
 // The bezel seats it on a flat ledge and rises over its curve.
 const setting = bezel({ stone: moonstone, on: band, wall: 1.0 });
@@ -27722,7 +27761,7 @@ var PROGRAM = {
   type: "string",
   maxLength: PROGRAM_MAX_CHARS,
   description: [
-    `The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion's face, a ship's hull): it builds the piece from the kernel's general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, stone, prongHead, bezel, thicken, relief, op), and ends with "return <the piece>;". relief() lays a grayscale height image (a PNG kept beside the piece, named in quotes) onto a flat or curved patch, for a sculpted face no program draws well by numbers. describe_piece lists every call with its settings, and shows any template piece written as a program.`,
+    `The piece written as a short JavaScript program, for any shape the templates and operations do not make (a cabochon, a lion's face, a ship's hull): it builds the piece from the kernel's general shapes (sphere, cylinder, box, extrude, revolve, sweep, hull, union, difference, smoothUnion ...) and the jewelry library (ringShank, roundStone, emeraldStone, cabochon, stone, prongHead, bezel, thicken, relief, op), and ends with "return <the piece>;". relief() lays a grayscale height image (a PNG kept beside the piece, named in quotes) onto a flat or curved patch, for a sculpted face no program draws well by numbers. describe_piece lists every call with its settings, and shows any template piece written as a program.`,
     "Bare numbers are millimetres (degrees for angles); a string carries its unit. A ring shank stands round the Y axis through the origin, a stone setting upright on top of it at +Z.",
     "It runs confined, in its own process with a time and memory limit, reaching nothing but the library: no require, files, network or timers. A program that fails is refused with the line and the reason, and nothing changes.",
     `The program is kept as the piece's file (<name>.tree.json), every version, and checked and exported exactly like any piece. Example: "const band = ringShank({ ring_size: { system: 'US', size: '7' } }); const head = prongHead({ on: band, stone: roundStone({ diameter: 6.5, depth: 4.0 }) }); return union(band, head);"`
@@ -27830,7 +27869,7 @@ var TOOLS = [
     title: "Check it will cast",
     description: [
       "Check whether the piece will print and cast, without exporting it.",
-      `It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece's metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of the crown; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.`,
+      `It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece's metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of a faceted stone's crown, or rising at least a third of a declared cabochon's dome; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.`,
       "Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.",
       "A failed check is a normal answer, not an error: tell the person what to change."
     ].join(" "),
