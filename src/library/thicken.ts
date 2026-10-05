@@ -53,6 +53,45 @@
 // the radius: the rim then leans less than 1° from the normal anywhere. (On a sphere
 // every normal meets the centre, and the rim does not lean.)
 //
+// AT LEAST THE STATED THICKNESS (dec:idea-four-choices-left-by-the-thicken-build,
+// choice 3: the library compensates, so a stated thickness is always built at least
+// that thick, whatever the material). A flat facet whose corners lie on a curved face
+// lies on the concave side of that face, by up to its sagitta. On the inner (concave)
+// face that side is away from the metal, so its facets only add thickness; on the
+// outer (convex) face it is INTO the metal, and the sheet came out thinner than stated:
+// 0.799 mm for 0.8 mm. Along any normal of the surface the two faces were t · f apart,
+// where f < 1 is how near (as a fraction of their radius) that facet comes to the
+// centre of curvature. So the outer face is built further out, by exactly the largest
+// sagitta its own facets have:
+//  · f is the same on both faces and on every layer between them, because each face
+//    is the same grid of facets scaled about the sphere's centre (or, on a cylinder,
+//    about its axis; the length along the axis does not change a point's distance
+//    from it). So the least f over every grid facet, f_min, is found once, exactly:
+//    the distance from the centre (or axis) to each facet's nearest point, divided by
+//    the radius its corners lie on (convexSag). Every piece of the sheet's faces is a
+//    piece of one grid facet, so nothing is nearer the centre than that.
+//  · Its corners at r_out / f_min, the outer face comes no nearer the centre than
+//    r_out = R + t/2 anywhere, and the inner face's facets no further out than
+//    r_in = R - t/2: measured square to the surface, along any of its normals, the
+//    sheet is at least t thick everywhere, the rim included. The outer face moves out
+//    by sag = r_out (1 / f_min - 1), which is that face's own largest sagitta.
+//  · Both faces also move off the metal by a float32 allowance, 2^-22 of the largest
+//    coordinate the sheet can have where placed (floatAllowance): the written STL keeps
+//    float32 corners, each rounded by at most 2^-24 of its size, and the allowance
+//    covers that with room for the casting shrinkage's scale. A flat sheet needs it
+//    alone: 0.35 mm is 0.34999999 in float32.
+// So a sheet stated at t is built between t and t + sag + 2 · allowance thick, measured
+// square to its surface: never thinner, and thicker by no more than the tessellation's
+// own error. The grid spacing holds each direction's chord to about 0.9 × tol
+// (gridSpacing), so sag comes to about 1.8 × tol on a sphere and 0.9 × tol on a
+// cylinder (computed over thicknesses 0.1-5 mm and radii 5 t-1000 mm at the three
+// tolerances: at most 1.80 and 0.91 × tol), under 2 × tol: a casting file's sheet is
+// at most 0.009 mm over, and its convex face stands off its surface by no more than it
+// did inward before, inside the 0.01 mm surface limit. The allowance is 2.4e-7 of the
+// piece's size (5e-6 mm on a ring, 3e-5 mm on a 100 mm leaf). It holds at any
+// thickness, radius and scale: f_min is computed from the grid actually built, never
+// assumed, and nothing in it is a jewelry value.
+//
 // WHAT IT DECLARES. Each thicken node declares a SHEET to the checker: its node id,
 // its nominal thickness, and points on its middle surface with their normals, in the
 // piece's coordinates. The checker measures the thickness of the written file square
@@ -215,31 +254,43 @@ export function signedArea2(pts: readonly Vec2[]): number {
 
 // ------------------------------------------------------------------- the build
 
-/** A closed box from x0..x1 × y0..y1 × zb..zt whose top and bottom are a regular grid of right triangles with legs at most h. */
-function gridSlab(k: Kernel, x0: number, x1: number, y0: number, y1: number, h: number, zb: number, zt: number): Manifold {
-  const nx = Math.max(1, Math.ceil((x1 - x0) / h)), ny = Math.max(1, Math.ceil((y1 - y0) / h));
+/** Grid lines from a to b at most h apart, rounded to float32 as the kernel's mesh will hold them, so the bound below is computed on the very corners built. */
+function gridLines(a: number, b: number, h: number): Float64Array {
+  const n = Math.max(1, Math.ceil((b - a) / h));
+  return Float64Array.from({ length: n + 1 }, (_, i) => Math.fround(a + ((b - a) * i) / n));
+}
+
+/** Each grid cell's two triangles, as corner indices (i, j) into the grid lines; the same diagonal on both faces. */
+function forEachGridTriangle(nx: number, ny: number, fn: (a: [number, number], b: [number, number], c: [number, number]) => void): void {
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      fn([i, j], [i + 1, j], [i + 1, j + 1]);
+      fn([i, j], [i + 1, j + 1], [i, j + 1]);
+    }
+  }
+}
+
+/** A closed box over the grid lines xs × ys, from zb to zt, whose top and bottom are the grid's right triangles. */
+function gridSlab(k: Kernel, xs: Float64Array, ys: Float64Array, zb: number, zt: number): Manifold {
+  const nx = xs.length - 1, ny = ys.length - 1;
   const layer = (nx + 1) * (ny + 1);
   const vert = new Float32Array(layer * 2 * 3);
   for (let top = 0; top < 2; top++) {
     for (let j = 0; j <= ny; j++) {
       for (let i = 0; i <= nx; i++) {
         const v = (top * layer + j * (nx + 1) + i) * 3;
-        vert[v] = x0 + ((x1 - x0) * i) / nx;
-        vert[v + 1] = y0 + ((y1 - y0) * j) / ny;
+        vert[v] = xs[i]!;
+        vert[v + 1] = ys[j]!;
         vert[v + 2] = top ? zt : zb;
       }
     }
   }
   const id = (i: number, j: number, top: number) => top * layer + j * (nx + 1) + i;
   const tri: number[] = [];
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nx; i++) {
-      const a = id(i, j, 1), b = id(i + 1, j, 1), c = id(i + 1, j + 1, 1), d = id(i, j + 1, 1);
-      tri.push(a, b, c, a, c, d);
-      const A = id(i, j, 0), B = id(i + 1, j, 0), C = id(i + 1, j + 1, 0), D = id(i, j + 1, 0);
-      tri.push(A, C, B, A, D, C);
-    }
-  }
+  forEachGridTriangle(nx, ny, (a, b, c) => {
+    tri.push(id(a[0], a[1], 1), id(b[0], b[1], 1), id(c[0], c[1], 1));
+    tri.push(id(a[0], a[1], 0), id(c[0], c[1], 0), id(b[0], b[1], 0));
+  });
   // The four sides, each a strip of quads, wound outward.
   const side = (p: number, q: number) => tri.push(p, q, q + layer, p, q + layer, p + layer);
   for (let i = 0; i < nx; i++) side(id(i, 0, 0), id(i + 1, 0, 0));
@@ -254,12 +305,77 @@ function gridSlab(k: Kernel, x0: number, x1: number, y0: number, y1: number, h: 
  * the outer face (radius r_out = R + t/2, the most stretched), and each leg's chord
  * stands off its curve by leg² / (8 r_out). Each direction is held to 0.9 × tol, the
  * library's per-direction convention (EXPORT_TOL: a doubly curved facet adds both
- * directions), so a facet stands off by at most 1.8 × tol: 0.0081 mm in a casting
- * file, inside the 0.01 mm limit.
+ * directions), so a facet stands off by about 1.8 × tol at most: 0.0081 mm in a
+ * casting file, inside the 0.01 mm limit. (The outer face, built out by its sagitta,
+ * is this grid scaled by under 0.3 % more; convexSag computes its sagitta exactly.)
  */
 export function gridSpacing(s: Pick<SheetSpec, 'radius' | 'thickness'>, tol: number): number {
   const rOut = s.radius + s.thickness / 2;
   return Math.min(1, s.radius * Math.sqrt((8 * 0.9 * tol) / rOut));
+}
+
+/** The distance from the origin to the nearest point of triangle abc, exactly; a degenerate (flat) triangle too. */
+function nearestOnTriangle(a: P3, b: P3, c: P3): number {
+  const seg = (p: P3, q: P3) => {
+    const d: P3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+    const l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    const u = l2 > 0 ? Math.max(0, Math.min(1, -(p[0] * d[0] + p[1] * d[1] + p[2] * d[2]) / l2)) : 0;
+    return Math.hypot(p[0] + u * d[0], p[1] + u * d[1], p[2] + u * d[2]);
+  };
+  let best = Math.min(seg(a, b), seg(b, c), seg(c, a));
+  const e1: P3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2: P3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const n: P3 = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+  const nn = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+  if (nn > 0) {
+    // The foot of the origin on the triangle's plane, when it falls inside the triangle, is its nearest point.
+    const s = (a[0] * n[0] + a[1] * n[1] + a[2] * n[2]) / nn;
+    const f: P3 = [s * n[0], s * n[1], s * n[2]];
+    const side = (p: P3, q: P3) => {
+      const u: P3 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], w: P3 = [f[0] - p[0], f[1] - p[1], f[2] - p[2]];
+      return (u[1] * w[2] - u[2] * w[1]) * n[0] + (u[2] * w[0] - u[0] * w[2]) * n[1] + (u[0] * w[1] - u[1] * w[0]) * n[2];
+    };
+    if (side(a, b) >= 0 && side(b, c) >= 0 && side(c, a) >= 0) best = Math.min(best, Math.abs(s) * Math.sqrt(nn));
+  }
+  return best;
+}
+
+/**
+ * How much further out the convex (outer) face is built, so that none of its facets
+ * comes inside the stated outer surface (AT LEAST THE STATED THICKNESS, above): every
+ * grid facet's nearest approach to the centre of curvature (a sphere's centre, or a
+ * cylinder's axis, measured with the axis's own coordinate dropped), as a fraction f
+ * of the radius its corners lie on; the least of them, f_min; and the outer face's
+ * largest sagitta once its corners are moved out to r_out / f_min.
+ */
+export function convexSag(s: Pick<SheetSpec, 'surface' | 'radius' | 'axis' | 'thickness'>, xs: Float64Array, ys: Float64Array): number {
+  if (s.surface === 'flat') return 0;
+  const R = s.radius, map = surfaceMap(s);
+  const nx = xs.length - 1;
+  // Each grid corner on the middle surface, from the centre of curvature.
+  const at: P3[] = [];
+  for (let j = 0; j < ys.length; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const p = map(xs[i]!, ys[j]!, 0).p;
+      at.push(s.surface === 'sphere' ? [p[0], p[1], p[2] - R] : s.axis === 'x' ? [0, p[1], p[2] - R] : [p[0], 0, p[2] - R]);
+    }
+  }
+  let fMin = 1;
+  forEachGridTriangle(nx, ys.length - 1, (a, b, c) => {
+    fMin = Math.min(fMin, nearestOnTriangle(at[a[1] * (nx + 1) + a[0]]!, at[b[1] * (nx + 1) + b[0]]!, at[c[1] * (nx + 1) + c[0]]!) / R);
+  });
+  return (R + s.thickness / 2) * (1 / fMin - 1);
+}
+
+/**
+ * float32's rounding, with room to spare: 2^-22 of a coordinate's size, four times
+ * the 2^-24 a float32 rounds a coordinate by. Covers the written STL's corners, the
+ * slab's own float32 corners and the casting shrinkage's scale (1.5 %).
+ */
+export const FLOAT_ALLOWANCE = 2 ** -22;
+
+/** The float32 allowance for a sheet no point of which lies further than `reach` from its own origin, placed by `m` (rotations, mirrors and moves, which keep lengths). */
+function floatAllowance(reach: number, m: Affine): number {
+  return FLOAT_ALLOWANCE * (Math.hypot(m[3]!, m[7]!, m[11]!) + reach);
 }
 
 /** Each contour divided into pieces no longer than `step` (the kernel keeps the points it is given). */
@@ -291,9 +407,13 @@ export function buildThicken(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx?
     throw new CallError(`${n.id}.params.round_corners`, `rounding the corners by ${s.roundCorners} mm leaves nothing of the outline: no part of it is ${2 * s.roundCorners} mm across. Use a smaller round_corners or a wider outline.`);
   }
   if (s.surface !== 'flat') cs = A.t(new CrossSection(divide(cs.toPolygons() as Vec2[][], Math.min(0.25, 0.05 * s.radius))));
+  const bb = cs.bounds();
+  // The furthest an outline point lies from the origin; a point of the sheet lies no further than that plus its offset along the normal.
+  const far = Math.max(...[bb.min[0], bb.max[0]].flatMap((x) => [bb.min[1], bb.max[1]].map((y) => Math.hypot(x, y))));
   let solid: Manifold;
   if (s.surface === 'flat') {
-    solid = A.t(A.t(Manifold.extrude(cs, t)).translate([0, 0, -t / 2]));
+    const eps = floatAllowance(far + t, ctx?.m ?? IDENTITY);
+    solid = A.t(A.t(Manifold.extrude(cs, t + 2 * eps)).translate([0, 0, -(t / 2 + eps)]));
   } else {
     const map = surfaceMap(s);
     const warp = (v: Float64Array, count: number) => {
@@ -305,15 +425,20 @@ export function buildThicken(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx?
       }
     };
     const h = gridSpacing(s, tol);
-    const bb = cs.bounds();
     // The grid's lines are offset by odd fractions of h, so none runs along a straight edge of the outline.
-    const slab = A.t(A.t(gridSlab(k, bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h, -t / 2, t / 2)).warpBatch(warp));
+    const xs = gridLines(bb.min[0] - 1.31 * h, bb.max[0] + 1.27 * h, h), ys = gridLines(bb.min[1] - 1.19 * h, bb.max[1] + 1.43 * h, h);
+    // The two faces, at least the stated thickness apart square to the surface (AT LEAST THE STATED THICKNESS, above):
+    // the outer (convex) face out by its facets' sagitta, and both off the metal by the float32 allowance.
+    const sag = convexSag(s, xs, ys);
+    const eps = floatAllowance(far + t + sag, ctx?.m ?? IDENTITY);
+    const zb = -(t / 2 + sag + eps), zt = t / 2 + eps;
+    const slab = A.t(A.t(gridSlab(k, xs, ys, zb, zt)).warpBatch(warp));
     // The cutter reaches m past each face. Its own faces lie outside the sheet, and are
     // refined only enough that, mapped, their chords sag less than m / 2 towards it.
     const m = Math.min(0.3, (s.radius - t / 2) / 2);
-    const rOut = s.radius + t / 2 + m;
+    const rOut = s.radius - zb + m;
     const lc = Math.min(1, s.radius * Math.sqrt(m / rOut));
-    const prism = A.t(A.t(A.t(A.t(Manifold.extrude(cs, t + 2 * m)).translate([0, 0, -(t / 2 + m)])).refineToLength(lc)).warpBatch(warp));
+    const prism = A.t(A.t(A.t(A.t(Manifold.extrude(cs, zt - zb + 2 * m)).translate([0, 0, zb - m])).refineToLength(lc)).warpBatch(warp));
     solid = A.t(slab.intersect(prism));
   }
   if (ctx?.sheets) ctx.sheets.push(declareSheet(n.id, s, cs.toPolygons() as Vec2[][], ctx.m));
