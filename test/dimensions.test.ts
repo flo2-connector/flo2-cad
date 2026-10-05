@@ -17,7 +17,10 @@ import { Session } from '../src/session.js';
 
 type V3 = [number, number, number];
 
-/** Every distance along the ray o + t·d (t > 0) at which it crosses a triangle of the mesh, nearest first. */
+/**
+ * Every distance along the ray o + t·d (t > 0) at which it crosses the mesh's surface, nearest first. A ray
+ * through an edge or a corner meets every triangle there at one distance, so hits that close count once.
+ */
 function hits(m: MeshOut, o: V3, d: V3): number[] {
   const P = m.positions, T = m.triangles;
   const out: number[] = [];
@@ -37,7 +40,7 @@ function hits(m: MeshOut, o: V3, d: V3): number[] {
     const dist = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
     if (dist > 1e-9) out.push(dist);
   }
-  return out.sort((x, y) => x - y);
+  return out.sort((x, y) => x - y).filter((x, i, all) => i === 0 || x - all[i - 1]! > 1e-6);
 }
 
 const first = (m: MeshOut, o: V3, d: V3): number => {
@@ -212,6 +215,7 @@ describe('describe_piece reports a prong head: the seat, each prong at its narro
   const cases: [string, () => PieceTree][] = [
     ['the solitaire, US 7, 4 prongs', () => treeFromTemplate('solitaire_ring', { ring_size: { system: 'US', size: '7' }, name: 'sol' })],
     ['one prong thinned to 0.7 mm', () => applySet(treeFromTemplate('solitaire_ring', { ring_size: { system: 'US', size: '7' }, name: 'thin' }), { 'head.prong_overrides': [{ prong: 2, thickness: '0.7 mm' }] }).tree],
+    ['one prong set 2.4 mm, reaching past the rail', () => applySet(treeFromTemplate('solitaire_ring', { ring_size: { system: 'US', size: '7' }, name: 'thick' }), { 'head.prong_overrides': [{ prong: 2, thickness: '2.4 mm' }] }).tree],
     [
       'an emerald cut north-south in 6 prongs',
       () => applySet(treeFromTemplate('emerald_bezel_solitaire', { ring_size: { system: 'US', size: '7' }, name: 'ns' }), { stone_setting: 'prong_head', stone_orientation: 'north_south', prong_count: 6 }).tree,
@@ -253,8 +257,20 @@ describe('describe_piece reports a prong head: the seat, each prong at its narro
         assert.equal(seat[0], Math.round((stone.lengthMm + 2 * clear!) * 100) / 100);
       }
       near(st.culet - m.rOut, culet!, ONE_SIDE, 'culet clearance');
-      // The head's widest metal along the finger (the band is narrower there): a round's diameter, a north-south emerald's length.
-      near(extent(m.b.metal, 1), head[0]!, ACROSS, 'head across at its widest');
+      // The head's widest metal, from its vertices beyond the band's sides (the band holds none there).
+      const hw = m.width / 2 + 0.01;
+      let reachOut = 0, xOut = 0;
+      for (let i = 0; i < m.b.metal.positions.length; i += 3) {
+        const x = m.b.metal.positions[i]!, y = m.b.metal.positions[i + 1]!;
+        if (Math.abs(y) <= hw) continue;
+        reachOut = Math.max(reachOut, Math.hypot(x, y));
+        xOut = Math.max(xOut, Math.abs(x));
+      }
+      if (stone.shape === 'round') near(2 * reachOut, head[0]!, ACROSS, 'head across at its widest');
+      else {
+        near(extent(m.b.metal, 1), head[0]!, ACROSS, "head's length, along the finger");
+        near(2 * xOut, head[1]!, ACROSS, "head's width, across the hand");
+      }
 
       // The independent checker's measurement of the written file.
       const r = await checkPiece(tree, 'check');
@@ -262,7 +278,8 @@ describe('describe_piece reports a prong head: the seat, each prong at its narro
       const measuredEach = [...prong.measured!.matchAll(/prong (\d+) (\d+\.\d+)/g)].map((x) => Number(x[2]));
       assert.equal(measuredEach.length, count);
       measuredEach.forEach((v, i) => near(v, narrowest[i]!, ACROSS, `prong ${i + 1}'s narrowest section`));
-      near(r.entries.find((e) => e.id === 'prong_grip')!.value!, reach!, ONE_SIDE, 'reach over the girdle');
+      // The checker reads the reach on the file, where the girdle and the prong are each drawn within 0.0045 mm.
+      near(r.entries.find((e) => e.id === 'prong_grip')!.value!, reach!, ACROSS, 'reach over the girdle');
     });
   }
 });

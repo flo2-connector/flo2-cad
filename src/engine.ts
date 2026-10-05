@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { quoteIds, runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
 import { writeBinaryStl } from './files/stl.js';
 import { write3mf } from './files/threemf.js';
-import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Built } from './library/build.js';
+import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Across, type Built, type PieceDims } from './library/build.js';
 import { METALS, SETTING, type Metal } from './metals.js';
 import { findNode, readPiece, STONE_DEFAULTS, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
 import { lengthMm } from './units.js';
@@ -75,6 +75,60 @@ export function summary(tree: PieceTree, v: PieceView = readPiece(tree)): string
   return `${kind} "${tree.name}", revision ${tree.revision}, in ${metal.name}: ${band}, ${stoneWords(v)}. Shrinkage allowance: ${tree.shrinkage}.${extras}`;
 }
 
+// ----------------------------------------------------- the dimensions
+
+/** A length in mm to 0.01 mm, always with two decimals, so a reader sees the resolution. */
+const mm2 = (x: number) => `${r2(x).toFixed(2)} mm`;
+
+/** A size seen from above: "7.60 mm" for a round, "8.60 × 6.10 mm" (length × width) for an emerald cut. */
+function acrossText(a: Across, shape: 'round' | 'emerald'): string {
+  return shape === 'round' ? mm2(a.lengthMm) : `${r2(a.lengthMm).toFixed(2)} × ${mm2(a.widthMm)}`;
+}
+
+/**
+ * The dimensions a check or a decision rests on, as the build makes them (pieceDims in
+ * the library): the band, and the stone's seat, the bezel or each prong, and the room
+ * under the stone. describe_piece reports them, so a fit or a weight is worked from the
+ * engine's own numbers, never an assumed one.
+ */
+export function dimensionLines(d: PieceDims): string[] {
+  const b = d.band;
+  const lines = [`- Band: inner diameter ${mm2(b.innerDiameterMm)}, outer diameter ${mm2(b.outerDiameterMm)}, ${mm2(b.widthMm)} wide, ${mm2(b.thicknessMm)} thick.`];
+  const h = d.head;
+  if (!h) return lines;
+  const stone = acrossText(h.stone, h.shape);
+  const seat = `${acrossText(h.seat, h.shape)} across`;
+  if (h.bezel) {
+    const z = h.bezel;
+    lines.push(`- Seat: ${seat} inside the bezel at the girdle, for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    lines.push(
+      `- Bezel: wall ${mm2(z.wallMm)} thick and ${acrossText(h.outside, h.shape)} across outside; its lip rises ${mm2(z.lipMm)} above the girdle (${z.lipAuto ? 'auto' : 'set'}: ${Math.round((z.lipMm / h.stone.crownMm) * 100)} % of the stone's ${mm2(h.stone.crownMm)} crown); it stands ${mm2(z.heightAboveBandMm)} above the top of the band.`,
+    );
+  } else if (h.prongs) {
+    const ps = h.prongs;
+    lines.push(`- Seat: ${seat} at the girdle, cut for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    const same = new Set(ps.map((p) => `${r2(p.thicknessMm)}/${r2(p.narrowestMm)}`)).size === 1;
+    const reaches = [...new Set(ps.map((p) => r2(p.reachMm)))].sort((a, c) => a - c);
+    const reach = reaches.length === 1 ? `each reaches ${mm2(reaches[0]!)} in over the girdle` : `they reach ${mm2(reaches[0]!)} to ${mm2(reaches[reaches.length - 1]!)} in over the girdle`;
+    const each = same
+      ? `${ps.length}, each ${mm2(ps[0]!.thicknessMm)} thick and ${mm2(ps[0]!.narrowestMm)} at its narrowest, where the seat is cut`
+      : `${ps.length}, each narrowest where the seat is cut: ${ps.map((p) => `${p.label.split(' of ')[0]} at ${p.clock} is ${mm2(p.thicknessMm)} thick and ${mm2(p.narrowestMm)} at its narrowest`).join('; ')}`;
+    lines.push(`- Prongs: ${each}; ${reach}. The head is ${acrossText(h.outside, h.shape)} across at its widest, at its rail.`);
+  }
+  lines.push(`- Culet clearance: ${mm2(h.culetClearanceMm)} from the stone's point down to the top of the band.`);
+  return lines;
+}
+
+/** One short line for start_piece and change_piece: the seat and the head's outside. Null for a plain band. */
+export function seatLine(d: PieceDims): string | null {
+  const h = d.head;
+  if (!h) return null;
+  const seat = `Seat ${acrossText(h.seat, h.shape)} across, ${mm2(h.seat.clearanceMm)} clearance a side`;
+  if (h.bezel) return `${seat}; bezel ${acrossText(h.outside, h.shape)} across outside, lip ${mm2(h.bezel.lipMm)} above the girdle.`;
+  const thinnest = Math.min(...(h.prongs ?? []).map((p) => p.narrowestMm));
+  return `${seat}; head ${acrossText(h.outside, h.shape)} across at its widest; prongs ${mm2(thinnest)} at their narrowest.`;
+}
+
 // --------------------------------------------------------------- preview
 
 export async function preview(tree: PieceTree, views: ViewName[]): Promise<{ png: Buffer; built: Built; ms: number }> {
@@ -94,7 +148,7 @@ export async function preview(tree: PieceTree, views: ViewName[]): Promise<{ png
   const png = renderPreview(items, views, {
     header: [head, stoneLine],
     warnings,
-    focusAboveZ: built.layout.girdleBottomZ !== undefined ? v.innerDiameterMm / 2 + v.bandThicknessMm - 1.2 : undefined,
+    focusAboveZ: built.dims.head ? built.dims.band.outerDiameterMm / 2 - 1.2 : undefined,
   });
   return { png, built, ms: performance.now() - t0 };
 }
@@ -322,9 +376,9 @@ export async function checkPiece(tree: PieceTree, mode: 'check' | 'export'): Pro
 
 // --------------------------------------------------------------- describe
 
-export async function describeNumbers(tree: PieceTree): Promise<{ volumeMm3: number; size: [number, number, number]; weights: { metal: string; grams: number }[] }> {
+export async function describeNumbers(tree: PieceTree): Promise<{ volumeMm3: number; size: [number, number, number]; weights: { metal: string; grams: number }[]; dims: PieceDims }> {
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
   const size: [number, number, number] = [0, 1, 2].map((k) => r2(built.bbox.max[k]! - built.bbox.min[k]!)) as [number, number, number];
   const weights = Object.values(METALS).map((m) => ({ metal: m.name, grams: r2((built.volumeMm3 / 1000) * m.density) }));
-  return { volumeMm3: r2(built.volumeMm3), size, weights };
+  return { volumeMm3: r2(built.volumeMm3), size, weights, dims: built.dims };
 }

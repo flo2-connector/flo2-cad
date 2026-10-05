@@ -13,7 +13,7 @@
 
 import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
 import type { BandDecl, BezelDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
-import type { PieceTree, PieceView, TreeNode } from '../piece/tree.js';
+import type { PieceTree, PieceView, StoneView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
 import { buildOp } from './ops.js';
 import { IDENTITY } from './thicken.js';
@@ -38,8 +38,8 @@ export interface Built {
   decl: FeatureDecl;
   volumeMm3: number;
   bbox: { min: Vec3; max: Vec3 };
-  /** Where things sit, for the summary and the placeholder notice. */
-  layout: { girdleBottomZ?: number; crownMm?: number; lipMm?: number; tableZ?: number };
+  /** The dimensions the piece was built to (before any shrinkage allowance): what describe_piece reports. */
+  dims: PieceDims;
 }
 
 /** Frees every kernel object it was handed when the build ends. */
@@ -192,6 +192,179 @@ export function prongPlaces(stone: StoneSpec, outline: P2[], count: number): { a
   return places.map(({ at, out }) => ({ at, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
 
+// --------------------------------------------------------------- dimensions
+//
+// Every dimension a check or a decision rests on (will this stone fit its seat, how
+// thick is each prong where the seat is cut) is worked out HERE, once. The build makes
+// its geometry from these numbers, and describe_piece and the summaries report the
+// same numbers, so what is reported is what is built and the two cannot drift
+// (fact:describe-piece-does-not-report-the-bezel-seat-so-a-chat-assumed-it-2026-10-05).
+// They are the piece as finished, before any shrinkage allowance.
+
+/** Every seat is cut as the stone's own shape grown by this all round. Under a bezel's lip, the wall stands further off. */
+export const SEAT_CLEARANCE = 0.03;
+/** A bezel's inner wall stands this far off the girdle all round, so the stone drops in. */
+export const BEZEL_CLEARANCE = 0.05;
+
+/** A size seen from above: an emerald cut's length (its long side) and width, or a round's diameter as both. */
+export interface Across {
+  lengthMm: number;
+  widthMm: number;
+}
+
+export interface ProngDims {
+  /** "prong 2 of 4", as the checker names it. */
+  label: string;
+  /** Seen from above, the finger pointing to 12 o'clock. */
+  clock: string;
+  /** Where its axis stands, seen from above. */
+  axis: P2;
+  thicknessMm: number;
+  /** Its narrowest section: where the seat is cut into it over the girdle, the largest circle inside the metal left. */
+  narrowestMm: number;
+  /** How far its metal reaches in over the girdle. */
+  reachMm: number;
+}
+
+export interface HeadDims {
+  kind: 'prong_head' | 'bezel';
+  shape: 'round' | 'emerald';
+  stone: Across & { depthMm: number; girdleMm: number; crownMm: number; pavilionMm: number };
+  /** Heights above the finger's axis: the stone's point, its girdle's bottom and top, and its table. */
+  culetZ: number;
+  girdleBottomZ: number;
+  girdleTopZ: number;
+  tableZ: number;
+  /** From the stone's point (its culet) down to the top of the band. */
+  culetClearanceMm: number;
+  /** The seat at the girdle: inside a bezel's wall, or the cut the stone drops into between the prongs. */
+  seat: Across & { clearanceMm: number };
+  /** The head's widest metal seen from above: a bezel's outside, or a prong head's rail. */
+  outside: Across;
+  bezel?: {
+    wallMm: number;
+    /** How far the lip rises above the girdle's top, as built ("auto" worked out). */
+    lipMm: number;
+    lipAuto: boolean;
+    topZ: number;
+    /** From the top of the band up to the bezel's top. */
+    heightAboveBandMm: number;
+  };
+  prongs?: ProngDims[];
+  /** The rail through the prongs' feet: its middle's offset outside the girdle, its width and height. */
+  rail?: { offMm: number; widthMm: number; heightMm: number };
+}
+
+export interface PieceDims {
+  band: { innerDiameterMm: number; outerDiameterMm: number; widthMm: number; thicknessMm: number };
+  head?: HeadDims;
+}
+
+function stoneSpec(sv: StoneView): StoneSpec {
+  return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
+}
+
+/**
+ * The narrowest section of a round prong (axis p, radius r) where a seat is cut into
+ * it: the diameter of the largest circle inside the prong and outside the seat, whose
+ * edge lies `outside(x, y)` mm away (negative inside). A grid over the prong, then
+ * finer grids round the best point.
+ */
+export function narrowestSection(p: P2, r: number, outside: (x: number, y: number) => number): number {
+  let best = { v: -Infinity, x: p[0], y: p[1] };
+  const scan = (cx: number, cy: number, span: number, n: number) => {
+    for (let i = 0; i <= n; i++)
+      for (let j = 0; j <= n; j++) {
+        const x = cx - span + (2 * span * i) / n, y = cy - span + (2 * span * j) / n;
+        const v = Math.min(r - Math.hypot(x - p[0], y - p[1]), outside(x, y));
+        if (v > best.v) best = { v, x, y };
+      }
+  };
+  scan(p[0], p[1], r, 24);
+  let span = r / 12;
+  for (let k = 0; k < 10; k++) {
+    scan(best.x, best.y, span, 8);
+    span /= 3;
+  }
+  return Math.max(0, 2 * best.v);
+}
+
+/** The dimensions the build makes a piece to. Pure numbers: no geometry is built. */
+export function pieceDims(v: PieceView): PieceDims {
+  const rIn = v.innerDiameterMm / 2;
+  const t = v.bandThicknessMm;
+  const rOut = rIn + t;
+  const dims: PieceDims = { band: { innerDiameterMm: v.innerDiameterMm, outerDiameterMm: 2 * rOut, widthMm: v.bandWidthMm, thicknessMm: t } };
+  if (!v.head) return dims;
+  const sv = v.head.stone;
+  const spec = stoneSpec(sv);
+  // Its proportions, its exact seat edge and (from the outline) where the prongs stand do
+  // not depend on how finely the outline is drawn, so any tolerance serves here.
+  const shape = stoneShape(spec, PREVIEW_TOL);
+  const culetZ = rOut + v.head.culetClearanceMm;
+  const zGb = culetZ + shape.pavilion;
+  const zGt = zGb + shape.girdle;
+  const zTable = zGt + shape.crown;
+  const grownBy = (d: number): Across => ({ lengthMm: sv.lengthMm + 2 * d, widthMm: sv.widthMm + 2 * d });
+  const head: HeadDims = {
+    kind: v.head.kind,
+    shape: sv.shape,
+    stone: { lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, girdleMm: shape.girdle, crownMm: shape.crown, pavilionMm: shape.pavilion },
+    culetZ,
+    girdleBottomZ: zGb,
+    girdleTopZ: zGt,
+    tableZ: zTable,
+    culetClearanceMm: culetZ - rOut,
+    seat: { ...grownBy(SEAT_CLEARANCE), clearanceMm: SEAT_CLEARANCE },
+    outside: grownBy(0),
+  };
+  if (v.head.kind === 'bezel') {
+    const hv = v.head;
+    const lip = hv.lipMm === 'auto' ? Math.round(0.6 * shape.crown * 100) / 100 : hv.lipMm;
+    head.seat = { ...grownBy(BEZEL_CLEARANCE), clearanceMm: BEZEL_CLEARANCE };
+    head.outside = grownBy(BEZEL_CLEARANCE + hv.wallMm);
+    head.bezel = { wallMm: hv.wallMm, lipMm: lip, lipAuto: hv.lipMm === 'auto', topZ: zGt + lip, heightAboveBandMm: zGt + lip - rOut };
+  } else {
+    const hv = v.head;
+    // The rail (gallery): a flat ring through the prongs' feet, wider and taller than a
+    // prong so each foot sits wholly inside it.
+    const rail = { offMm: hv.nominalProngMm / 2 - hv.gripMm, widthMm: Math.max(hv.nominalProngMm, 1.2) + 0.3, heightMm: Math.max(hv.nominalProngMm, 1.2) + 0.2 };
+    head.rail = rail;
+    const prongs = prongPlaces(spec, shape.outline, hv.prongCount).map((pl, i) => {
+      const tk = hv.prongThicknessMm[i]!;
+      // Each prong stands so its inner edge reaches the grip in over the girdle.
+      const off = tk / 2 - hv.gripMm;
+      const axis: P2 = [pl.at[0] + pl.out[0] * off, pl.at[1] + pl.out[1] * off];
+      return {
+        label: `prong ${i + 1} of ${hv.prongCount}`,
+        clock: clockOf(axis[0], axis[1]),
+        axis,
+        thicknessMm: tk,
+        narrowestMm: Math.min(tk, narrowestSection(axis, tk / 2, (x, y) => shape.outsideGirdle(SEAT_CLEARANCE, x, y))),
+        reachMm: tk / 2 - off,
+      };
+    });
+    head.prongs = prongs;
+    // The head's widest metal: the rail, unless a prong set thicker than the rest reaches past it.
+    const railHalf = grownBy(rail.offMm + rail.widthMm / 2);
+    let halfL = railHalf.lengthMm / 2, halfW = railHalf.widthMm / 2;
+    for (const p of prongs) {
+      const r = p.thicknessMm / 2;
+      if (sv.shape === 'round') {
+        halfL = halfW = Math.max(halfL, Math.hypot(p.axis[0], p.axis[1]) + r);
+      } else {
+        // Length runs across the finger (X) east-west, along it (Y) north-south.
+        const [along, across] = sv.orientation === 'east_west' ? p.axis : [p.axis[1], p.axis[0]];
+        halfL = Math.max(halfL, Math.abs(along) + r);
+        halfW = Math.max(halfW, Math.abs(across) + r);
+      }
+    }
+    head.outside = { lengthMm: 2 * halfL, widthMm: 2 * halfW };
+  }
+  dims.head = head;
+  return dims;
+}
+
 // --------------------------------------------------------------------- build
 
 export async function buildPiece(tree: PieceTree, opts: { tol: number; applyShrinkage: boolean }): Promise<Built> {
@@ -221,10 +394,11 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   const { Manifold, CrossSection } = k;
   const tol = opts.tol;
   const v = readPiece(tree);
-  const rIn = v.innerDiameterMm / 2;
-  const t = v.bandThicknessMm;
-  const rOut = rIn + t;
-  const w = v.bandWidthMm;
+  const dims = pieceDims(v);
+  const rIn = dims.band.innerDiameterMm / 2;
+  const t = dims.band.thicknessMm;
+  const rOut = dims.band.outerDiameterMm / 2;
+  const w = dims.band.widthMm;
 
   // The band: its cross-section revolved around the finger.
   const profile = bandProfile(v.profile, rIn, t, w, tol);
@@ -233,36 +407,29 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
   const decl: FeatureDecl = { prongs: [], scale: 1 };
   const bandDecl: BandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
   decl.band = bandDecl;
-  const layout: Built['layout'] = {};
 
   let metal: Manifold = band;
   let stoneSolid: Manifold | undefined;
 
-  if (v.head) {
+  if (v.head && dims.head) {
+    const hd = dims.head;
     const sv = v.head.stone;
-    const spec: StoneSpec = { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
-    const shape = stoneShape(spec, tol);
-    const zGb = rOut + v.head.culetClearanceMm + shape.pavilion;
-    const zGt = zGb + shape.girdle;
-    const zTable = zGt + shape.crown;
-    layout.girdleBottomZ = zGb;
-    layout.crownMm = shape.crown;
-    layout.tableZ = zTable;
-    const stoneDecl: StoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: shape.crown };
+    const shape = stoneShape(stoneSpec(sv), tol);
+    const zGb = hd.girdleBottomZ;
+    const zGt = hd.girdleTopZ;
+    const zTable = hd.tableZ;
+    const stoneDecl: StoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm };
     decl.stone = stoneDecl;
     stoneSolid = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-    const seatCut = A.t(A.t(Manifold.hull(shape.points(0.03))).translate([0, 0, zGb]));
+    const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
 
     let head: Manifold;
-    if (v.head.kind === 'prong_head') {
-      const hv = v.head;
-      const places = prongPlaces(spec, shape.outline, hv.prongCount);
-      // The rail (gallery): a flat ring through the prongs' feet, wider and taller than a
-      // prong so each foot sits wholly inside it, its middle on the band's surface where
-      // it crosses the band. Built as one extruded ring, so no two shapes share a face.
-      const railW = Math.max(hv.nominalProngMm, 1.2) + 0.3;
-      const railH = Math.max(hv.nominalProngMm, 1.2) + 0.2;
-      const railOff = hv.nominalProngMm / 2 - hv.gripMm;
+    if (v.head.kind === 'prong_head' && hd.prongs && hd.rail) {
+      // The rail, its middle on the band's surface where it crosses the band. Built as one
+      // extruded ring, so no two shapes share a face.
+      const railW = hd.rail.widthMm;
+      const railH = hd.rail.heightMm;
+      const railOff = hd.rail.offMm;
       const girdleCs = A.t(new CrossSection([shape.outline]));
       const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
       const railOuter = A.t(girdleCs.offset(railOff + railW / 2, 'Round', 2, ringSeg));
@@ -272,10 +439,9 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
       const xCross = Math.max(...crossingsX(railMid, w / 2));
       const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
       const parts: Manifold[] = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
-      places.forEach((pl, i) => {
-        const tk = hv.prongThicknessMm[i]!;
-        const off = tk / 2 - hv.gripMm;
-        const cx = pl.at[0] + pl.out[0] * off, cy = pl.at[1] + pl.out[1] * off;
+      hd.prongs.forEach((pd) => {
+        const tk = pd.thicknessMm;
+        const [cx, cy] = pd.axis;
         // One solid of revolution: a round column from inside the rail up to the table's
         // height, with a domed tip (Stuller: the dome's base flush with the table).
         const r = tk / 2;
@@ -285,8 +451,8 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
         const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
         parts.push(A.t(col.translate([cx, cy, zRail])));
         const prong: ProngDecl = {
-          label: `prong ${i + 1} of ${hv.prongCount}`,
-          clock: clockOf(cx, cy),
+          label: pd.label,
+          clock: pd.clock,
           axis: [cx, cy],
           nominalDiameter: tk,
           sectionFromZ: zRail + railH / 2 + 0.1,
@@ -295,15 +461,12 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
         decl.prongs.push(prong);
       });
       head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
-    } else {
-      const hv = v.head;
-      const c = 0.05;
-      const lip = hv.lipMm === 'auto' ? Math.round(0.6 * shape.crown * 100) / 100 : hv.lipMm;
-      layout.lipMm = lip;
-      const zTop = zGt + lip;
+    } else if (v.head.kind === 'bezel' && hd.bezel) {
+      const c = hd.seat.clearanceMm;
+      const zTop = hd.bezel.topZ;
       const girdleCs = A.t(new CrossSection([shape.outline]));
-      const seg = segmentsFor(c + hv.wallMm, tol, 32);
-      const outerCs = A.t(girdleCs.offset(c + hv.wallMm, 'Round', 2, seg));
+      const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
+      const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, 'Round', 2, seg));
       const innerCs = A.t(girdleCs.offset(c, 'Round', 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
       const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
       const holeCs = A.t(girdleCs.offset(-ledge, 'Round', 2, seg));
@@ -314,8 +477,10 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
       const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
       const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
       head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
-      const bezelDecl: BezelDecl = { outer: outerPts, zBottom, nominalWall: hv.wallMm };
+      const bezelDecl: BezelDecl = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
       decl.bezel = bezelDecl;
+    } else {
+      throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
     }
     // Trim the head clear of the finger hole, then join it to the band.
     const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
@@ -350,7 +515,7 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: { tol: number; ap
     decl,
     volumeMm3: metal.volume(),
     bbox: { min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 },
-    layout,
+    dims,
   };
 }
 
