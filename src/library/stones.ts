@@ -40,6 +40,13 @@ export interface StoneShapeInfo {
   pavilion: number;
   /** Hull points of the stone solid with the girdle's BOTTOM at z = 0. */
   points(clearance: number): Vec3[];
+  /**
+   * How far (x, y) lies outside the girdle grown by `clearance` all round, negative
+   * inside: over the girdle, the edge of the seat `points(clearance)` cuts. Exact (a
+   * round is a true circle here), so a figure worked from it does not depend on how
+   * finely the outline is drawn.
+   */
+  outsideGirdle(clearance: number, x: number, y: number): number;
 }
 
 const CROWN_SHARE = 16.2 / (16.2 + 43.1);
@@ -104,21 +111,28 @@ export function stoneShape(spec: StoneSpec, tol: number): StoneShapeInfo {
         pts.push([0, 0, -pavilion - c]);
         return pts;
       },
+      outsideGirdle(c: number, x: number, y: number) {
+        return Math.hypot(x, y) - (r + c);
+      },
     };
   }
   const L = spec.lengthMm, W = spec.widthMm;
   const corner = 0.15 * W;
   const base = emeraldOutline(L, W, corner);
   const outline = rotateToOrientation(base, spec.orientation);
+  /** The girdle grown by c: what the hull's girdle ring is, and so the seat's edge over the girdle. */
+  const grownGirdle = (c: number) => rotateToOrientation(emeraldOutline(L + 2 * c, W + 2 * c, corner + c * 0.4142), spec.orientation);
   return {
     outline,
     girdle,
     crown,
     pavilion,
+    outsideGirdle(c: number, x: number, y: number) {
+      return outsideConvex(grownGirdle(c), x, y);
+    },
     points(c: number) {
       const pts: Vec3[] = [];
-      const grown = emeraldOutline(L + 2 * c, W + 2 * c, corner + c * 0.4142);
-      for (const [x, y] of rotateToOrientation(grown, spec.orientation)) {
+      for (const [x, y] of grownGirdle(c)) {
         pts.push([x, y, -c * 0.5]);
         pts.push([x, y, girdle + c * 0.5]);
       }
@@ -139,6 +153,21 @@ export function stoneShape(spec: StoneSpec, tol: number): StoneShapeInfo {
       return pts;
     },
   };
+}
+
+/** How far (x, y) lies outside a convex counter-clockwise polygon (the distance to its nearest edge or corner), negative inside (less the distance to its nearest edge). */
+export function outsideConvex(poly: [number, number][], x: number, y: number): number {
+  const n = poly.length;
+  let inset = Infinity, nearest = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]!, b = poly[(i + 1) % n]!;
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const l2 = ex * ex + ey * ey || 1e-30;
+    inset = Math.min(inset, (ex * (y - a[1]) - ey * (x - a[0])) / Math.sqrt(l2));
+    const s = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2));
+    nearest = Math.min(nearest, Math.hypot(x - a[0] - s * ex, y - a[1] - s * ey));
+  }
+  return inset >= 0 ? -inset : nearest;
 }
 
 export { scaleAbout };

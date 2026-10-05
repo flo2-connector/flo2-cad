@@ -23623,9 +23623,9 @@ function checkParam(spec, v, path) {
       ringInnerDiameterMm(v, path);
       return;
     case "length": {
-      const mm2 = lengthMm(v, path);
-      if (spec.min !== void 0 && mm2 < spec.min) throw new CallError(path, `${mm2} mm is below the smallest the library can build (${spec.min} mm).`);
-      if (spec.max !== void 0 && mm2 > spec.max) throw new CallError(path, `${mm2} mm is above the largest the library builds (${spec.max} mm).`);
+      const mm3 = lengthMm(v, path);
+      if (spec.min !== void 0 && mm3 < spec.min) throw new CallError(path, `${mm3} mm is below the smallest the library can build (${spec.min} mm).`);
+      if (spec.max !== void 0 && mm3 > spec.max) throw new CallError(path, `${mm3} mm is above the largest the library builds (${spec.max} mm).`);
       return;
     }
     case "enum":
@@ -23642,8 +23642,8 @@ function checkParam(spec, v, path) {
     case "lip":
       if (v === "auto") return;
       {
-        const mm2 = lengthMm(v, path);
-        if (mm2 < 0.1 || mm2 > 4) throw new CallError(path, `${mm2} mm is outside what the library builds (0.1 to 4 mm), or "auto".`);
+        const mm3 = lengthMm(v, path);
+        if (mm3 < 0.1 || mm3 > 4) throw new CallError(path, `${mm3} mm is outside what the library builds (0.1 to 4 mm), or "auto".`);
       }
       return;
   }
@@ -23988,8 +23988,8 @@ function validateOp(op, p, path) {
     if (v === void 0) continue;
     const kp = at(path, k);
     if (kind === "length") {
-      const mm2 = lengthMm(v, kp);
-      if (mm2 < 0 && !["x", "y", "z"].includes(k)) throw new CallError(kp, "must not be negative.");
+      const mm3 = lengthMm(v, kp);
+      if (mm3 < 0 && !["x", "y", "z"].includes(k)) throw new CallError(kp, "must not be negative.");
     } else if (kind === "angle") validateUnitsDeep(v, kp, k);
     else if (kind === "plane") {
       if (!["xy", "yz", "xz"].includes(v)) throw new CallError(kp, 'the mirror plane is "xy", "yz" or "xz".');
@@ -24462,6 +24462,9 @@ function stoneShape(spec, tol) {
         for (const [x, y] of roundOutline(r * 0.53 + c, Math.max(16, n / 2))) pts.push([x, y, girdle + crown + c]);
         pts.push([0, 0, -pavilion - c]);
         return pts;
+      },
+      outsideGirdle(c, x, y) {
+        return Math.hypot(x, y) - (r + c);
       }
     };
   }
@@ -24469,15 +24472,18 @@ function stoneShape(spec, tol) {
   const corner = 0.15 * W;
   const base = emeraldOutline(L2, W, corner);
   const outline = rotateToOrientation(base, spec.orientation);
+  const grownGirdle = (c) => rotateToOrientation(emeraldOutline(L2 + 2 * c, W + 2 * c, corner + c * 0.4142), spec.orientation);
   return {
     outline,
     girdle,
     crown,
     pavilion,
+    outsideGirdle(c, x, y) {
+      return outsideConvex(grownGirdle(c), x, y);
+    },
     points(c) {
       const pts = [];
-      const grown = emeraldOutline(L2 + 2 * c, W + 2 * c, corner + c * 0.4142);
-      for (const [x, y] of rotateToOrientation(grown, spec.orientation)) {
+      for (const [x, y] of grownGirdle(c)) {
         pts.push([x, y, -c * 0.5]);
         pts.push([x, y, girdle + c * 0.5]);
       }
@@ -24498,6 +24504,19 @@ function stoneShape(spec, tol) {
       return pts;
     }
   };
+}
+function outsideConvex(poly, x, y) {
+  const n = poly.length;
+  let inset = Infinity, nearest = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const l2 = ex * ex + ey * ey || 1e-30;
+    inset = Math.min(inset, (ex * (y - a[1]) - ey * (x - a[0])) / Math.sqrt(l2));
+    const s = Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2));
+    nearest = Math.min(nearest, Math.hypot(x - a[0] - s * ex, y - a[1] - s * ey));
+  }
+  return inset >= 0 ? -inset : nearest;
 }
 
 // src/library/build.ts
@@ -24615,6 +24634,96 @@ function prongPlaces(stone, outline, count) {
   };
   return places.map(({ at: at2, out }) => ({ at: at2, out })).sort((a, b) => angle(a.at) - angle(b.at));
 }
+var SEAT_CLEARANCE = 0.03;
+var BEZEL_CLEARANCE = 0.05;
+function stoneSpec(sv) {
+  return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
+}
+function narrowestSection(p, r, outside) {
+  let best = { v: -Infinity, x: p[0], y: p[1] };
+  const scan = (cx, cy, span2, n) => {
+    for (let i = 0; i <= n; i++)
+      for (let j = 0; j <= n; j++) {
+        const x = cx - span2 + 2 * span2 * i / n, y = cy - span2 + 2 * span2 * j / n;
+        const v = Math.min(r - Math.hypot(x - p[0], y - p[1]), outside(x, y));
+        if (v > best.v) best = { v, x, y };
+      }
+  };
+  scan(p[0], p[1], r, 24);
+  let span = r / 12;
+  for (let k = 0; k < 10; k++) {
+    scan(best.x, best.y, span, 8);
+    span /= 3;
+  }
+  return Math.max(0, 2 * best.v);
+}
+function pieceDims(v) {
+  const rIn = v.innerDiameterMm / 2;
+  const t = v.bandThicknessMm;
+  const rOut = rIn + t;
+  const dims = { band: { innerDiameterMm: v.innerDiameterMm, outerDiameterMm: 2 * rOut, widthMm: v.bandWidthMm, thicknessMm: t } };
+  if (!v.head) return dims;
+  const sv = v.head.stone;
+  const spec = stoneSpec(sv);
+  const shape = stoneShape(spec, PREVIEW_TOL);
+  const culetZ = rOut + v.head.culetClearanceMm;
+  const zGb = culetZ + shape.pavilion;
+  const zGt = zGb + shape.girdle;
+  const zTable = zGt + shape.crown;
+  const grownBy = (d) => ({ lengthMm: sv.lengthMm + 2 * d, widthMm: sv.widthMm + 2 * d });
+  const head = {
+    kind: v.head.kind,
+    shape: sv.shape,
+    stone: { lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, girdleMm: shape.girdle, crownMm: shape.crown, pavilionMm: shape.pavilion },
+    culetZ,
+    girdleBottomZ: zGb,
+    girdleTopZ: zGt,
+    tableZ: zTable,
+    culetClearanceMm: culetZ - rOut,
+    seat: { ...grownBy(SEAT_CLEARANCE), clearanceMm: SEAT_CLEARANCE },
+    outside: grownBy(0)
+  };
+  if (v.head.kind === "bezel") {
+    const hv = v.head;
+    const lip = hv.lipMm === "auto" ? Math.round(0.6 * shape.crown * 100) / 100 : hv.lipMm;
+    head.seat = { ...grownBy(BEZEL_CLEARANCE), clearanceMm: BEZEL_CLEARANCE };
+    head.outside = grownBy(BEZEL_CLEARANCE + hv.wallMm);
+    head.bezel = { wallMm: hv.wallMm, lipMm: lip, lipAuto: hv.lipMm === "auto", topZ: zGt + lip, heightAboveBandMm: zGt + lip - rOut };
+  } else {
+    const hv = v.head;
+    const rail = { offMm: hv.nominalProngMm / 2 - hv.gripMm, widthMm: Math.max(hv.nominalProngMm, 1.2) + 0.3, heightMm: Math.max(hv.nominalProngMm, 1.2) + 0.2 };
+    head.rail = rail;
+    const prongs = prongPlaces(spec, shape.outline, hv.prongCount).map((pl, i) => {
+      const tk = hv.prongThicknessMm[i];
+      const off = tk / 2 - hv.gripMm;
+      const axis = [pl.at[0] + pl.out[0] * off, pl.at[1] + pl.out[1] * off];
+      return {
+        label: `prong ${i + 1} of ${hv.prongCount}`,
+        clock: clockOf(axis[0], axis[1]),
+        axis,
+        thicknessMm: tk,
+        narrowestMm: Math.min(tk, narrowestSection(axis, tk / 2, (x, y) => shape.outsideGirdle(SEAT_CLEARANCE, x, y))),
+        reachMm: tk / 2 - off
+      };
+    });
+    head.prongs = prongs;
+    const railHalf = grownBy(rail.offMm + rail.widthMm / 2);
+    let halfL = railHalf.lengthMm / 2, halfW = railHalf.widthMm / 2;
+    for (const p of prongs) {
+      const r = p.thicknessMm / 2;
+      if (sv.shape === "round") {
+        halfL = halfW = Math.max(halfL, Math.hypot(p.axis[0], p.axis[1]) + r);
+      } else {
+        const [along, across] = sv.orientation === "east_west" ? p.axis : [p.axis[1], p.axis[0]];
+        halfL = Math.max(halfL, Math.abs(along) + r);
+        halfW = Math.max(halfW, Math.abs(across) + r);
+      }
+    }
+    head.outside = { lengthMm: 2 * halfL, widthMm: 2 * halfW };
+  }
+  dims.head = head;
+  return dims;
+}
 async function buildPiece(tree, opts) {
   const k = await kernel();
   const A = new Arena();
@@ -24640,40 +24749,35 @@ function buildWith(k, A, tree, opts) {
   const { Manifold, CrossSection } = k;
   const tol = opts.tol;
   const v = readPiece(tree);
-  const rIn = v.innerDiameterMm / 2;
-  const t = v.bandThicknessMm;
-  const rOut = rIn + t;
-  const w = v.bandWidthMm;
+  const dims = pieceDims(v);
+  const rIn = dims.band.innerDiameterMm / 2;
+  const t = dims.band.thicknessMm;
+  const rOut = dims.band.outerDiameterMm / 2;
+  const w = dims.band.widthMm;
   const profile = bandProfile(v.profile, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
   const decl = { prongs: [], scale: 1 };
   const bandDecl = { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 };
   decl.band = bandDecl;
-  const layout = {};
   let metal = band;
   let stoneSolid;
-  if (v.head) {
+  if (v.head && dims.head) {
+    const hd = dims.head;
     const sv = v.head.stone;
-    const spec = { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
-    const shape = stoneShape(spec, tol);
-    const zGb = rOut + v.head.culetClearanceMm + shape.pavilion;
-    const zGt = zGb + shape.girdle;
-    const zTable = zGt + shape.crown;
-    layout.girdleBottomZ = zGb;
-    layout.crownMm = shape.crown;
-    layout.tableZ = zTable;
-    const stoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: shape.crown };
+    const shape = stoneShape(stoneSpec(sv), tol);
+    const zGb = hd.girdleBottomZ;
+    const zGt = hd.girdleTopZ;
+    const zTable = hd.tableZ;
+    const stoneDecl = { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm };
     decl.stone = stoneDecl;
     stoneSolid = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-    const seatCut = A.t(A.t(Manifold.hull(shape.points(0.03))).translate([0, 0, zGb]));
+    const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
     let head;
-    if (v.head.kind === "prong_head") {
-      const hv = v.head;
-      const places = prongPlaces(spec, shape.outline, hv.prongCount);
-      const railW = Math.max(hv.nominalProngMm, 1.2) + 0.3;
-      const railH = Math.max(hv.nominalProngMm, 1.2) + 0.2;
-      const railOff = hv.nominalProngMm / 2 - hv.gripMm;
+    if (v.head.kind === "prong_head" && hd.prongs && hd.rail) {
+      const railW = hd.rail.widthMm;
+      const railH = hd.rail.heightMm;
+      const railOff = hd.rail.offMm;
       const girdleCs = A.t(new CrossSection([shape.outline]));
       const ringSeg = segmentsFor(Math.max(sv.lengthMm, sv.widthMm) / 2 + railOff + railW, tol, 48);
       const railOuter = A.t(girdleCs.offset(railOff + railW / 2, "Round", 2, ringSeg));
@@ -24683,10 +24787,9 @@ function buildWith(k, A, tree, opts) {
       const xCross = Math.max(...crossingsX(railMid, w / 2));
       const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
       const parts = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
-      places.forEach((pl, i) => {
-        const tk = hv.prongThicknessMm[i];
-        const off = tk / 2 - hv.gripMm;
-        const cx = pl.at[0] + pl.out[0] * off, cy = pl.at[1] + pl.out[1] * off;
+      hd.prongs.forEach((pd) => {
+        const tk = pd.thicknessMm;
+        const [cx, cy] = pd.axis;
         const r = tk / 2;
         const colH = zTable - zRail;
         const arc = (u) => [r * Math.cos(u), colH + r * Math.sin(u)];
@@ -24694,8 +24797,8 @@ function buildWith(k, A, tree, opts) {
         const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
         parts.push(A.t(col.translate([cx, cy, zRail])));
         const prong = {
-          label: `prong ${i + 1} of ${hv.prongCount}`,
-          clock: clockOf(cx, cy),
+          label: pd.label,
+          clock: pd.clock,
           axis: [cx, cy],
           nominalDiameter: tk,
           sectionFromZ: zRail + railH / 2 + 0.1,
@@ -24704,15 +24807,12 @@ function buildWith(k, A, tree, opts) {
         decl.prongs.push(prong);
       });
       head = A.t(A.t(Manifold.union(parts)).subtract(seatCut));
-    } else {
-      const hv = v.head;
-      const c = 0.05;
-      const lip = hv.lipMm === "auto" ? Math.round(0.6 * shape.crown * 100) / 100 : hv.lipMm;
-      layout.lipMm = lip;
-      const zTop = zGt + lip;
+    } else if (v.head.kind === "bezel" && hd.bezel) {
+      const c = hd.seat.clearanceMm;
+      const zTop = hd.bezel.topZ;
       const girdleCs = A.t(new CrossSection([shape.outline]));
-      const seg = segmentsFor(c + hv.wallMm, tol, 32);
-      const outerCs = A.t(girdleCs.offset(c + hv.wallMm, "Round", 2, seg));
+      const seg = segmentsFor(c + hd.bezel.wallMm, tol, 32);
+      const outerCs = A.t(girdleCs.offset(c + hd.bezel.wallMm, "Round", 2, seg));
       const innerCs = A.t(girdleCs.offset(c, "Round", 2, segmentsFor(Math.max(c, 0.05), tol, 16)));
       const ledge = Math.min(0.4, 0.25 * Math.min(sv.lengthMm, sv.widthMm));
       const holeCs = A.t(girdleCs.offset(-ledge, "Round", 2, seg));
@@ -24723,8 +24823,10 @@ function buildWith(k, A, tree, opts) {
       const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
       const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
       head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
-      const bezelDecl = { outer: outerPts, zBottom, nominalWall: hv.wallMm };
+      const bezelDecl = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
       decl.bezel = bezelDecl;
+    } else {
+      throw new Error(`engine bug: the head's dimensions do not match its kind (${v.head.kind})`);
     }
     const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
     metal = A.t(A.t(head.subtract(finger)).add(band));
@@ -24753,7 +24855,7 @@ function buildWith(k, A, tree, opts) {
     decl,
     volumeMm3: metal.volume(),
     bbox: { min: [...bb.min], max: [...bb.max] },
-    layout
+    dims
   };
 }
 function crossingsX(poly, halfWidth) {
@@ -25126,6 +25228,43 @@ function summary(tree, v = readPiece(tree)) {
   const extras = v.extras.length ? ` Plus ${v.extras.length} added shape(s): ${v.extras.map((e) => `"${e.id}"`).join(", ")}.` : "";
   return `${kind} "${tree.name}", revision ${tree.revision}, in ${metal.name}: ${band}, ${stoneWords(v)}. Shrinkage allowance: ${tree.shrinkage}.${extras}`;
 }
+var mm2 = (x) => `${r2(x).toFixed(2)} mm`;
+function acrossText(a, shape) {
+  return shape === "round" ? mm2(a.lengthMm) : `${r2(a.lengthMm).toFixed(2)} \xD7 ${mm2(a.widthMm)}`;
+}
+function dimensionLines(d) {
+  const b = d.band;
+  const lines = [`- Band: inner diameter ${mm2(b.innerDiameterMm)}, outer diameter ${mm2(b.outerDiameterMm)}, ${mm2(b.widthMm)} wide, ${mm2(b.thicknessMm)} thick.`];
+  const h = d.head;
+  if (!h) return lines;
+  const stone = acrossText(h.stone, h.shape);
+  const seat = `${acrossText(h.seat, h.shape)} across`;
+  if (h.bezel) {
+    const z = h.bezel;
+    lines.push(`- Seat: ${seat} inside the bezel at the girdle, for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    lines.push(
+      `- Bezel: wall ${mm2(z.wallMm)} thick and ${acrossText(h.outside, h.shape)} across outside; its lip rises ${mm2(z.lipMm)} above the girdle (${z.lipAuto ? "auto" : "set"}: ${Math.round(z.lipMm / h.stone.crownMm * 100)} % of the stone's ${mm2(h.stone.crownMm)} crown); it stands ${mm2(z.heightAboveBandMm)} above the top of the band.`
+    );
+  } else if (h.prongs) {
+    const ps = h.prongs;
+    lines.push(`- Seat: ${seat} at the girdle, cut for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
+    const same = new Set(ps.map((p) => `${r2(p.thicknessMm)}/${r2(p.narrowestMm)}`)).size === 1;
+    const reaches = [...new Set(ps.map((p) => r2(p.reachMm)))].sort((a, c) => a - c);
+    const reach = reaches.length === 1 ? `each reaches ${mm2(reaches[0])} in over the girdle` : `they reach ${mm2(reaches[0])} to ${mm2(reaches[reaches.length - 1])} in over the girdle`;
+    const each = same ? `${ps.length}, each ${mm2(ps[0].thicknessMm)} thick and ${mm2(ps[0].narrowestMm)} at its narrowest, where the seat is cut` : `${ps.length}, each narrowest where the seat is cut: ${ps.map((p) => `${p.label.split(" of ")[0]} at ${p.clock} is ${mm2(p.thicknessMm)} thick and ${mm2(p.narrowestMm)} at its narrowest`).join("; ")}`;
+    lines.push(`- Prongs: ${each}; ${reach}. The head is ${acrossText(h.outside, h.shape)} across at its widest, at its rail.`);
+  }
+  lines.push(`- Culet clearance: ${mm2(h.culetClearanceMm)} from the stone's point down to the top of the band.`);
+  return lines;
+}
+function seatLine(d) {
+  const h = d.head;
+  if (!h) return null;
+  const seat = `Seat ${acrossText(h.seat, h.shape)} across, ${mm2(h.seat.clearanceMm)} clearance a side`;
+  if (h.bezel) return `${seat}; bezel ${acrossText(h.outside, h.shape)} across outside, lip ${mm2(h.bezel.lipMm)} above the girdle.`;
+  const thinnest = Math.min(...(h.prongs ?? []).map((p) => p.narrowestMm));
+  return `${seat}; head ${acrossText(h.outside, h.shape)} across at its widest; prongs ${mm2(thinnest)} at their narrowest.`;
+}
 async function preview(tree, views) {
   const t0 = performance.now();
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
@@ -25141,7 +25280,7 @@ async function preview(tree, views) {
   const png = renderPreview(items, views, {
     header: [head, stoneLine],
     warnings,
-    focusAboveZ: built.layout.girdleBottomZ !== void 0 ? v.innerDiameterMm / 2 + v.bandThicknessMm - 1.2 : void 0
+    focusAboveZ: built.dims.head ? built.dims.band.outerDiameterMm / 2 - 1.2 : void 0
   });
   return { png, built, ms: performance.now() - t0 };
 }
@@ -25332,7 +25471,7 @@ async function describeNumbers(tree) {
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
   const size = [0, 1, 2].map((k) => r2(built.bbox.max[k] - built.bbox.min[k]));
   const weights = Object.values(METALS).map((m) => ({ metal: m.name, grams: r2(built.volumeMm3 / 1e3 * m.density) }));
-  return { volumeMm3: r2(built.volumeMm3), size, weights };
+  return { volumeMm3: r2(built.volumeMm3), size, weights, dims: built.dims };
 }
 
 // src/reply.ts
@@ -25560,6 +25699,7 @@ var TOOLS = [
     title: "Describe the piece",
     description: [
       "Read back what the piece is now, in a jeweler's terms: the ring size (with its system and the inner diameter in mm), the band's width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.",
+      "It also gives the dimensions the piece is built to, in mm, each the figure the engine itself uses: the band's inner and outer diameter, width and thickness; the stone's seat (its size across at the girdle and the clearance a side); a bezel's wall, its outside size, the lip height it works out, and how far it stands above the band; each prong's thickness, its narrowest section where the seat is cut, and how far it reaches over the girdle; and the room under the stone's point. Work a fit, a weight or a cost from these, never from an assumed size.",
       "Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece's tree.",
       "Changes nothing and makes no files."
     ].join(" "),
@@ -25641,6 +25781,8 @@ var Session = class {
     }
     files.push(treeFile(tree));
     const texts = [`${lead} ${summary(tree, v)}`];
+    const seat = seatLine(pieceDims(v));
+    if (seat) texts[0] += ` ${seat}`;
     const ph = placeholderNote(v);
     if (ph) texts.push(`PLACEHOLDER: ${ph} The picture says so too.`);
     const note = METALS[v.metal].castingNote;
@@ -25756,6 +25898,8 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
     const metal = METALS[v.metal];
     const texts = [
       summary(tree, v),
+      `Dimensions as built (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:
+${dimensionLines(n.dims).join("\n")}`,
       `Overall size ${n.size[0]} \xD7 ${n.size[1]} \xD7 ${n.size[2]} mm (across the hand \xD7 along the finger \xD7 height). Metal volume about ${n.volumeMm3} mm\xB3 (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join("; ")}.`,
       `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ""}`,
       `Settings change_piece can set:

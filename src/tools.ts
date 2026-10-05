@@ -213,6 +213,7 @@ export const TOOLS: Tool[] = [
     title: 'Describe the piece',
     description: [
       'Read back what the piece is now, in a jeweler\'s terms: the ring size (with its system and the inner diameter in mm), the band\'s width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.',
+      'It also gives the dimensions the piece is built to, in mm, each the figure the engine itself uses: the band\'s inner and outer diameter, width and thickness; the stone\'s seat (its size across at the girdle and the clearance a side); a bezel\'s wall, its outside size, the lip height it works out, and how far it stands above the band; each prong\'s thickness, its narrowest section where the seat is cut, and how far it reaches over the girdle; and the room under the stone\'s point. Work a fit, a weight or a cost from these, never from an assumed size.',
       'Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece\'s tree.',
       'Changes nothing and makes no files.',
     ].join(' '),

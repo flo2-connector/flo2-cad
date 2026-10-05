@@ -31,12 +31,12 @@ The seam with flo2 is fixed, so this list is final for the increment. Any change
 
 | Tool | Class | Arguments | Returns |
 |---|---|---|---|
-| `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview` | summary, the tree as text, `<name>.preview.png`, `<name>.tree.json` |
-| `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `preview?` | what changed, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
+| `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview` | summary (with the seat and the head's outside size), the tree as text, `<name>.preview.png`, `<name>.tree.json` |
+| `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `preview?` | what changed, the summary, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
 | `preview_piece` | read | `tree?`, `views?` (1 to 4 of `three_quarter`, `front`, `side`, `top`, `setting_closeup`) | `<name>.preview.png` |
 | `check_piece` | read | `tree?` | pass or fail for each limit, what to thicken and where, `<name>.check.json` |
 | `export_for_casting` | write | `tree?` | if every check passes: `<name>.stl`, `<name>.3mf` and `<name>.check.json`. If not: `<name>.check.json` and what to thicken and where (`isError: false`) |
-| `describe_piece` | read | `tree?` | the piece in jeweler's terms, its weight in each metal, every setting, the tree |
+| `describe_piece` | read | `tree?` | the piece in jeweler's terms, the dimensions it is built to (below), its weight in each metal, every setting, the tree |
 
 **Settings.** `start_piece` takes these, and so does `change_piece` under `set`:
 
@@ -65,6 +65,25 @@ the STL as written holds the bound too. A sheet comes out at most the sagitta pl
 chord tolerance, 0.009 mm in a casting file (about 0.008 mm on a sphere and 0.004 mm on a cylinder). `src/library/thicken.ts`
 (AT LEAST THE STATED THICKNESS) gives the proof, and `test/thicken.test.ts` reads every face triangle of ring petals
 and of a 100 mm sculpture leaf, 0.5 to 5 mm thick, to hold it.
+
+**The dimensions a check or a decision rests on.** `describe_piece` reports, in mm, the figures the build itself
+uses: the band's inner and outer diameter, width and thickness; the seat's size across at the girdle and its clearance
+a side; a bezel's wall, outside size, the lip height it works out ("auto" is 60 % of the crown) and its height above
+the band; each prong's thickness, its narrowest section where the seat is cut, and its reach over the girdle; and the
+culet clearance. `start_piece` and `change_piece` add one line with the seat and the head's outside size. One function,
+`pieceDims` in `src/library/build.ts`, works these out, and the build makes its geometry from the same numbers, so
+what is reported is what is built. A seat is the stone grown by 0.03 mm all round, and a bezel's inner wall stands
+0.05 mm off the girdle. For a 7.5 mm round, 4 mm deep, in a bezel with a 1.0 mm wall:
+
+```
+- Seat: 7.60 mm across inside the bezel at the girdle, for the 7.50 mm stone, so 0.05 mm clearance a side.
+- Bezel: wall 1.00 mm thick and 9.60 mm across outside; its lip rises 0.63 mm above the girdle (auto: 60 % of the
+  stone's 1.05 mm crown); it stands 3.88 mm above the top of the band.
+- Culet clearance: 0.30 mm from the stone's point down to the top of the band.
+```
+
+`test/dimensions.test.ts` holds each figure to the piece as built: measured by rays on the built metal and stone, or
+by the independent checker on the written file.
 
 **Units and errors:**
 
@@ -185,6 +204,10 @@ npm run measure
   the sliver rule. Since the sphere must meet a crease square-on, it reads 0.96 mm and 0.89 mm there (0.85-0.99 mm
   over five tessellations), still thinner than the 1.17 mm section, so the exclusion stays: where a curved far side
   crosses the 105° line, the reading still moves with the tessellation.
+- **A round stone in a bezel does not export yet.** Its file fails the watertight check (edges shared by more than two
+  faces, and degenerate triangles), though every other check passes; the emerald-cut bezel passes. Measured
+  2026-10-05 and recorded as `fact:a-round-stone-in-a-bezel-fails-the-watertight-check-2026-10-05`. Until it is fixed,
+  a round stone exports in prongs.
 - **"Plain round band"** in Emily's design is read as a round-wire band (`band_profile: round`, 2.0 × 2.0 mm).
 - **Curved sheets** (`thicken`) curve no tighter than 5 times their thickness. The limit is the wall check's: it grows
   its sphere from the rim straight along the rim's normal, and on a tighter curve meets the sheet's own outer face

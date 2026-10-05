@@ -4,7 +4,8 @@
 // piece (contract §3: a new session resumes from the saved <name>.tree.json).
 
 import { CallError } from './errors.js';
-import { checkPiece, describeNumbers, placeholderNote, preview, summary } from './engine.js';
+import { checkPiece, describeNumbers, dimensionLines, placeholderNote, preview, seatLine, summary } from './engine.js';
+import { pieceDims } from './library/build.js';
 import { METALS } from './metals.js';
 import { applySet, checkStartArgs, getSetting, OP_HELP, OP_PARAMS, OPERATIONS, PARAMS, PARTS, readPiece, treeFromTemplate, validateTree, type PieceTree } from './piece/tree.js';
 import type { ViewName } from './render/render.js';
@@ -90,6 +91,8 @@ export class Session {
     }
     files.push(treeFile(tree));
     const texts = [`${lead} ${summary(tree, v)}`];
+    const seat = seatLine(pieceDims(v));
+    if (seat) texts[0] += ` ${seat}`;
     const ph = placeholderNote(v);
     if (ph) texts.push(`PLACEHOLDER: ${ph} The picture says so too.`);
     const note = METALS[v.metal].castingNote;
@@ -215,6 +218,7 @@ export class Session {
     const metal = METALS[v.metal];
     const texts = [
       summary(tree, v),
+      `Dimensions as built (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n${dimensionLines(n.dims).join('\n')}`,
       `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
       `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ''}`,
       `Settings change_piece can set:\n${catalog.join('\n')}\nAny part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
