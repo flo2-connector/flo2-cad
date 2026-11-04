@@ -11,7 +11,10 @@
 // stone.
 
 import { CallError, at } from '../errors.js';
-import { METAL_IDS, METALS, type MetalId } from '../metals.js';
+import { HEAD_DEFAULTS, STONE_DEFAULTS } from '../jewelry/index.js';
+import { checkMaterial, checkProcess, citedShrinkage, materialName, processOf, type CastStatement } from '../limits/choose.js';
+import { readSupplied, SUPPLIED_HELP, type SuppliedFile } from '../limits/supplied.js';
+import { METAL_IDS, type MetalId } from '../metals.js';
 import { anyQuantity, caratText, lengthMm, looksLikeQuantity, percent, ringInnerDiameterMm, type RingSize } from '../units.js';
 import {
   CYLINDER_MAX_DEG,
@@ -46,8 +49,14 @@ export interface PieceTree {
   name: string;
   revision: number;
   template: string;
-  metal: MetalId;
-  /** "off" (the default), "on" (the metal's cited allowance) or an allowance such as "1.5 %". */
+  /** One of the four metals, by its id; or, instead, `material`: any other, by name (src/limits/choose.ts). */
+  metal?: MetalId;
+  material?: string;
+  /** How it will be cast: "lost_wax", or another process in words. Absent, lost wax is assumed and the check says so. */
+  process?: string;
+  /** Limits the person supplies, each with its source, used in place of a profile's (src/limits/supplied.ts). */
+  limits?: SuppliedFile;
+  /** "off" (the default), "on" (the cited allowance for its material and process) or an allowance such as "1.5 %". */
   shrinkage: string;
   root: TreeNode;
 }
@@ -93,22 +102,7 @@ const NODE_ID = /^[a-z][a-z0-9_]{0,39}$/;
 
 // --------------------------------------------------------------------- stones
 
-/**
- * Template stone sizes. They are PLACEHOLDERS until the person gives the stone's
- * measured dimensions, and the preview and replies say so.
- *  · round: 6.5 × 4.0 mm, about a 1.00 ct round brilliant (International Gem
- *    Society chart, https://www.gemsociety.org/article/standard-gem-sizes-chart/;
- *    depth 61 %, between Tolkowsky's 59.3 % and typical graded stones);
- *  · emerald: 8.5 × 6.0 × 4.1 mm, a typical 2.00 ct emerald cut (Stuller's
- *    mm-to-carat chart gives 8.5 × 6 mm for 2.00 ct,
- *    https://blog.stuller.com/wp-content/uploads/2023/12/Millimeter-to-Diamond-Carat-Weight-Conversion-Chart-2.pdf;
- *    depth 4.1 mm, within three GIA-graded 2.00 ct emerald cuts of 3.98-4.33 mm
- *    listed by Blue Nile, e.g. https://www.bluenile.com/diamond-details/19095454).
- */
-export const STONE_DEFAULTS = {
-  round: { diameter: '6.5 mm', depth: '4.0 mm', carat: '1.00 ct' },
-  emerald: { length: '8.5 mm', width: '6.0 mm', depth: '4.1 mm', carat: '2.00 ct' },
-} as const;
+// The template stones' placeholder sizes, STONE_DEFAULTS, are the jewelry layer's (src/jewelry/rules.ts).
 
 function defaultStone(shape: 'round' | 'emerald', orientation = 'east_west'): Record<string, unknown> {
   if (shape === 'round') {
@@ -125,7 +119,7 @@ function defaultStone(shape: 'round' | 'emerald', orientation = 'east_west'): Re
 export interface ParamSpec {
   readonly key: string;
   readonly help: string;
-  readonly kind: 'name' | 'ring_size' | 'length' | 'enum' | 'shrinkage' | 'carat' | 'lip';
+  readonly kind: 'name' | 'ring_size' | 'length' | 'enum' | 'shrinkage' | 'carat' | 'lip' | 'material' | 'process' | 'limits';
   readonly values?: readonly (string | number)[];
   readonly min?: number;
   readonly max?: number;
@@ -154,7 +148,22 @@ export const PARAMS: readonly ParamSpec[] = [
     kind: 'enum',
     values: METAL_IDS,
     default: 'sterling_silver_925',
-    help: 'The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage; platinum goes to a specialist caster.',
+    help: 'The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage, in the limit profile "precious metals cast by lost wax, at jewelry scale"; platinum goes to a specialist caster. For any other material, give "material" instead.',
+  },
+  {
+    key: 'material',
+    kind: 'material',
+    help: 'What it will be cast in, when that is not one of the four metals: a plain name, such as "bronze", "silicon bronze" or "copper". Give "metal" or "material", not both. No limit profile covers any other material yet, so check_piece gives no verdict for it (and nothing is exported) unless the piece carries its caster\'s limits with their sources ("limits").',
+  },
+  {
+    key: 'process',
+    kind: 'process',
+    help: 'How it will be cast: "lost_wax" (lost wax casting, from a pattern printed in castable resin or wax, or carved in wax: the process the jewelry profile covers), or another process in words, such as "sand casting" or "ceramic shell", which no profile covers yet. Left out, lost wax is assumed, and every check and export says so. null removes it.',
+  },
+  {
+    key: 'limits',
+    kind: 'limits',
+    help: `${SUPPLIED_HELP} null removes them.`,
   },
   { key: 'band_width', kind: 'length', min: 1.0, max: 12, default: '2.2 mm', help: 'How wide the band is, measured along the finger.' },
   {
@@ -240,7 +249,7 @@ export const PARAMS: readonly ParamSpec[] = [
     key: 'shrinkage',
     kind: 'shrinkage',
     default: 'off',
-    help: '"off", "on" (the metal\'s cited allowance, 1.5 %), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.',
+    help: '"off", "on" (the cited allowance for the piece\'s material and process: 1.5 % for the four metals by lost wax, or the supplied limits\' own), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.',
   },
 ];
 
@@ -287,7 +296,16 @@ export function checkParam(spec: ParamSpec, v: unknown, path: string): void {
       }
       return;
     case 'shrinkage':
-      shrinkagePercent(v, 'sterling_silver_925', path);
+      shrinkagePercent(v, { metal: 'sterling_silver_925' }, path);
+      return;
+    case 'material':
+      checkMaterial(v, path);
+      return;
+    case 'process':
+      checkProcess(v, path);
+      return;
+    case 'limits':
+      readSupplied(v, path);
       return;
     case 'carat':
       caratText(v, path);
@@ -302,10 +320,23 @@ export function checkParam(spec: ParamSpec, v: unknown, path: string): void {
   }
 }
 
-/** The shrinkage allowance in percent: 0 when "off", the metal's cited figure when "on". */
-export function shrinkagePercent(v: unknown, metal: MetalId, path: string): number {
+/**
+ * The shrinkage allowance in percent: 0 when "off"; when "on", the cited figure for what the
+ * piece states (its supplied limits' own, or its profile's for its metal and process), refused
+ * when there is none to cite.
+ */
+export function shrinkagePercent(v: unknown, cast: CastStatement, path: string): number {
   if (v === 'off') return 0;
-  if (v === 'on') return METALS[metal].shrinkagePct;
+  if (v === 'on') {
+    const pct = citedShrinkage(cast);
+    if (pct === null) {
+      throw new CallError(
+        path,
+        `"on" uses the cited allowance for the piece's material and process, and there is none for ${materialName(cast)} cast by ${processOf(cast).words}. Give the allowance the caster or foundry gives, such as "1.5 %", or supply limits with their sources ("limits"), whose shrinkage "on" then applies.`,
+      );
+    }
+    return pct;
+  }
   const pct = percent(v, path);
   if (pct <= 0 || pct > 5) {
     throw new CallError(path, `a shrinkage allowance is "off", "on", or between 0 and 5 %, for example "1.5 %"; got "${String(v)}".`);
@@ -314,13 +345,6 @@ export function shrinkagePercent(v: unknown, metal: MetalId, path: string): numb
 }
 
 // ------------------------------------------------------------------- templates
-
-export const HEAD_DEFAULTS = {
-  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
-  prong_grip: '0.2 mm',
-  /** Gap between the stone's culet (its point) and the top of the band. */
-  culet_clearance: '0.3 mm',
-};
 
 /** A band's width and thickness when they are not given: a round wire is 2.0 mm across both ways. */
 export function bandDefaults(profile: string): { width: string; thickness: string } {
@@ -404,7 +428,9 @@ const TEMPLATE_PRESETS: Readonly<Record<Template, Record<string, unknown>>> = {
 
 /** start_piece's arguments, already checked, as a new tree at revision 1. */
 export function treeFromTemplate(template: Template, args: Record<string, unknown>): PieceTree {
-  const o = { ...TEMPLATE_PRESETS[template], ...args };
+  const o: Record<string, unknown> = { ...TEMPLATE_PRESETS[template], ...args };
+  // A material named in words takes the place of the template's metal.
+  if (args['material'] !== undefined) delete o['metal'];
   const setting = o['stone_setting'] as 'prong_head' | 'bezel' | 'none';
   const children = [bandNode(o, o['band_profile'] as string)];
   if (setting !== 'none') children.push(headNode(setting, stoneFrom(o, (o['stone_shape'] as 'round' | 'emerald') ?? 'round'), o));
@@ -414,8 +440,11 @@ export function treeFromTemplate(template: Template, args: Record<string, unknow
     name: (args['name'] as string | undefined) ?? fallbackName,
     revision: 1,
     template,
-    metal: o['metal'] as MetalId,
+    ...(o['metal'] !== undefined ? { metal: o['metal'] as MetalId } : {}),
+    ...(o['material'] !== undefined ? { material: o['material'] as string } : {}),
+    ...(o['process'] !== undefined ? { process: o['process'] as string } : {}),
     shrinkage: (args['shrinkage'] as string | undefined) ?? 'off',
+    ...(o['limits'] !== undefined ? { limits: o['limits'] as SuppliedFile } : {}),
     root: { id: 'ring', op: 'union', children },
   };
 }
@@ -430,10 +459,14 @@ export function checkStartArgs(args: Record<string, unknown>): Template {
   if (args['ring_size'] === undefined) {
     throw new CallError('ring_size', 'give the finger size with its system, for example {"system": "US", "size": "7"}.');
   }
+  if (args['metal'] !== undefined && args['material'] !== undefined) throw new CallError('material', 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
   for (const spec of PARAMS) {
     if (args[spec.key] !== undefined) checkParam(spec, args[spec.key], spec.key);
   }
-  const o = { ...TEMPLATE_PRESETS[template as Template], ...args };
+  const o: Record<string, unknown> = { ...TEMPLATE_PRESETS[template as Template], ...args };
+  if (args['material'] !== undefined) delete o['metal'];
+  // "on" is read against what the piece states it is cast in, and how.
+  if (args['shrinkage'] !== undefined) shrinkagePercent(args['shrinkage'], o as CastStatement, 'shrinkage');
   const setting = o['stone_setting'];
   const shape = o['stone_shape'];
   if (setting === 'none') {
@@ -475,10 +508,9 @@ export function validateTree(v: unknown, path = 'tree'): PieceTree {
     throw new CallError(at(path, 'revision'), 'must be a whole number, 1 or more (it counts the changes, so it has no unit).');
   }
   if (!TEMPLATES.includes(t['template'] as Template)) throw new CallError(at(path, 'template'), `must be one of ${TEMPLATES.map((x) => `"${x}"`).join(', ')}.`);
-  checkParam(PARAM_BY_KEY.get('metal')!, t['metal'], at(path, 'metal'));
-  shrinkagePercent(t['shrinkage'], t['metal'] as MetalId, at(path, 'shrinkage'));
+  checkCastStatement(t, path);
   for (const k of Object.keys(t)) {
-    if (!['format', 'name', 'revision', 'template', 'metal', 'shrinkage', 'root'].includes(k)) throw new CallError(at(path, k), 'is not a field of a piece tree.');
+    if (!['format', 'name', 'revision', 'template', 'metal', 'material', 'process', 'shrinkage', 'limits', 'root'].includes(k)) throw new CallError(at(path, k), 'is not a field of a piece tree.');
   }
   const root = t['root'] as Record<string, unknown> | undefined;
   if (!root || typeof root !== 'object' || root['op'] !== 'union') {
@@ -493,6 +525,36 @@ export function validateTree(v: unknown, path = 'tree'): PieceTree {
   if (heads.length > 1 || (heads[0] && heads[0].id !== 'head')) throw new CallError(at(path, 'root.children'), 'a ring has at most one head (prong_head or bezel), with id "head".');
   return v as PieceTree;
 }
+
+/**
+ * Checks what a piece's file states about how it is cast, each under its field's path: one
+ * metal by its id or one material by name, a process, supplied limits, and the shrinkage
+ * allowance read against them. A program piece's file is checked the same way.
+ */
+export function checkCastStatement(t: Record<string, unknown>, path: string): void {
+  if (t['metal'] !== undefined && t['material'] !== undefined) throw new CallError(at(path, 'material'), 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
+  if (t['material'] !== undefined) checkMaterial(t['material'], at(path, 'material'));
+  else checkParam(PARAM_BY_KEY.get('metal')!, t['metal'], at(path, 'metal'));
+  if (t['process'] !== undefined) checkProcess(t['process'], at(path, 'process'));
+  if (t['limits'] !== undefined) readSupplied(t['limits'], at(path, 'limits'));
+  shrinkagePercent(t['shrinkage'], t as CastStatement, at(path, 'shrinkage'));
+}
+
+/** Sets one of what a piece states about how it is cast (metal, material, process or limits) on its file; null removes a process or limits. */
+export function setCastStatement(t: { metal?: MetalId; material?: string; process?: string; limits?: SuppliedFile }, key: 'metal' | 'material' | 'process' | 'limits', value: unknown): void {
+  if (key === 'metal') {
+    t.metal = value as MetalId;
+    delete t.material;
+  } else if (key === 'material') {
+    t.material = value as string;
+    delete t.metal;
+  } else if (value === null) delete t[key];
+  else if (key === 'process') t.process = value as string;
+  else t.limits = value as SuppliedFile;
+}
+
+/** Whether a set's value removes a process or limits. */
+export const removes = (key: string, value: unknown): boolean => value === null && (key === 'process' || key === 'limits');
 
 /**
  * Validates one operation subtree on its own, as a tree's added shape is validated: what a
@@ -820,14 +882,15 @@ export function applySet(tree: PieceTree, set: Record<string, unknown>): { tree:
   const next = structuredClone(tree);
   const changed: string[] = [];
   const entries = Object.entries(set).sort(([a], [b]) => (SET_ORDER.get(a) ?? 999) - (SET_ORDER.get(b) ?? 999));
+  if (set['metal'] !== undefined && set['material'] !== undefined) throw new CallError('set.material', 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
   for (const [key, value] of entries) {
     const path = at('set', key);
     const spec = PARAM_BY_KEY.get(key);
     if (spec) {
-      checkParam(spec, value, path);
+      if (!removes(key, value)) checkParam(spec, value, path);
       if (key === 'name') next.name = value as string;
       else if (key === 'shrinkage') next.shrinkage = value as string;
-      else if (key === 'metal') next.metal = value as MetalId;
+      else if (key === 'metal' || key === 'material' || key === 'process' || key === 'limits') setCastStatement(next, key, value);
       else if (key === 'stone_setting') setStoneSetting(next, value as string);
       else if (key === 'stone_shape') setStoneShape(next, value as 'round' | 'emerald', path);
       else {
@@ -878,6 +941,9 @@ export function getSetting(tree: PieceTree, key: string): unknown {
   if (key === 'name') return tree.name;
   if (key === 'shrinkage') return tree.shrinkage;
   if (key === 'metal') return tree.metal;
+  if (key === 'material') return tree.material;
+  if (key === 'process') return tree.process;
+  if (key === 'limits') return tree.limits;
   const head = findNode(tree.root, 'head');
   if (key === 'stone_setting') return head ? head.part : 'none';
   if (key === 'stone_shape') return (head?.params?.['stone'] as Record<string, unknown> | undefined)?.['shape'];
@@ -938,7 +1004,8 @@ export interface PieceView {
   bandWidthMm: number;
   bandThicknessMm: number;
   profile: string;
-  metal: MetalId;
+  /** The metal, when the piece names one of the four; a piece in any other material names it as `material` on its tree. */
+  metal?: MetalId;
   head?: HeadView;
   shrinkagePct: number;
   /** Operation subtrees beside the band and head, unioned with them. */
@@ -974,8 +1041,8 @@ export function readPiece(tree: PieceTree): PieceView {
     bandWidthMm: lengthMm(bp['width'], 'band.width'),
     bandThicknessMm: lengthMm(bp['thickness'], 'band.thickness'),
     profile: bp['profile'] as string,
-    metal: tree.metal,
-    shrinkagePct: shrinkagePercent(tree.shrinkage, tree.metal, 'tree.shrinkage'),
+    ...(tree.metal !== undefined ? { metal: tree.metal } : {}),
+    shrinkagePct: shrinkagePercent(tree.shrinkage, tree, 'tree.shrinkage'),
     extras: (tree.root.children ?? []).filter((c) => c.id !== 'band' && c.id !== 'head'),
   };
   const head = findNode(tree.root, 'head');

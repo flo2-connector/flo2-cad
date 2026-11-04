@@ -21870,12 +21870,12 @@ var Bvh = class {
    */
   anyWithin(p, r, keep, meets) {
     if (this.n === 0) return false;
-    const r22 = r * r;
+    const r23 = r * r;
     const q = this.#q;
     const stack = [0];
     while (stack.length) {
       const node2 = stack.pop();
-      if (this.#boxDistSq(node2, p) >= r22) continue;
+      if (this.#boxDistSq(node2, p) >= r23) continue;
       if (this.#left[node2] < 0) {
         const s = this.#first[node2], e = s + this.#count[node2];
         for (let i = s; i < e; i++) {
@@ -21883,7 +21883,7 @@ var Bvh = class {
           if (!keep(t)) continue;
           const where = this.nearestOn(p[0], p[1], p[2], t, q);
           const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
-          if (dx * dx + dy * dy + dz * dz < r22 && (!meets || meets(t, q, where === IN_FACE, where))) return true;
+          if (dx * dx + dy * dy + dz * dz < r23 && (!meets || meets(t, q, where === IN_FACE, where))) return true;
         }
       } else {
         stack.push(this.#left[node2], this.#right[node2]);
@@ -21898,7 +21898,7 @@ var Bvh = class {
    */
   collectNear(px, py, pz, r, into) {
     if (this.n === 0) return 0;
-    const r22 = r * r;
+    const r23 = r * r;
     const lo = this.#bmin, hi = this.#bmax, left = this.#left, right = this.#right, first = this.#first, cnt = this.#count, order = this.#order;
     const C = this.centroid, R = this.reach, N = this.normal;
     const stack = this.#stack;
@@ -21911,7 +21911,7 @@ var Bvh = class {
       const dx = px < lo[b] ? lo[b] - px : px > hi[b] ? px - hi[b] : 0;
       const dy = py < lo[b + 1] ? lo[b + 1] - py : py > hi[b + 1] ? py - hi[b + 1] : 0;
       const dz = pz < lo[b + 2] ? lo[b + 2] - pz : pz > hi[b + 2] ? pz - hi[b + 2] : 0;
-      if (dx * dx + dy * dy + dz * dz >= r22) continue;
+      if (dx * dx + dy * dy + dz * dz >= r23) continue;
       if (left[node2] >= 0) {
         stack[top++] = left[node2];
         stack[top++] = right[node2];
@@ -21938,13 +21938,13 @@ var Bvh = class {
   /** anyWithin, the nearer child box searched first: the same answer, found sooner when it is yes. */
   anyWithinNearestFirst(px, py, pz, r, keep, meets) {
     if (this.n === 0) return false;
-    const r22 = r * r;
+    const r23 = r * r;
     const q = this.#q;
     const p = [px, py, pz];
     const stack = [0];
     while (stack.length) {
       const node2 = stack.pop();
-      if (this.#boxDistSq(node2, p) >= r22) continue;
+      if (this.#boxDistSq(node2, p) >= r23) continue;
       if (this.#left[node2] < 0) {
         const s = this.#first[node2], e = s + this.#count[node2];
         for (let i = s; i < e; i++) {
@@ -21952,7 +21952,7 @@ var Bvh = class {
           if (!keep(t)) continue;
           const where = this.nearestOn(px, py, pz, t, q);
           const dx = px - q[0], dy = py - q[1], dz = pz - q[2];
-          if (dx * dx + dy * dy + dz * dz < r22 && meets(t, q, where === IN_FACE, where)) return true;
+          if (dx * dx + dy * dy + dz * dz < r23 && meets(t, q, where === IN_FACE, where)) return true;
         }
       } else {
         const l = this.#left[node2], rt = this.#right[node2];
@@ -21965,17 +21965,17 @@ var Bvh = class {
   /** Calls fn for every triangle closer than r to (px, py, pz). */
   forEachWithin(px, py, pz, r, fn) {
     if (this.n === 0) return;
-    const r22 = r * r;
+    const r23 = r * r;
     const p = [px, py, pz];
     const stack = [0];
     while (stack.length) {
       const node2 = stack.pop();
-      if (this.#boxDistSq(node2, p) >= r22) continue;
+      if (this.#boxDistSq(node2, p) >= r23) continue;
       if (this.#left[node2] < 0) {
         const s = this.#first[node2], e = s + this.#count[node2];
         for (let i = s; i < e; i++) {
           const t = this.#order[i];
-          if (this.distSq(px, py, pz, t) < r22) fn(t);
+          if (this.distSq(px, py, pz, t) < r23) fn(t);
         }
       } else {
         stack.push(this.#left[node2], this.#right[node2]);
@@ -22142,7 +22142,7 @@ function clockAt(x, y) {
   if (h === 0) h = 12;
   return `${h}:${String(total % 60).padStart(2, "0")}`;
 }
-function runChecks(stl, decl, L3, reference) {
+function runChecks(stl, decl, L3, reference, layers = []) {
   const t0 = performance.now();
   let mesh;
   try {
@@ -22157,6 +22157,7 @@ function runChecks(stl, decl, L3, reference) {
     };
   }
   const bvh = new Bvh(mesh.positions, mesh.triangles);
+  const on = layers.filter((l) => l.applies(decl));
   const entries = [];
   const guard = (id, name, limit, fn) => {
     try {
@@ -22175,22 +22176,15 @@ function runChecks(stl, decl, L3, reference) {
   });
   const surface = surfaceDirections(bvh, L3.surfaceDeviation).normal;
   const samples = sampleThickness(bvh, surface);
-  guard("wall", "Wall thickness", mm(L3.wall), () => wallEntry(bvh, samples, L3, decl));
-  guard("detail", "Smallest detail", mm(L3.detail), () => detailEntry(bvh, samples, L3, decl));
+  guard("wall", "Wall thickness", mm(L3.wall), () => wallEntry(bvh, samples, L3, decl, on));
+  guard("detail", "Smallest detail", mm(L3.detail), () => detailEntry(bvh, samples, L3, decl, on));
   if (decl.band) guard("band", "Ring band thickness", mm(L3.band), () => bandEntry(bvh, decl.band, L3));
-  if (decl.prongs.length) {
-    guard("prong", "Prong thickness", mm(L3.prong), () => prongEntry(bvh, decl.prongs, L3));
-    if (decl.stone) guard("prong_grip", "Prongs grip the stone", `each reaches ${mm(L3.gripMin)} over the girdle`, () => gripEntry(bvh, decl, L3));
-  }
-  if (decl.bezel && decl.stone) {
-    guard("bezel_wall", "Bezel wall thickness", mm(L3.wall), () => bezelWallEntry(bvh, samples, decl, L3));
-    guard("bezel_lip", "Bezel lip height", decl.stone.kind === "cabochon" ? "at least a third of the cabochon's dome" : `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L3));
-  }
+  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L: L3 })) guard(c.id, c.name, c.limit, c.run);
   if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L3.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L3));
   guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3));
   guard("surface_deviation", "Surface smoothness", mm(L3.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
-    return surfaceEntry(bvh, L3, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl);
+    return surfaceEntry(bvh, L3, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl, on);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
@@ -22443,7 +22437,7 @@ var BallCandidates = class {
   }
   /** anyWithin's answer for the ball of radius r (asked at radius rr < r) centred at (cx, cy, cz), from these triangles. */
   any(bvh, r, cx, cy, cz, rr, keep, meets) {
-    const r22 = rr * rr, edge = r * (1 + 1e-9) + 1e-9, inner = rr + 1e-9;
+    const r23 = rr * rr, edge = r * (1 + 1e-9) + 1e-9, inner = rr + 1e-9;
     const q = this.#q, tau = this.tau, alpha = this.alpha, beta = this.beta, tri = this.tri, lastD = this.lastD, lastR = this.lastR;
     let b = 0;
     while (b < BUCKETS && this.floor[b] < edge) b++;
@@ -22459,7 +22453,7 @@ var BallCandidates = class {
       const d2 = dx * dx + dy * dy + dz * dz;
       lastD[k] = Math.sqrt(d2) * (1 - 1e-12);
       lastR[k] = r;
-      if (d2 < r22 && meets(t, q, where === IN_FACE, where)) return true;
+      if (d2 < r23 && meets(t, q, where === IN_FACE, where)) return true;
     }
     return false;
   }
@@ -22507,13 +22501,11 @@ function minSample(samples, keep = () => true) {
   for (const s of samples) if (keep(s) && (!best || s.thickness < best.thickness)) best = s;
   return best;
 }
-function partAt(p, decl, centre) {
-  for (const pr of decl.prongs) {
-    if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
-      return { part: "head", feature: pr.label, clock: pr.clock };
-    }
+function partAt(p, decl, layers, centre) {
+  for (const l of layers) {
+    const own2 = l.partAt?.(p, decl);
+    if (own2) return own2;
   }
-  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]) };
   const bandAt = () => ({ part: "band", feature: `${Math.round((Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360)}\xB0 round the band from the top` });
   const sheetPart = (q) => {
     const [sheet2, ...others] = sheetsAt(q, decl);
@@ -22545,8 +22537,8 @@ function inBox(a, c) {
 function quoteIds(ids) {
   return ids.split(", ").map((id) => `"${id}"`).join(" or ");
 }
-function whereOf(p, decl, what, centre) {
-  const a = partAt(p, decl, centre);
+function whereOf(p, decl, layers, what, centre) {
+  const a = partAt(p, decl, layers, centre);
   const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, ...a.meets ? { meets: a.meets } : {}, point_mm: pt(p) };
   if (a.part === "added shape") return { ...where, description: `${what} in the added shape ${quoteIds(a.feature)}` };
   if (a.part === "sheet") return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` };
@@ -22558,11 +22550,8 @@ function onBlend(p, label, what) {
   return { part: "blend", feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
 }
 var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
-function onProngColumn(p, decl) {
-  return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
-}
-function wallEntry(bvh, samples, L3, decl) {
-  const m = minSample(samples, (s) => !onProngColumn(s.p, decl));
+function wallEntry(bvh, samples, L3, decl, layers) {
+  const m = minSample(samples, (s) => !layers.some((l) => l.judgesWallAt?.(s.p, decl)));
   if (!m) throw new Error("no thickness could be measured");
   return {
     id: "wall",
@@ -22571,11 +22560,11 @@ function wallEntry(bvh, samples, L3, decl) {
     result: m.thickness >= L3.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, "thinnest wall", m.centre),
+    where: whereOf(m.p, decl, layers, "thinnest wall", m.centre),
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`
   };
 }
-function detailEntry(_bvh, samples, L3, decl) {
+function detailEntry(_bvh, samples, L3, decl, layers) {
   const m = minSample(samples);
   if (!m) throw new Error("no thickness could be measured");
   return {
@@ -22585,7 +22574,7 @@ function detailEntry(_bvh, samples, L3, decl) {
     result: m.thickness >= L3.detail ? "pass" : "fail",
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, "the thinnest feature", m.centre),
+    where: whereOf(m.p, decl, layers, "the thinnest feature", m.centre),
     method: MAXSPHERE
   };
 }
@@ -22752,163 +22741,6 @@ function bandEntry(bvh, band, L3) {
     method: "the band's cross-section every 5\xB0 all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band"
   };
 }
-function prongEntry(bvh, prongs, L3) {
-  const results = [];
-  for (const pr of prongs) {
-    let worst = null;
-    const R = pr.nominalDiameter / 2 + 0.35;
-    const [ax, ay] = pr.axis;
-    const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
-    const region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
-    const at2 = (z) => {
-      const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
-      const ins = largestCircleIn(segs, region);
-      if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
-    };
-    const steps = Math.max(8, Math.ceil((pr.sectionToZ - pr.sectionFromZ) / 0.1));
-    for (let i = 0; i <= steps; i++) at2(pr.sectionFromZ + (pr.sectionToZ - pr.sectionFromZ) * i / steps);
-    const zc = worst?.z;
-    if (zc !== void 0) {
-      for (let dz = -0.1; dz <= 0.1001; dz += 0.02) if (zc + dz >= pr.sectionFromZ && zc + dz <= pr.sectionToZ) at2(zc + dz);
-    }
-    if (!worst) throw new Error(`no section of ${pr.label} could be measured`);
-    const w = worst;
-    results.push({
-      label: pr.label,
-      value: r3(w.d),
-      where: {
-        part: "head",
-        feature: pr.label,
-        clock: pr.clock,
-        point_mm: pt([w.at[0], w.at[1], w.z]),
-        description: `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`
-      }
-    });
-  }
-  const failing = results.filter((r) => r.value < L3.prong);
-  const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
-  return {
-    id: "prong",
-    name: "Prong thickness",
-    limit: mm(L3.prong),
-    result: failing.length ? "fail" : "pass",
-    measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(" of ")[0]} ${r.value}`).join(", ")} mm`,
-    value: thinnest.value,
-    where: thinnest.where,
-    ...failing.length ? { failing } : {},
-    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
-  };
-}
-function gripEntry(bvh, decl, L3) {
-  const s = decl.stone;
-  const results = [];
-  const P = bvh.pos;
-  for (const pr of decl.prongs) {
-    let reach = -Infinity;
-    let at2 = [pr.axis[0], pr.axis[1], s.girdleTopZ];
-    for (let i = 0; i < P.length; i += 3) {
-      const x = P[i], y = P[i + 1], z = P[i + 2];
-      if (z < s.girdleTopZ + 0.02 || Math.hypot(x - pr.axis[0], y - pr.axis[1]) > pr.nominalDiameter / 2 + 0.05) continue;
-      const inset = signedInset(s.outline, x, y);
-      if (inset > reach) {
-        reach = inset;
-        at2 = [x, y, z];
-      }
-    }
-    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at2), description: `${pr.label}, at ${pr.clock}` } });
-  }
-  const failing = results.filter((r) => r.value < L3.gripMin);
-  const least = results.reduce((a, b) => b.value < a.value ? b : a);
-  return {
-    id: "prong_grip",
-    name: "Prongs grip the stone",
-    limit: `each prong reaches at least ${mm(L3.gripMin)} in over the girdle`,
-    result: failing.length ? "fail" : "pass",
-    measured: `${mm(least.value)} (${least.label})`,
-    value: least.value,
-    where: least.where,
-    ...failing.length ? { failing } : {},
-    method: "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL"
-  };
-}
-function signedInset(poly, x, y) {
-  let best = Infinity;
-  const n = poly.length;
-  let area = 0;
-  for (let i = 0; i < n; i++) {
-    const a = poly[i], b = poly[(i + 1) % n];
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  const sign = area >= 0 ? 1 : -1;
-  for (let i = 0; i < n; i++) {
-    const a = poly[i], b = poly[(i + 1) % n];
-    const ex = b[0] - a[0], ey = b[1] - a[1];
-    const l = Math.hypot(ex, ey) || 1;
-    const d = sign * (ex * (y - a[1]) - ey * (x - a[0])) / l;
-    best = Math.min(best, d);
-  }
-  return best;
-}
-function inPolygon(poly, x, y, grow = 0) {
-  if (grow > 0) return signedInset(poly, x, y) > -grow;
-  return signedInset(poly, x, y) >= 0;
-}
-function bezelWallEntry(_bvh, samples, decl, L3) {
-  const bz = decl.bezel, st = decl.stone;
-  const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
-  const m = minSample(samples, inBezel);
-  if (!m) throw new Error("no point on the bezel could be measured");
-  return {
-    id: "bezel_wall",
-    name: "Bezel wall thickness",
-    limit: mm(L3.wall),
-    result: m.thickness >= L3.wall ? "pass" : "fail",
-    measured: mm(m.thickness),
-    value: r3(m.thickness),
-    where: { part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
-    method: MAXSPHERE + ", on the bezel rim around and above the girdle"
-  };
-}
-function bezelLipEntry(bvh, decl, L3) {
-  const bz = decl.bezel, st = decl.stone;
-  const P = bvh.pos;
-  let top = -Infinity;
-  let at2 = [0, 0, 0];
-  for (let i = 0; i < P.length; i += 3) {
-    const x = P[i], y = P[i + 1], z = P[i + 2];
-    if (!inPolygon(bz.outer, x, y, 0.05)) continue;
-    if (z > top) {
-      top = z;
-      at2 = [x, y, z];
-    }
-  }
-  const lip = top - st.girdleTopZ;
-  const share = lip / st.crownHeight;
-  if (st.kind === "cabochon") {
-    const need = L3.lipMinOfCabochon * st.crownHeight;
-    return {
-      id: "bezel_lip",
-      name: "Bezel lip height",
-      limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
-      result: share >= L3.lipMinOfCabochon - 1e-6 ? "pass" : "fail",
-      measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
-      value: r3(lip),
-      where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
-      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule"
-    };
-  }
-  const ok = share >= L3.lipMinOfCrown - 1e-6 && share <= L3.lipMaxOfCrown + 1e-6;
-  return {
-    id: "bezel_lip",
-    name: "Bezel lip height",
-    limit: `${Math.round(L3.lipMinOfCrown * 100)}-${Math.round(L3.lipMaxOfCrown * 100)} % of the crown (${mm(L3.lipMinOfCrown * st.crownHeight)} to ${mm(L3.lipMaxOfCrown * st.crownHeight)} for this stone)`,
-    result: ok ? "pass" : "fail",
-    measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
-    value: r3(lip),
-    where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
-    method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
-  };
-}
 function gapEntry(bvh, S, L3) {
   const C = bvh.centroid;
   let best = null;
@@ -22942,7 +22774,7 @@ function gapEntry(bvh, S, L3) {
     method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
   };
 }
-function surfaceEntry(bvh, L3, ref, decl) {
+function surfaceEntry(bvh, L3, ref, decl, layers) {
   let worst = { dev: 0, p: [0, 0, 0] };
   const cap = Math.max(0.2, L3.surfaceDeviation * 20);
   const first = Math.min(cap, L3.surfaceDeviation * 2);
@@ -22972,7 +22804,7 @@ function surfaceEntry(bvh, L3, ref, decl) {
     result: worst.dev <= L3.surfaceDeviation ? "pass" : "fail",
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""})`,
     value: r3(worst.dev),
-    where: worst.blend !== void 0 ? onBlend(worst.p, worst.blend, "the facets stand furthest from the curved surface") : whereOf(worst.p, decl, "the facets stand furthest from the curved surface"),
+    where: worst.blend !== void 0 ? onBlend(worst.p, worst.blend, "the facets stand furthest from the curved surface") : whereOf(worst.p, decl, layers, "the facets stand furthest from the curved surface"),
     method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`
   };
 }
@@ -23171,85 +23003,205 @@ function sphereSegments(radius, tol) {
   return Math.ceil(segmentsFor(radius, tol * 0.6, 16) / 4) * 4;
 }
 
-// src/metals.ts
-var METAL_IDS = ["sterling_silver_925", "gold_14k_yellow", "gold_18k_yellow", "platinum_950"];
-var SHAPEWAYS_SHRINK = 'Shapeways (silver, gold and platinum pages): "the metal shrinks by approximately 1-1.5%"; finishing takes the overall reduction to about 3%; ring inside diameters stay within \xB10.05-0.10 mm.';
-var COMMON = [
-  "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
-  "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY).",
-  SHAPEWAYS_SHRINK
-];
-var METALS = {
-  sterling_silver_925: {
-    id: "sterling_silver_925",
-    name: "sterling silver 925",
-    density: 10.4,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 10.40 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  gold_14k_yellow: {
-    id: "gold_14k_yellow",
-    name: "14k yellow gold",
-    density: 13.07,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 13.07 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  gold_18k_yellow: {
-    id: "gold_18k_yellow",
-    name: "18k yellow gold",
-    density: 15.58,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 15.58 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  platinum_950: {
-    id: "platinum_950",
-    name: "platinum 950 (Pt950/Ru)",
-    density: 20.7,
-    // The gap is Stuller's 0.8 mm platinum figure, stricter than the 0.3 mm clearance of the services.
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.8, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: "Platinum 950 melts at about 1780-1795 \xB0C and is cast at about 1850-2200 \xB0C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup.",
-    sources: [
-      "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".',
-      ...COMMON,
-      "Melting range Pt950/Ru 1780-1795 \xB0C and density 20.7 g/cm\xB3: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
-      'Casting at about 1850-2200 \xB0C, "special equipment is needed", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/'
-    ]
+// src/jewelry/checks.ts
+function declaresSetting(decl) {
+  return decl.prongs.length > 0 || decl.bezel !== void 0 || decl.stone !== void 0;
+}
+function jewelryChecks(R) {
+  return {
+    applies: declaresSetting,
+    partAt: settingPartAt,
+    judgesWallAt: onProngColumn,
+    checks: ({ bvh, samples, decl, L: L3 }) => {
+      const out = [];
+      if (decl.prongs.length) {
+        out.push({ id: "prong", name: "Prong thickness", limit: mm(L3.prong), run: () => prongEntry(bvh, decl.prongs, L3) });
+        if (decl.stone) out.push({ id: "prong_grip", name: "Prongs grip the stone", limit: `each reaches ${mm(R.gripMin)} over the girdle`, run: () => gripEntry(bvh, decl, R) });
+      }
+      if (decl.bezel && decl.stone) {
+        out.push({ id: "bezel_wall", name: "Bezel wall thickness", limit: mm(L3.wall), run: () => bezelWallEntry(bvh, samples, decl, L3) });
+        out.push({
+          id: "bezel_lip",
+          name: "Bezel lip height",
+          limit: decl.stone.kind === "cabochon" ? "at least a third of the cabochon's dome" : `${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown`,
+          run: () => bezelLipEntry(bvh, decl, R)
+        });
+      }
+      return out;
+    }
+  };
+}
+function settingPartAt(p, decl) {
+  for (const pr of decl.prongs) {
+    if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
+      return { part: "head", feature: pr.label, clock: pr.clock };
+    }
   }
-};
-var STRICTEST = Object.keys(METALS).reduce(
-  (acc, id) => {
-    const l = METALS[id].limits;
-    return {
-      wall: Math.max(acc.wall, l.wall),
-      band: Math.max(acc.band, l.band),
-      prong: Math.max(acc.prong, l.prong),
-      detail: Math.max(acc.detail, l.detail),
-      gap: Math.max(acc.gap, l.gap),
-      surfaceDeviation: Math.min(acc.surfaceDeviation, l.surfaceDeviation)
+  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]) };
+  return null;
+}
+function onProngColumn(p, decl) {
+  return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
+}
+function prongEntry(bvh, prongs, L3) {
+  const results = [];
+  for (const pr of prongs) {
+    let worst = null;
+    const R = pr.nominalDiameter / 2 + 0.35;
+    const [ax, ay] = pr.axis;
+    const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
+    const region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
+    const at2 = (z) => {
+      const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
+      const ins = largestCircleIn(segs, region);
+      if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
     };
-  },
-  { wall: 0, band: 0, prong: 0, detail: 0, gap: 0, surfaceDeviation: Infinity }
-);
+    const steps = Math.max(8, Math.ceil((pr.sectionToZ - pr.sectionFromZ) / 0.1));
+    for (let i = 0; i <= steps; i++) at2(pr.sectionFromZ + (pr.sectionToZ - pr.sectionFromZ) * i / steps);
+    const zc = worst?.z;
+    if (zc !== void 0) {
+      for (let dz = -0.1; dz <= 0.1001; dz += 0.02) if (zc + dz >= pr.sectionFromZ && zc + dz <= pr.sectionToZ) at2(zc + dz);
+    }
+    if (!worst) throw new Error(`no section of ${pr.label} could be measured`);
+    const w = worst;
+    results.push({
+      label: pr.label,
+      value: r3(w.d),
+      where: {
+        part: "head",
+        feature: pr.label,
+        clock: pr.clock,
+        point_mm: pt([w.at[0], w.at[1], w.z]),
+        description: `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`
+      }
+    });
+  }
+  const failing = results.filter((r) => r.value < L3.prong);
+  const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
+  return {
+    id: "prong",
+    name: "Prong thickness",
+    limit: mm(L3.prong),
+    result: failing.length ? "fail" : "pass",
+    measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(" of ")[0]} ${r.value}`).join(", ")} mm`,
+    value: thinnest.value,
+    where: thinnest.where,
+    ...failing.length ? { failing } : {},
+    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
+  };
+}
+function gripEntry(bvh, decl, R) {
+  const s = decl.stone;
+  const results = [];
+  const P = bvh.pos;
+  for (const pr of decl.prongs) {
+    let reach = -Infinity;
+    let at2 = [pr.axis[0], pr.axis[1], s.girdleTopZ];
+    for (let i = 0; i < P.length; i += 3) {
+      const x = P[i], y = P[i + 1], z = P[i + 2];
+      if (z < s.girdleTopZ + 0.02 || Math.hypot(x - pr.axis[0], y - pr.axis[1]) > pr.nominalDiameter / 2 + 0.05) continue;
+      const inset = signedInset(s.outline, x, y);
+      if (inset > reach) {
+        reach = inset;
+        at2 = [x, y, z];
+      }
+    }
+    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at2), description: `${pr.label}, at ${pr.clock}` } });
+  }
+  const failing = results.filter((r) => r.value < R.gripMin);
+  const least = results.reduce((a, b) => b.value < a.value ? b : a);
+  return {
+    id: "prong_grip",
+    name: "Prongs grip the stone",
+    limit: `each prong reaches at least ${mm(R.gripMin)} in over the girdle`,
+    result: failing.length ? "fail" : "pass",
+    measured: `${mm(least.value)} (${least.label})`,
+    value: least.value,
+    where: least.where,
+    ...failing.length ? { failing } : {},
+    method: "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL"
+  };
+}
+function signedInset(poly, x, y) {
+  let best = Infinity;
+  const n = poly.length;
+  let area = 0;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    area += a[0] * b[1] - b[0] * a[1];
+  }
+  const sign = area >= 0 ? 1 : -1;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const l = Math.hypot(ex, ey) || 1;
+    const d = sign * (ex * (y - a[1]) - ey * (x - a[0])) / l;
+    best = Math.min(best, d);
+  }
+  return best;
+}
+function inPolygon(poly, x, y, grow = 0) {
+  if (grow > 0) return signedInset(poly, x, y) > -grow;
+  return signedInset(poly, x, y) >= 0;
+}
+function bezelWallEntry(_bvh, samples, decl, L3) {
+  const bz = decl.bezel, st = decl.stone;
+  const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
+  const m = minSample(samples, inBezel);
+  if (!m) throw new Error("no point on the bezel could be measured");
+  return {
+    id: "bezel_wall",
+    name: "Bezel wall thickness",
+    limit: mm(L3.wall),
+    result: m.thickness >= L3.wall ? "pass" : "fail",
+    measured: mm(m.thickness),
+    value: r3(m.thickness),
+    where: { part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
+    method: MAXSPHERE + ", on the bezel rim around and above the girdle"
+  };
+}
+function bezelLipEntry(bvh, decl, R) {
+  const bz = decl.bezel, st = decl.stone;
+  const P = bvh.pos;
+  let top = -Infinity;
+  let at2 = [0, 0, 0];
+  for (let i = 0; i < P.length; i += 3) {
+    const x = P[i], y = P[i + 1], z = P[i + 2];
+    if (!inPolygon(bz.outer, x, y, 0.05)) continue;
+    if (z > top) {
+      top = z;
+      at2 = [x, y, z];
+    }
+  }
+  const lip = top - st.girdleTopZ;
+  const share = lip / st.crownHeight;
+  if (st.kind === "cabochon") {
+    const need = R.lipMinOfCabochon * st.crownHeight;
+    return {
+      id: "bezel_lip",
+      name: "Bezel lip height",
+      limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
+      result: share >= R.lipMinOfCabochon - 1e-6 ? "pass" : "fail",
+      measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
+      value: r3(lip),
+      where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
+      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule"
+    };
+  }
+  const ok = share >= R.lipMinOfCrown - 1e-6 && share <= R.lipMaxOfCrown + 1e-6;
+  return {
+    id: "bezel_lip",
+    name: "Bezel lip height",
+    limit: `${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown (${mm(R.lipMinOfCrown * st.crownHeight)} to ${mm(R.lipMaxOfCrown * st.crownHeight)} for this stone)`,
+    result: ok ? "pass" : "fail",
+    measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
+    value: r3(lip),
+    where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
+    method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
+  };
+}
+
+// src/jewelry/rules.ts
 var SETTING = {
   /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
   gripMin: 0.15,
@@ -23270,6 +23222,243 @@ var SETTING = {
     `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
   ]
 };
+var SEAT_CLEARANCE = 0.03;
+var BEZEL_CLEARANCE = 0.05;
+var STONE_DEFAULTS = {
+  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
+  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
+};
+var HEAD_DEFAULTS = {
+  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
+  prong_grip: "0.2 mm",
+  /** Gap between the stone's culet (its point) and the top of the band. */
+  culet_clearance: "0.3 mm"
+};
+
+// src/jewelry/fixes.ts
+var r2 = (x) => Math.round(x * 100) / 100;
+function suggestThicker(current, measured, limit) {
+  return Math.ceil((current + (limit - measured) + 0.1) * 10) / 10;
+}
+var SETTING_CHECKS = /* @__PURE__ */ new Set(["prong", "prong_grip", "bezel_wall", "bezel_lip"]);
+function isSettingCheck(e) {
+  return SETTING_CHECKS.has(e.id);
+}
+function cabochonLipFix(e) {
+  const m = /cabochon's ([\d.]+) mm dome \(at least ([\d.]+) mm for this stone/.exec(e.limit);
+  if (!m) return null;
+  const need = Number(m[2]);
+  return { dome: Number(m[1]), need, to: Math.ceil((need + 0.01) * 10) / 10 };
+}
+var cabochonLipWords = (e, c) => `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
+function treeSettingFix(e, h, L3) {
+  switch (e.id) {
+    case "prong": {
+      if (!h || h.kind !== "prong_head") return null;
+      const lines = (e.failing ?? []).map((f) => {
+        const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
+        const cur = h.prongThicknessMm[k - 1] ?? h.nominalProngMm;
+        return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm, where the seat for the stone is cut, and it needs ${L3.prong.toFixed(1)} mm. Make that prong at least ${suggestThicker(cur, f.value, L3.prong)} mm thick.`;
+      });
+      const all = (e.failing ?? []).length === h.prongCount;
+      const worst = Math.min(...(e.failing ?? []).map((f) => f.value));
+      const suggestion = suggestThicker(h.nominalProngMm, worst, L3.prong);
+      return `${lines.join(" ")} ${all ? `Change: set {"prong_thickness": "${Math.max(suggestion, 1.4)} mm"}.` : `Change: set {"head.prong_overrides": []} to give every prong the head's prong_thickness, or set that prong's own thickness in "head.prong_overrides".`} A prong is joined at one end only, so it needs more metal than a wall.`;
+    }
+    case "bezel_wall":
+      if (!h || h.kind !== "bezel") return null;
+      return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L3.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1, suggestThicker(h.wallMm, e.value ?? 0, L3.wall))} mm"}.`;
+    case "bezel_lip": {
+      if (!h || h.kind !== "bezel") return null;
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} Change: set {"bezel_lip": "${cab.to} mm"} (or "auto").`;
+      const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
+      const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
+      return (e.value ?? 0) < lo ? `Raise the bezel lip: it rises ${e.value} mm above the girdle, too little to be pushed over the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").` : `Lower the bezel lip: it rises ${e.value} mm above the girdle and would cover too much of the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`;
+    }
+    case "prong_grip":
+      return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. Change: set {"head.prong_grip": "0.2 mm"}.`;
+  }
+  return null;
+}
+function treeSettingWallFix(e, h, L3) {
+  const part = e.where?.feature ?? e.where?.part ?? "the piece";
+  if (/prong/.test(part) && h?.kind === "prong_head") return `Thicken ${part}: a wall there is ${e.value} mm and needs ${L3.wall.toFixed(1)} mm. Raise prong_thickness.`;
+  if (part === "bezel" && h?.kind === "bezel") return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${L3.wall.toFixed(1)} mm. Raise bezel_wall.`;
+  return void 0;
+}
+function programSettingFix(e, head, L3) {
+  switch (e.id) {
+    case "prong": {
+      const lines = (e.failing ?? []).map((f) => {
+        const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
+        const cur = head?.prongs?.[k - 1]?.thicknessMm ?? L3.prong;
+        return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm and it needs ${L3.prong.toFixed(1)} mm; make it at least ${suggestThicker(cur, f.value, L3.prong)} mm thick.`;
+      });
+      return `${lines.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
+    }
+    case "bezel_wall":
+      return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L3.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1, suggestThicker(head?.bezel?.wallMm ?? L3.wall, e.value ?? 0, L3.wall))} mm.`;
+    case "bezel_lip": {
+      const cab = cabochonLipFix(e);
+      if (cab) return `${cabochonLipWords(e, cab)} In the program, set lip in its bezel call to ${cab.to} mm or more (or "auto").`;
+      const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
+      const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
+      return `${(e.value ?? 0) < lo ? "Raise" : "Lower"} the bezel lip: it rises ${e.value} mm above the girdle. In the program, set lip in its bezel call to ${r2((lo + hi) / 2)} mm (or "auto").`;
+    }
+    case "prong_grip":
+      return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. In the program, set prong_grip in its prongHead call to 0.2 mm or more.`;
+  }
+  return null;
+}
+function failingSettingFeatures(entries) {
+  const out = new Set((entries.find((e) => e.id === "prong" && e.result === "fail")?.failing ?? []).map((f) => f.label));
+  if (entries.some((e) => e.id === "bezel_wall" && e.result === "fail")) out.add("bezel");
+  return out;
+}
+
+// src/jewelry/index.ts
+var JEWELRY_CHECKS = /* @__PURE__ */ jewelryChecks(SETTING);
+
+// src/metals.ts
+var METAL_IDS = ["sterling_silver_925", "gold_14k_yellow", "gold_18k_yellow", "platinum_950"];
+var METALS = {
+  sterling_silver_925: {
+    id: "sterling_silver_925",
+    name: "sterling silver 925",
+    density: 10.4,
+    castingNote: null
+  },
+  gold_14k_yellow: {
+    id: "gold_14k_yellow",
+    name: "14k yellow gold",
+    density: 13.07,
+    castingNote: null
+  },
+  gold_18k_yellow: {
+    id: "gold_18k_yellow",
+    name: "18k yellow gold",
+    density: 15.58,
+    castingNote: null
+  },
+  platinum_950: {
+    id: "platinum_950",
+    name: "platinum 950 (Pt950/Ru)",
+    density: 20.7,
+    castingNote: "Platinum 950 melts at about 1780-1795 \xB0C and is cast at about 1850-2200 \xB0C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup."
+  }
+};
+
+// src/limits/profiles.ts
+var LIMIT_KEYS = ["wall", "band", "prong", "detail", "gap", "surfaceDeviation"];
+var PROCESSES = {
+  lost_wax: {
+    words: "lost wax",
+    detail: "lost wax (investment) casting, from a pattern printed in castable resin or wax, or carved in wax",
+    source: 'Materialise (silver and gold): "Your model is first printed in wax, placed in a container, and covered in a liquid plaster" and "the wax is burned out, creating a cavity in the now-hardened plaster" (https://www.materialise.com/en/academy/industrial/design-am/silver, .../gold); Shapeways (silver, gold and platinum): process "Lost Wax Casting" (https://www.shapeways.com/materials/silver, .../gold, .../platinum). Pages read 2026-11-04. A pattern printed in castable resin, or carved in wax, is cast the same way.'
+  }
+};
+var DEFAULT_PROCESS = "lost_wax";
+function isProcessId(v) {
+  return Object.hasOwn(PROCESSES, v);
+}
+var MATERIALISE = "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold";
+var SHAPEWAYS_SHRINK = 'Shapeways (silver, gold and platinum pages): "the metal shrinks by approximately 1-1.5%"; finishing takes the overall reduction to about 3%; ring inside diameters stay within \xB10.05-0.10 mm.';
+var COMMON = [
+  `${MATERIALISE}: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.`,
+  "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY).",
+  SHAPEWAYS_SHRINK
+];
+function shared(page, gap) {
+  return {
+    wall: { value: 0.8, source: `${MATERIALISE}: walls 0.8 mm for a high-gloss finish; ${page}: walls 0.8 mm.` },
+    band: { value: 1, source: `${MATERIALISE}: "when making something small such as the band of a ring, the wall thickness should be at least 1 mm".` },
+    prong: { value: 1, source: `${page}: wire 1.0 mm unsupported (joined on one side only; 0.8 mm supported).` },
+    detail: { value: 0.35, source: `${MATERIALISE}: "The smallest features in your design should be at least 0.35 mm in diameter and 0.4 mm in height".` },
+    gap,
+    surfaceDeviation: { value: 0.01, source: "con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY)." }
+  };
+}
+var CLEARANCE = { value: 0.3, source: `${MATERIALISE}: "we advise a minimum gap of 0.3 mm"; Shapeways: clearance 0.3 mm.` };
+var SHRINK = { value: 1.5, source: SHAPEWAYS_SHRINK };
+var PRECIOUS_METALS_LOST_WAX_JEWELRY = {
+  id: "precious-metals-lost-wax-jewelry-scale",
+  name: "precious metals cast by lost wax, at jewelry scale",
+  family: "precious metals",
+  processes: ["lost_wax"],
+  size: {
+    minMm: {
+      value: 2.4,
+      source: 'Shapeways (silver, gold and platinum): "Minimum Bounding Box 2.4 \xD7 2.4 \xD7 0.6 mm" and "Your model must be within the minimum and maximum bounding box sizes" (https://www.shapeways.com/materials/silver, .../gold, .../platinum, read 2026-11-04). A piece under 2.4 mm at its largest is below it. Materialise gives no smallest part.'
+    },
+    maxMm: {
+      value: 88,
+      source: `Materialise (silver and gold): "Maximum part dimensions" "88 x 88 x 125 mm" (https://www.materialise.com/en/academy/industrial/design-am/silver, .../gold); Shapeways (silver, gold and platinum): "Maximum Bounding Box 89 \xD7 89 \xD7 100 mm" (https://www.shapeways.com/materials/silver, .../gold, .../platinum). Pages read 2026-11-04. The piece is read by its largest side alone, so the bound is the largest side that fits both services' boxes whatever its other two sides are: the smaller box side, 88 mm. A piece longer than that may still fit one box lengthwise; it gets no verdict here.`
+    }
+  },
+  materials: {
+    sterling_silver_925: {
+      limits: shared("https://www.shapeways.com/materials/silver", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 10.40 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    gold_14k_yellow: {
+      limits: shared("https://www.shapeways.com/materials/gold", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 13.07 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    gold_18k_yellow: {
+      limits: shared("https://www.shapeways.com/materials/gold", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 15.58 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    platinum_950: {
+      // The gap is Stuller's 0.8 mm platinum figure, stricter than the 0.3 mm clearance of the services.
+      limits: shared("https://www.shapeways.com/materials/platinum", {
+        value: 0.8,
+        source: 'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".'
+      }),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".',
+        ...COMMON,
+        "Melting range Pt950/Ru 1780-1795 \xB0C and density 20.7 g/cm\xB3: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
+        'Casting at about 1850-2200 \xB0C, "special equipment is needed", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/'
+      ]
+    }
+  }
+};
+var PROFILES = [PRECIOUS_METALS_LOST_WAX_JEWELRY];
+function limitValues(m) {
+  return Object.fromEntries(LIMIT_KEYS.map((k) => [k, m.limits[k].value]));
+}
+var STRICTEST = Object.values(PRECIOUS_METALS_LOST_WAX_JEWELRY.materials).reduce(
+  (acc, m) => {
+    const l = limitValues(m);
+    return {
+      wall: Math.max(acc.wall, l.wall),
+      band: Math.max(acc.band, l.band),
+      prong: Math.max(acc.prong, l.prong),
+      detail: Math.max(acc.detail, l.detail),
+      gap: Math.max(acc.gap, l.gap),
+      surfaceDeviation: Math.min(acc.surfaceDeviation, l.surfaceDeviation)
+    };
+  },
+  { wall: 0, band: 0, prong: 0, detail: 0, gap: 0, surfaceDeviation: Infinity }
+);
 
 // src/units.ts
 var QUANTITY = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(\S.*?)?\s*$/;
@@ -23431,6 +23620,165 @@ function caratText(v, path) {
   }
   if (num <= 0 || num > 50) throw new CallError(path, `${num} ct is not a plausible weight for one stone.`);
   return `${num} ct`;
+}
+
+// src/limits/supplied.ts
+var SUPPLIED_FIELDS = [
+  { key: "wall", limit: "wall", words: "walls", help: "the thinnest wall anywhere" },
+  { key: "band", limit: "band", words: "band", help: "a ring's band across its narrowest section (checked only where the piece has a ring band)" },
+  { key: "prong", limit: "prong", words: "prongs", help: "a wire joined at one end only, such as a prong, across its narrowest section (checked only where the piece has prongs)" },
+  { key: "detail", limit: "detail", words: "details", help: "the smallest raised detail" },
+  { key: "gap", limit: "gap", words: "gaps", help: "the smallest gap between two parts of the piece" },
+  { key: "surface_deviation", limit: "surfaceDeviation", words: "surface within", help: "the most the file's facets may stand off the intended surface" }
+];
+var SUPPLIED_KEYS = [...SUPPLIED_FIELDS.map((f) => f.key), "shrinkage"];
+var SOURCE_MAX = 600;
+var EXAMPLE = `{"value": "1.0 mm", "source": "the foundry's design guide, rev. 3, 2026-10-01"}`;
+var SUPPLIED_HELP = `Casting limits the person supplies, kept in the piece's file and used in place of any limit profile's: every limit the checker reads, ${SUPPLIED_FIELDS.map((f) => `"${f.key}" (${f.help})`).join(", ")}, and "shrinkage" (the linear shrinkage allowance in %, which shrinkage "on" then applies), each as ${EXAMPLE}. Every one needs its value with its unit and its source: the caster's or foundry's word (with its date) or a datasheet. A set missing any of them is refused.`;
+function readSupplied(v, path) {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) {
+    throw new CallError(path, `supplied limits are an object giving ${SUPPLIED_KEYS.join(", ")}, each as ${EXAMPLE}.`);
+  }
+  const o = v;
+  for (const k of Object.keys(o)) {
+    if (!SUPPLIED_KEYS.includes(k)) throw new CallError(at(path, k), `is not a limit the checker reads; a supplied set gives ${SUPPLIED_KEYS.join(", ")}.`);
+  }
+  const entry = (k) => {
+    const p = at(path, k);
+    const e = o[k];
+    if (e === void 0) {
+      throw new CallError(p, `missing. A supplied set gives every limit the checker reads and the shrinkage allowance (${SUPPLIED_KEYS.join(", ")}), each with its source, for example ${EXAMPLE}; ask the caster or foundry for any you do not have.`);
+    }
+    if (e === null || typeof e !== "object" || Array.isArray(e)) throw new CallError(p, `each supplied limit is its value and its source, for example ${EXAMPLE}.`);
+    const r = e;
+    for (const f of Object.keys(r)) if (f !== "value" && f !== "source") throw new CallError(at(p, f), 'is not part of a supplied limit; it has a "value" and a "source".');
+    if (r["value"] === void 0) throw new CallError(at(p, "value"), `missing: give the figure with its unit, for example ${k === "shrinkage" ? '"1.5 %"' : '"1.0 mm"'}.`);
+    const source = r["source"];
+    if (typeof source !== "string" || !source.trim()) {
+      throw new CallError(at(p, "source"), `missing: every supplied limit says where it comes from, the caster's or foundry's word (with its date) or a datasheet, for example "the foundry's design guide, rev. 3, 2026-10-01".`);
+    }
+    if (source.length > SOURCE_MAX) throw new CallError(at(p, "source"), `is ${source.length} characters; a source is at most ${SOURCE_MAX}: name it, and keep the document itself in the design.`);
+    return { value: r["value"], source };
+  };
+  const limits = {};
+  const each = {};
+  for (const f of SUPPLIED_FIELDS) {
+    const e = entry(f.key);
+    const mm3 = lengthMm(e.value, at(at(path, f.key), "value"));
+    if (!(mm3 > 0)) throw new CallError(at(at(path, f.key), "value"), "must be more than 0 mm.");
+    limits[f.limit] = mm3;
+    each[f.key] = { value: e.value, source: e.source };
+  }
+  const s = entry("shrinkage");
+  const pct = percent(s.value, at(at(path, "shrinkage"), "value"));
+  if (!(pct >= 0 && pct <= 5)) throw new CallError(at(at(path, "shrinkage"), "value"), `a shrinkage allowance is between 0 and 5 %, for example "1.5 %"; got "${String(s.value)}".`);
+  each["shrinkage"] = { value: s.value, source: s.source };
+  return { limits, shrinkagePct: pct, each };
+}
+function suppliedWords(s) {
+  return [...SUPPLIED_FIELDS.map((f) => `${f.words} ${s.each[f.key].value} (${s.each[f.key].source})`), `shrinkage ${s.each.shrinkage.value} (${s.each.shrinkage.source})`].join("; ");
+}
+function suppliedSources(s) {
+  return [...SUPPLIED_FIELDS.map((f) => `${f.key} ${s.each[f.key].value}, supplied with the piece: ${s.each[f.key].source}`), `shrinkage ${s.each.shrinkage.value}, supplied with the piece: ${s.each.shrinkage.source}`];
+}
+
+// src/limits/choose.ts
+function metalOf(s) {
+  return s.metal ? METALS[s.metal] : null;
+}
+function materialName(s) {
+  return s.metal ? METALS[s.metal].name : s.material ?? "an unnamed material";
+}
+function processOf(s) {
+  const id = s.process ?? DEFAULT_PROCESS;
+  const known = isProcessId(id) ? id : null;
+  return { id, stated: s.process !== void 0, words: known ? PROCESSES[known].words : id, known };
+}
+function processWords(s) {
+  const p = processOf(s);
+  return p.stated ? p.words : `${p.words} (assumed: the piece states no process; set "process" to say how it will be cast)`;
+}
+var NAME_TEXT = /^[\p{L}\p{N}][\p{L}\p{N} _.,'()/%+&-]{0,79}$/u;
+function checkMaterial(v, path) {
+  if (typeof v !== "string" || !NAME_TEXT.test(v.trim()) || v !== v.trim()) {
+    throw new CallError(path, 'a material is named in words, 1 to 80 letters, digits, spaces and simple punctuation, for example "bronze" or "silicon bronze".');
+  }
+  const low = v.toLowerCase();
+  const metal = METAL_IDS.find((id) => id === low || METALS[id].name.toLowerCase() === low);
+  if (metal) throw new CallError(path, `"${v}" is one of the metals flo2-cad knows by id: give it as {"metal": "${metal}"}, not as a material.`);
+  return v;
+}
+function checkProcess(v, path) {
+  if (typeof v !== "string" || !NAME_TEXT.test(v.trim()) || v !== v.trim()) {
+    throw new CallError(path, `a process is "lost_wax" (${PROCESSES.lost_wax.detail}), or another named in words, for example "sand casting" or "ceramic shell".`);
+  }
+  return v;
+}
+function matchProfile(profile, s, sizeMm) {
+  const p = processOf(s);
+  return {
+    profile,
+    material: s.metal !== void 0 && profile.materials[s.metal] !== void 0,
+    process: p.known !== null && profile.processes.includes(p.known),
+    size: sizeMm === null ? null : sizeMm >= profile.size.minMm.value && sizeMm <= profile.size.maxMm.value
+  };
+}
+function chooseLimits(s, sizeMm) {
+  if (s.limits !== void 0) {
+    const supplied = readSupplied(s.limits, "tree.limits");
+    return { kind: "supplied", supplied, limits: supplied.limits, shrinkagePct: supplied.shrinkagePct };
+  }
+  const matches = PROFILES.map((p) => matchProfile(p, s, sizeMm));
+  const hit = matches.find((m) => m.material && m.process && m.size !== false);
+  if (hit && s.metal) {
+    const m = hit.profile.materials[s.metal];
+    return { kind: "profile", profile: hit.profile, metal: s.metal, limits: limitValues(m), shrinkagePct: m.shrinkagePct.value, sources: m.sources };
+  }
+  return { kind: "none", matches };
+}
+function citedShrinkage(s) {
+  if (s.limits !== void 0) return readSupplied(s.limits, "tree.limits").shrinkagePct;
+  for (const p of PROFILES) {
+    const m = matchProfile(p, s, null);
+    if (m.material && m.process && s.metal) return p.materials[s.metal].shrinkagePct.value;
+  }
+  return null;
+}
+var mmText = (x) => `${Math.round(x * 100) / 100} mm`;
+function profileWords(p) {
+  const metals = Object.keys(p.materials).map((id) => `${METALS[id].name} ("${id}")`);
+  return `"${p.name}": ${metals.join(", ")}; ${p.processes.map((id) => `${PROCESSES[id].detail} ("${id}")`).join(", ")}; ${mmText(p.size.minMm.value).replace(" mm", "")} to ${mmText(p.size.maxMm.value)} at its largest`;
+}
+function unmatched(m) {
+  return [...m.material ? [] : ["material"], ...m.process ? [] : ["process"], ...m.size === false ? ["size"] : []];
+}
+function noVerdictWords(s, size, matches) {
+  const why = [];
+  const how = /* @__PURE__ */ new Set();
+  for (const m of matches) {
+    const p = m.profile;
+    const parts = [];
+    if (!m.material) {
+      parts.push(`its material, ${materialName(s)}, is not one the profile covers`);
+      how.add(`If it will be cast in one of the profile's metals, set "metal" to its id (${Object.keys(p.materials).join(", ")}).`);
+    }
+    if (!m.process) {
+      parts.push(`its process, ${processOf(s).words}, is not one the profile covers`);
+      how.add(`If it will be cast by lost wax, set "process" to "lost_wax".`);
+    }
+    if (m.size === false && size) {
+      parts.push(`its size, ${mmText(size.largestMm)} at its largest (${size.boxMm.map((x) => Math.round(x * 100) / 100).join(" \xD7 ")} mm), is outside the profile's ${mmText(p.size.minMm.value).replace(" mm", "")} to ${mmText(p.size.maxMm.value)}`);
+      how.add(`Or make the piece ${size.largestMm > p.size.maxMm.value ? "smaller" : "larger"}, within ${mmText(p.size.minMm.value).replace(" mm", "")} to ${mmText(p.size.maxMm.value)} at its largest, if it can be.`);
+    }
+    why.push(`The profile ${profileWords(p)}, does not cover it: ${parts.join("; ")}.`);
+  }
+  return {
+    why,
+    howToGoOn: [
+      'Ask the caster or foundry who will cast it for their limits, and give them as "limits" (change_piece, set), each figure with its source; the piece is then checked against them, and every report names them as yours.',
+      ...how
+    ]
+  };
 }
 
 // src/library/thicken.ts
@@ -23772,10 +24120,6 @@ var ORIENTATIONS = ["east_west", "north_south"];
 var COUNT_KEYS = /* @__PURE__ */ new Set(["prong_count", "prong", "count", "segments"]);
 var NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 var NODE_ID = /^[a-z][a-z0-9_]{0,39}$/;
-var STONE_DEFAULTS = {
-  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
-  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
-};
 function defaultStone(shape, orientation = "east_west") {
   if (shape === "round") {
     const d2 = STONE_DEFAULTS.round;
@@ -23800,7 +24144,22 @@ var PARAMS = [
     kind: "enum",
     values: METAL_IDS,
     default: "sterling_silver_925",
-    help: "The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage; platinum goes to a specialist caster."
+    help: 'The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage, in the limit profile "precious metals cast by lost wax, at jewelry scale"; platinum goes to a specialist caster. For any other material, give "material" instead.'
+  },
+  {
+    key: "material",
+    kind: "material",
+    help: `What it will be cast in, when that is not one of the four metals: a plain name, such as "bronze", "silicon bronze" or "copper". Give "metal" or "material", not both. No limit profile covers any other material yet, so check_piece gives no verdict for it (and nothing is exported) unless the piece carries its caster's limits with their sources ("limits").`
+  },
+  {
+    key: "process",
+    kind: "process",
+    help: 'How it will be cast: "lost_wax" (lost wax casting, from a pattern printed in castable resin or wax, or carved in wax: the process the jewelry profile covers), or another process in words, such as "sand casting" or "ceramic shell", which no profile covers yet. Left out, lost wax is assumed, and every check and export says so. null removes it.'
+  },
+  {
+    key: "limits",
+    kind: "limits",
+    help: `${SUPPLIED_HELP} null removes them.`
   },
   { key: "band_width", kind: "length", min: 1, max: 12, default: "2.2 mm", help: "How wide the band is, measured along the finger." },
   {
@@ -23886,7 +24245,7 @@ var PARAMS = [
     key: "shrinkage",
     kind: "shrinkage",
     default: "off",
-    help: `"off", "on" (the metal's cited allowance, 1.5 %), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.`
+    help: `"off", "on" (the cited allowance for the piece's material and process: 1.5 % for the four metals by lost wax, or the supplied limits' own), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.`
   }
 ];
 var PARAM_BY_KEY = new Map(PARAMS.map((p) => [p.key, p]));
@@ -23928,7 +24287,16 @@ function checkParam(spec, v, path) {
       }
       return;
     case "shrinkage":
-      shrinkagePercent(v, "sterling_silver_925", path);
+      shrinkagePercent(v, { metal: "sterling_silver_925" }, path);
+      return;
+    case "material":
+      checkMaterial(v, path);
+      return;
+    case "process":
+      checkProcess(v, path);
+      return;
+    case "limits":
+      readSupplied(v, path);
       return;
     case "carat":
       caratText(v, path);
@@ -23942,21 +24310,24 @@ function checkParam(spec, v, path) {
       return;
   }
 }
-function shrinkagePercent(v, metal, path) {
+function shrinkagePercent(v, cast, path) {
   if (v === "off") return 0;
-  if (v === "on") return METALS[metal].shrinkagePct;
+  if (v === "on") {
+    const pct2 = citedShrinkage(cast);
+    if (pct2 === null) {
+      throw new CallError(
+        path,
+        `"on" uses the cited allowance for the piece's material and process, and there is none for ${materialName(cast)} cast by ${processOf(cast).words}. Give the allowance the caster or foundry gives, such as "1.5 %", or supply limits with their sources ("limits"), whose shrinkage "on" then applies.`
+      );
+    }
+    return pct2;
+  }
   const pct = percent(v, path);
   if (pct <= 0 || pct > 5) {
     throw new CallError(path, `a shrinkage allowance is "off", "on", or between 0 and 5 %, for example "1.5 %"; got "${String(v)}".`);
   }
   return pct;
 }
-var HEAD_DEFAULTS = {
-  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
-  prong_grip: "0.2 mm",
-  /** Gap between the stone's culet (its point) and the top of the band. */
-  culet_clearance: "0.3 mm"
-};
 function bandDefaults(profile) {
   return profile === "round" ? { width: "2.0 mm", thickness: "2.0 mm" } : { width: PARAM_BY_KEY.get("band_width").default, thickness: PARAM_BY_KEY.get("band_thickness").default };
 }
@@ -24030,6 +24401,7 @@ var TEMPLATE_PRESETS = {
 };
 function treeFromTemplate(template, args) {
   const o = { ...TEMPLATE_PRESETS[template], ...args };
+  if (args["material"] !== void 0) delete o["metal"];
   const setting = o["stone_setting"];
   const children = [bandNode(o, o["band_profile"])];
   if (setting !== "none") children.push(headNode(setting, stoneFrom(o, o["stone_shape"] ?? "round"), o));
@@ -24039,8 +24411,11 @@ function treeFromTemplate(template, args) {
     name: args["name"] ?? fallbackName,
     revision: 1,
     template,
-    metal: o["metal"],
+    ...o["metal"] !== void 0 ? { metal: o["metal"] } : {},
+    ...o["material"] !== void 0 ? { material: o["material"] } : {},
+    ...o["process"] !== void 0 ? { process: o["process"] } : {},
     shrinkage: args["shrinkage"] ?? "off",
+    ...o["limits"] !== void 0 ? { limits: o["limits"] } : {},
     root: { id: "ring", op: "union", children }
   };
 }
@@ -24053,10 +24428,13 @@ function checkStartArgs(args) {
   if (args["ring_size"] === void 0) {
     throw new CallError("ring_size", 'give the finger size with its system, for example {"system": "US", "size": "7"}.');
   }
+  if (args["metal"] !== void 0 && args["material"] !== void 0) throw new CallError("material", 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
   for (const spec of PARAMS) {
     if (args[spec.key] !== void 0) checkParam(spec, args[spec.key], spec.key);
   }
   const o = { ...TEMPLATE_PRESETS[template], ...args };
+  if (args["material"] !== void 0) delete o["metal"];
+  if (args["shrinkage"] !== void 0) shrinkagePercent(args["shrinkage"], o, "shrinkage");
   const setting = o["stone_setting"];
   const shape = o["stone_shape"];
   if (setting === "none") {
@@ -24094,10 +24472,9 @@ function validateTree(v, path = "tree") {
     throw new CallError(at(path, "revision"), "must be a whole number, 1 or more (it counts the changes, so it has no unit).");
   }
   if (!TEMPLATES.includes(t["template"])) throw new CallError(at(path, "template"), `must be one of ${TEMPLATES.map((x) => `"${x}"`).join(", ")}.`);
-  checkParam(PARAM_BY_KEY.get("metal"), t["metal"], at(path, "metal"));
-  shrinkagePercent(t["shrinkage"], t["metal"], at(path, "shrinkage"));
+  checkCastStatement(t, path);
   for (const k of Object.keys(t)) {
-    if (!["format", "name", "revision", "template", "metal", "shrinkage", "root"].includes(k)) throw new CallError(at(path, k), "is not a field of a piece tree.");
+    if (!["format", "name", "revision", "template", "metal", "material", "process", "shrinkage", "limits", "root"].includes(k)) throw new CallError(at(path, k), "is not a field of a piece tree.");
   }
   const root = t["root"];
   if (!root || typeof root !== "object" || root["op"] !== "union") {
@@ -24112,6 +24489,26 @@ function validateTree(v, path = "tree") {
   if (heads.length > 1 || heads[0] && heads[0].id !== "head") throw new CallError(at(path, "root.children"), 'a ring has at most one head (prong_head or bezel), with id "head".');
   return v;
 }
+function checkCastStatement(t, path) {
+  if (t["metal"] !== void 0 && t["material"] !== void 0) throw new CallError(at(path, "material"), 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
+  if (t["material"] !== void 0) checkMaterial(t["material"], at(path, "material"));
+  else checkParam(PARAM_BY_KEY.get("metal"), t["metal"], at(path, "metal"));
+  if (t["process"] !== void 0) checkProcess(t["process"], at(path, "process"));
+  if (t["limits"] !== void 0) readSupplied(t["limits"], at(path, "limits"));
+  shrinkagePercent(t["shrinkage"], t, at(path, "shrinkage"));
+}
+function setCastStatement(t, key, value) {
+  if (key === "metal") {
+    t.metal = value;
+    delete t.material;
+  } else if (key === "material") {
+    t.material = value;
+    delete t.metal;
+  } else if (value === null) delete t[key];
+  else if (key === "process") t.process = value;
+  else t.limits = value;
+}
+var removes = (key, value) => value === null && (key === "process" || key === "limits");
 function validateNode(v, path, ids, inBlend) {
   if (v === null || typeof v !== "object" || Array.isArray(v)) {
     throw new CallError(path, 'a tree node is an object with an "id" and either a "part" or an "op".');
@@ -24385,14 +24782,15 @@ function applySet(tree, set) {
   const next = structuredClone(tree);
   const changed = [];
   const entries = Object.entries(set).sort(([a], [b]) => (SET_ORDER.get(a) ?? 999) - (SET_ORDER.get(b) ?? 999));
+  if (set["metal"] !== void 0 && set["material"] !== void 0) throw new CallError("set.material", 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.');
   for (const [key, value] of entries) {
     const path = at("set", key);
     const spec = PARAM_BY_KEY.get(key);
     if (spec) {
-      checkParam(spec, value, path);
+      if (!removes(key, value)) checkParam(spec, value, path);
       if (key === "name") next.name = value;
       else if (key === "shrinkage") next.shrinkage = value;
-      else if (key === "metal") next.metal = value;
+      else if (key === "metal" || key === "material" || key === "process" || key === "limits") setCastStatement(next, key, value);
       else if (key === "stone_setting") setStoneSetting(next, value);
       else if (key === "stone_shape") setStoneShape(next, value, path);
       else {
@@ -24441,6 +24839,9 @@ function getSetting(tree, key) {
   if (key === "name") return tree.name;
   if (key === "shrinkage") return tree.shrinkage;
   if (key === "metal") return tree.metal;
+  if (key === "material") return tree.material;
+  if (key === "process") return tree.process;
+  if (key === "limits") return tree.limits;
   const head = findNode(tree.root, "head");
   if (key === "stone_setting") return head ? head.part : "none";
   if (key === "stone_shape") return head?.params?.["stone"]?.["shape"];
@@ -24499,8 +24900,8 @@ function readPiece(tree) {
     bandWidthMm: lengthMm(bp["width"], "band.width"),
     bandThicknessMm: lengthMm(bp["thickness"], "band.thickness"),
     profile: bp["profile"],
-    metal: tree.metal,
-    shrinkagePct: shrinkagePercent(tree.shrinkage, tree.metal, "tree.shrinkage"),
+    ...tree.metal !== void 0 ? { metal: tree.metal } : {},
+    shrinkagePct: shrinkagePercent(tree.shrinkage, tree, "tree.shrinkage"),
     extras: (tree.root.children ?? []).filter((c) => c.id !== "band" && c.id !== "head")
   };
   const head = findNode(tree.root, "head");
@@ -25506,8 +25907,6 @@ function prongPlacesAround(outline, count) {
     return { at: [dir[0] * best.s, dir[1] * best.s], out: best.out };
   });
 }
-var SEAT_CLEARANCE = 0.03;
-var BEZEL_CLEARANCE = 0.05;
 function stoneSpec(sv) {
   if (sv.shape === "custom") throw new Error("engine bug: a stone of its own shape has no round or emerald-cut spec");
   return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };
@@ -25891,7 +26290,7 @@ function isProgramPiece(p) {
   return p.format === PROGRAM_FORMAT;
 }
 var NAME2 = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-var FIELDS = ["format", "name", "revision", "metal", "shrinkage", "units", "program"];
+var FIELDS = ["format", "name", "revision", "metal", "material", "process", "shrinkage", "limits", "units", "program"];
 function checkProgramSource(v, path) {
   if (typeof v !== "string" || !v.trim()) {
     throw new CallError(path, 'a program is JavaScript text that builds the piece and returns it, for example "const band = ringShank({ ring_size: { system: \\"US\\", size: \\"7\\" } }); return band;". describe_piece lists what a program can call.');
@@ -25908,8 +26307,7 @@ function validateProgramPiece(v, path = "tree") {
     throw new CallError(at(path, "name"), 'a piece name is 1 to 64 letters, digits, "-" or "_", starting with a letter or digit, for example "moon-cabochon".');
   }
   if (!Number.isInteger(t["revision"]) || t["revision"] < 1) throw new CallError(at(path, "revision"), "must be a whole number, 1 or more (it counts the changes, so it has no unit).");
-  if (!METAL_IDS.includes(t["metal"])) throw new CallError(at(path, "metal"), `must be one of ${METAL_IDS.join(", ")}.`);
-  shrinkagePercent(t["shrinkage"], t["metal"], at(path, "shrinkage"));
+  checkCastStatement(t, path);
   if (t["units"] !== PROGRAM_UNITS) throw new CallError(at(path, "units"), `must be "${PROGRAM_UNITS}": a program's bare numbers are millimetres (and degrees where an angle is asked for).`);
   checkProgramSource(t["program"], at(path, "program"));
   return v;
@@ -25919,8 +26317,10 @@ function programPiece(program, o) {
     format: PROGRAM_FORMAT,
     name: o.name ?? "piece",
     revision: 1,
-    metal: o.metal ?? "sterling_silver_925",
+    ...o.material !== void 0 ? { material: o.material } : { metal: o.metal ?? "sterling_silver_925" },
+    ...o.process !== void 0 ? { process: o.process } : {},
     shrinkage: o.shrinkage ?? "off",
+    ...o.limits !== void 0 ? { limits: o.limits } : {},
     units: PROGRAM_UNITS,
     program
   };
@@ -26606,7 +27006,7 @@ function renderPreview(items, views, opts) {
 
 // src/version.ts
 var ENGINE_NAME = "flo2-cad";
-var ENGINE_VERSION = "0.2.0";
+var ENGINE_VERSION = "0.3.0";
 var KERNEL_NAME = "manifold-3d";
 var KERNEL_VERSION = "3.5.4";
 
@@ -26626,17 +27026,10 @@ function canonicalJson(v) {
   return JSON.stringify(v);
 }
 var sha256 = (b) => createHash("sha256").update(b).digest("hex");
-var r2 = (x) => Math.round(x * 100) / 100;
-function limitsFor(metal) {
-  return { ...metal.limits, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown, lipMinOfCabochon: SETTING.lipMinOfCabochon };
+var r22 = (x) => Math.round(x * 100) / 100;
+function withSettingRules(L3) {
+  return { ...L3, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown, lipMinOfCabochon: SETTING.lipMinOfCabochon };
 }
-function cabochonLipFix(e) {
-  const m = /cabochon's ([\d.]+) mm dome \(at least ([\d.]+) mm for this stone/.exec(e.limit);
-  if (!m) return null;
-  const need = Number(m[2]);
-  return { dome: Number(m[1]), need, to: Math.ceil((need + 0.01) * 10) / 10 };
-}
-var cabochonLipWords = (e, c) => `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
 function stoneWords(v) {
   const h = v.head;
   if (!h) return "no stone (a plain band)";
@@ -26653,15 +27046,14 @@ function placeholderNote(v) {
   return `The stone's ${s.placeholder.join(", ")} ${s.placeholder.length === 1 ? "is a placeholder" : "are placeholders"} (${typical}). Give the measured ${s.shape === "round" ? "diameter and depth" : "length, width and depth"} from the stone's grading report.`;
 }
 function summary(tree, v = readPiece(tree)) {
-  const metal = METALS[v.metal];
   const band = `${v.ringSize.system} size ${v.ringSize.size} (inner diameter ${v.innerDiameterMm.toFixed(2)} mm), ${v.profile.replace("_", "-")} band ${v.bandWidthMm} mm wide and ${v.bandThicknessMm} mm thick`;
   const kind = !v.head ? "Plain band" : v.head.kind === "bezel" ? "Bezel solitaire" : "Solitaire ring";
   const extras = v.extras.length ? ` Plus ${v.extras.length} added shape(s): ${v.extras.map((e) => `"${e.id}"`).join(", ")}.` : "";
-  return `${kind} "${tree.name}", revision ${tree.revision}, in ${metal.name}: ${band}, ${stoneWords(v)}. Shrinkage allowance: ${tree.shrinkage}.${extras}`;
+  return `${kind} "${tree.name}", revision ${tree.revision}, in ${materialName(tree)}: ${band}, ${stoneWords(v)}. Shrinkage allowance: ${tree.shrinkage}.${extras}`;
 }
-var mm2 = (x) => `${r2(x).toFixed(2)} mm`;
+var mm2 = (x) => `${r22(x).toFixed(2)} mm`;
 function acrossText(a, shape) {
-  return shape === "round" ? mm2(a.lengthMm) : `${r2(a.lengthMm).toFixed(2)} \xD7 ${mm2(a.widthMm)}`;
+  return shape === "round" ? mm2(a.lengthMm) : `${r22(a.lengthMm).toFixed(2)} \xD7 ${mm2(a.widthMm)}`;
 }
 function dimensionLines(d) {
   const b = d.band;
@@ -26679,8 +27071,8 @@ function dimensionLines(d) {
   } else if (h.prongs) {
     const ps = h.prongs;
     lines.push(`- Seat: ${seat} at the girdle, cut for the ${stone} stone, so ${mm2(h.seat.clearanceMm)} clearance a side.`);
-    const same = new Set(ps.map((p) => `${r2(p.thicknessMm)}/${r2(p.narrowestMm)}`)).size === 1;
-    const reaches = [...new Set(ps.map((p) => r2(p.reachMm)))].sort((a, c) => a - c);
+    const same = new Set(ps.map((p) => `${r22(p.thicknessMm)}/${r22(p.narrowestMm)}`)).size === 1;
+    const reaches = [...new Set(ps.map((p) => r22(p.reachMm)))].sort((a, c) => a - c);
     const reach = reaches.length === 1 ? `each reaches ${mm2(reaches[0])} in over the girdle` : `they reach ${mm2(reaches[0])} to ${mm2(reaches[reaches.length - 1])} in over the girdle`;
     const each = same ? `${ps.length}, each ${mm2(ps[0].thicknessMm)} thick and ${mm2(ps[0].narrowestMm)} at its narrowest, where the seat is cut` : `${ps.length}, each narrowest where the seat is cut: ${ps.map((p) => `${p.label.split(" of ")[0]} at ${p.clock} is ${mm2(p.thicknessMm)} thick and ${mm2(p.narrowestMm)} at its narrowest`).join("; ")}`;
     lines.push(`- Prongs: ${each}; ${reach}. The head is ${acrossText(h.outside, h.shape)} across at its widest, at its rail.`);
@@ -26700,9 +27092,9 @@ async function preview(tree, views) {
   const t0 = performance.now();
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
   const v = built.view;
-  const items = [{ ...built.metal, kind: "metal", color: METAL_COLOR[v.metal] ?? [200, 200, 200] }];
+  const items = [{ ...built.metal, kind: "metal", color: METAL_COLOR[v.metal ?? ""] ?? [200, 200, 200] }];
   if (built.stone) items.push({ ...built.stone, kind: "stone", color: STONE_COLOR });
-  const head = `${tree.name} rev ${tree.revision} - ${METALS[v.metal].name} - ${v.ringSize.system} ${v.ringSize.size} (${v.innerDiameterMm.toFixed(2)} mm inside)`;
+  const head = `${tree.name} rev ${tree.revision} - ${materialName(tree)} - ${v.ringSize.system} ${v.ringSize.size} (${v.innerDiameterMm.toFixed(2)} mm inside)`;
   const s = v.head?.stone;
   const stoneLine = !v.head ? "plain band" : `${s.shape === "round" ? `${s.lengthMm} mm round` : `${s.lengthMm} x ${s.widthMm} mm emerald cut ${s.orientation.replace("_", "-")}`}, ${s.depthMm} mm deep, in a ${v.head.kind === "bezel" ? "full bezel" : `${v.head.prongCount}-prong head`}`;
   const warnings = [];
@@ -26715,7 +27107,7 @@ async function preview(tree, views) {
   });
   return { png, built, ms: performance.now() - t0 };
 }
-function suggestThicker(current, measured, limit) {
+function suggestThicker2(current, measured, limit) {
   return Math.ceil((current + (limit - measured) + 0.1) * 10) / 10;
 }
 function sheetNode(v, id) {
@@ -26738,80 +27130,55 @@ function roundingFor(n, across) {
   }
   return Math.ceil((across / 2 + 0.05) / narrowing * 20) / 20;
 }
-function fixFor(e, v, metal) {
+function fixFor(e, v, L3, material) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
-  const h = v.head;
+  if (isSettingCheck(e)) return treeSettingFix(e, v.head, L3);
   switch (e.id) {
-    case "prong": {
-      if (!h || h.kind !== "prong_head") return null;
-      const lines = (e.failing ?? []).map((f) => {
-        const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
-        const cur = h.prongThicknessMm[k - 1] ?? h.nominalProngMm;
-        return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm, where the seat for the stone is cut, and it needs ${metal.limits.prong.toFixed(1)} mm. Make that prong at least ${suggestThicker(cur, f.value, metal.limits.prong)} mm thick.`;
-      });
-      const all = (e.failing ?? []).length === h.prongCount;
-      const worst = Math.min(...(e.failing ?? []).map((f) => f.value));
-      const suggestion = suggestThicker(h.nominalProngMm, worst, metal.limits.prong);
-      return `${lines.join(" ")} ${all ? `Change: set {"prong_thickness": "${Math.max(suggestion, 1.4)} mm"}.` : `Change: set {"head.prong_overrides": []} to give every prong the head's prong_thickness, or set that prong's own thickness in "head.prong_overrides".`} A prong is joined at one end only, so it needs more metal than a wall.`;
-    }
     case "band":
-      return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${metal.limits.band.toFixed(1)} mm. Change: set {"band_thickness": "${Math.max(1.6, suggestThicker(v.bandThicknessMm, e.value ?? 0, metal.limits.band))} mm"}.`;
-    case "bezel_wall":
-      if (!h || h.kind !== "bezel") return null;
-      return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1, suggestThicker(h.wallMm, e.value ?? 0, metal.limits.wall))} mm"}.`;
-    case "bezel_lip": {
-      if (!h || h.kind !== "bezel") return null;
-      const cab = cabochonLipFix(e);
-      if (cab) return `${cabochonLipWords(e, cab)} Change: set {"bezel_lip": "${cab.to} mm"} (or "auto").`;
-      const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
-      const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
-      return (e.value ?? 0) < lo ? `Raise the bezel lip: it rises ${e.value} mm above the girdle, too little to be pushed over the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").` : `Lower the bezel lip: it rises ${e.value} mm above the girdle and would cover too much of the stone. Change: set {"bezel_lip": "${r2((lo + hi) / 2)} mm"} (or "auto").`;
-    }
+      return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${L3.band.toFixed(1)} mm. Change: set {"band_thickness": "${Math.max(1.6, suggestThicker2(v.bandThicknessMm, e.value ?? 0, L3.band))} mm"}.`;
     case "sheet": {
       const each = (e.failing ?? []).map((f) => {
         const cur = sheetThickness(v, f.label) ?? f.nominal ?? f.value;
-        return { f, cur, to: Math.max(1, suggestThicker(cur, f.value, metal.limits.wall)) };
+        return { f, cur, to: Math.max(1, suggestThicker2(cur, f.value, L3.wall)) };
       });
-      const lines = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${metal.limits.wall.toFixed(1)} mm.`);
+      const lines = each.map(({ f, cur }) => `Thicken the sheet "${f.label}": measured square to its surface it is ${f.value} mm (its thickness is set to ${cur} mm), and a wall needs ${L3.wall.toFixed(1)} mm.`);
       const set = each.map(({ f, to }) => `"${f.label}.thickness": "${to} mm"`).join(", ");
       return `${lines.join(" ")} Change: set {${set}}.`;
     }
-    case "prong_grip":
-      return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. Change: set {"head.prong_grip": "0.2 mm"}.`;
     case "wall": {
       const part = e.where?.feature ?? e.where?.part ?? "the piece";
-      if (/prong/.test(part) && h?.kind === "prong_head") return `Thicken ${part}: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise prong_thickness.`;
-      if (part === "bezel" && h?.kind === "bezel") return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${metal.limits.wall.toFixed(1)} mm. Raise bezel_wall.`;
-      if (e.where?.part === "band") return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${metal.limits.wall.toFixed(1)} mm. Raise band_thickness.`;
+      const setting = treeSettingWallFix(e, v.head, L3);
+      if (setting) return setting;
+      if (e.where?.part === "band") return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${L3.wall.toFixed(1)} mm. Raise band_thickness.`;
       if (e.where?.part === "sheet" && e.where.meets?.length) {
         const names = [part, ...e.where.meets].map((x) => `"${x}"`).join(" and ");
-        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is ${e.value} mm across, and a wall needs ${metal.limits.wall.toFixed(1)} mm. Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is ${e.value} mm across, and a wall needs ${L3.wall.toFixed(1)} mm. Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
       }
       if (e.where?.part === "sheet" && sheetNode(v, part)) {
-        const rc = roundingFor(sheetNode(v, part), metal.limits.wall);
-        return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${metal.limits.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(metal.limits.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
+        const rc = roundingFor(sheetNode(v, part), L3.wall);
+        return `The metal at the sheet "${part}" is only ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm, and a wall needs ${L3.wall.toFixed(1)} mm. The sheet itself is thick enough square to its surface, so the thin place is either a narrow part of its outline (a pointed tip or a thin neck: widen it, or set {"${part}.round_corners": "${rc} mm"}, which leaves no part of the sheet narrower than ${(L3.wall + 0.1).toFixed(1)} mm) or a thin wedge where it joins other metal (move it so it meets that metal squarely, or bury its edge deeper).`;
       }
       if (e.where?.part === "added shape") {
-        return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${metal.limits.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
+        return `Thicken the added shape ${quoteIds(part)}: a wall in it is ${e.value} mm at ${JSON.stringify(e.where.point_mm)} mm and needs ${L3.wall.toFixed(1)} mm. Change that shape's own settings ("<node id>.<setting>"); the thin metal lies outside the band's own section, so band_thickness does not reach it.`;
       }
-      return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${metal.limits.wall.toFixed(1)} mm.`;
+      return `Thicken the thinnest wall, ${e.value} mm at ${JSON.stringify(e.where?.point_mm)} mm, to at least ${L3.wall.toFixed(1)} mm.`;
     }
     case "detail":
       if (e.where?.part === "sheet" && e.where.feature && e.where.meets?.length) {
         const names = [e.where.feature, ...e.where.meets].map((x) => `"${x}"`).join(" and ");
-        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is only ${e.value} mm across (the finest detail must be ${metal.limits.detail} mm). Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
+        return `Where the sheets ${names} meet, at ${JSON.stringify(e.where.point_mm)} mm, the metal between them is only ${e.value} mm across (the finest detail must be ${L3.detail} mm). Move or turn them so they either stay apart there or overlap squarely, with no thin wedge between them.`;
       }
       if (e.where?.part === "sheet" && e.where.feature && sheetNode(v, e.where.feature)) {
-        return `The finest detail, ${e.value} mm across, is at the sheet "${e.where.feature}", at ${JSON.stringify(e.where.point_mm)} mm; it must be at least ${metal.limits.detail} mm. Widen or round that part of its outline (set {"${e.where.feature}.round_corners": "${roundingFor(sheetNode(v, e.where.feature), metal.limits.wall)} mm"}), or, if it is a wedge where the sheet joins other metal, move the sheet so it meets that metal squarely.`;
+        return `The finest detail, ${e.value} mm across, is at the sheet "${e.where.feature}", at ${JSON.stringify(e.where.point_mm)} mm; it must be at least ${L3.detail} mm. Widen or round that part of its outline (set {"${e.where.feature}.round_corners": "${roundingFor(sheetNode(v, e.where.feature), L3.wall)} mm"}), or, if it is a wedge where the sheet joins other metal, move the sheet so it meets that metal squarely.`;
       }
-      return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${metal.limits.detail} mm, or remove it.`;
+      return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${L3.detail} mm, or remove it.`;
     case "gap":
-      return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
+      return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
     case "watertight":
       return `The piece is not one closed solid (${e.measured}). Join any added shape to the ring, or remove it.`;
     case "surface_deviation":
-      return `The casting file's facets stand ${e.value} mm off the curved surface, over the ${metal.limits.surfaceDeviation} mm limit. This is an engine fault, not the design: report it.`;
+      return `The casting file's facets stand ${e.value} mm off the curved surface, over the ${L3.surfaceDeviation} mm limit. This is an engine fault, not the design: report it.`;
   }
   return null;
 }
@@ -26826,47 +27193,118 @@ function couldNotRun(msg) {
     method: "the piece could not be built, so the check could not run"
   }));
 }
+function sizeOf(lo, hi, scale2) {
+  const boxMm = [0, 1, 2].map((k) => (hi[k] - lo[k]) / scale2);
+  return { boxMm, largestMm: Math.max(...boxMm) };
+}
+function materialReport(cast) {
+  const m = metalOf(cast);
+  return m ? { id: m.id, name: m.name, density_g_cm3: m.density, casting_note: m.castingNote } : { id: null, name: materialName(cast), density_g_cm3: null, casting_note: null };
+}
+var sizeReport = (size) => size ? { largest_mm: r22(size.largestMm), bounding_box_mm: size.boxMm.map(r22), measured: "the largest side of the piece's bounding box, as finished (the casting file before any shrinkage allowance)" } : { largest_mm: null, measured: "not measured: the piece could not be built" };
+function limitsReport(choice, cast, size) {
+  const p = processOf(cast);
+  const process3 = { id: p.id, stated: p.stated, words: p.words };
+  const material = { id: cast.metal ?? null, name: materialName(cast) };
+  if (choice.kind === "profile") {
+    const pm = choice.profile.materials[choice.metal];
+    return {
+      limits: { ...withSettingRules(choice.limits), units: "mm", sources: [...choice.sources, ...SETTING.sources] },
+      limits_from: {
+        kind: "profile",
+        profile: choice.profile.id,
+        name: choice.profile.name,
+        material,
+        process: process3,
+        size: { ...sizeReport(size), range_mm: [choice.profile.size.minMm.value, choice.profile.size.maxMm.value], range_sources: [choice.profile.size.minMm.source, choice.profile.size.maxMm.source] },
+        each: { ...Object.fromEntries(LIMIT_KEYS.map((k) => [k, { mm: pm.limits[k].value, source: pm.limits[k].source }])), shrinkage: { percent: pm.shrinkagePct.value, source: pm.shrinkagePct.source } }
+      }
+    };
+  }
+  if (choice.kind === "supplied") {
+    return {
+      limits: { ...withSettingRules(choice.limits), units: "mm", sources: [...suppliedSources(choice.supplied), ...SETTING.sources] },
+      limits_from: { kind: "supplied", by: "the person", name: "limits supplied with the piece", material, process: process3, size: sizeReport(size), each: choice.supplied.each }
+    };
+  }
+  const words = noVerdictWords(cast, size, choice.matches);
+  return {
+    limits: null,
+    limits_from: {
+      kind: "none",
+      material,
+      process: process3,
+      size: sizeReport(size),
+      unmatched: choice.matches.map((m) => ({ profile: m.profile.id, name: m.profile.name, did_not_match: unmatched(m) })),
+      why: words.why,
+      how_to_go_on: words.howToGoOn
+    }
+  };
+}
+function limitsLine(r, cast) {
+  const size = r.size ? `${r22(r.size.largestMm)} mm at its largest` : "its size not measured (the piece could not be built)";
+  if (r.choice.kind === "profile") {
+    const p = r.choice.profile;
+    return `Limits: the limit profile "${p.name}" covers this piece: ${materialName(cast)}, cast by ${processWords(cast)}, ${size} (the profile covers ${p.size.minMm.value} to ${p.size.maxMm.value} mm). Each limit's source is in the report.`;
+  }
+  if (r.choice.kind === "supplied") {
+    return `Limits: the person's own, supplied with the piece and used in place of any profile's: ${suppliedWords(r.choice.supplied)}. The piece is ${materialName(cast)}, cast by ${processWords(cast)}, ${size}.`;
+  }
+  return `Limits: none. ${materialName(cast)}, cast by ${processWords(cast)}, ${size}: no limit profile covers it, and it carries no limits of its own.`;
+}
+function limitsTag(choice) {
+  return choice.kind === "profile" ? `, from the limit profile "${choice.profile.name}"` : choice.kind === "supplied" ? ", against the limits supplied with the piece" : "";
+}
 async function checkPiece(piece, mode, limits = programLimits()) {
   if (isProgramPiece(piece)) return checkProgram(piece, mode, limits);
   const tree = piece;
   const t0 = performance.now();
   const v = readPiece(tree);
-  const metal = METALS[v.metal];
+  const metal = metalOf(tree);
   let built = null;
   let stl = null;
-  let entries;
+  let entries = [];
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
+  let size = null;
+  let choice = chooseLimits(tree, null);
   try {
     const meshes = /* @__PURE__ */ new Map();
     built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false } });
     tBuild = performance.now() - t0;
-    const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : "off";
-    stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${v.metal} mm shrinkage ${shrink}`);
-    const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
-    const refStl = writeBinaryStl(ref.metal, "flo2-cad reference");
-    tBuild = performance.now() - t0;
-    const run = runChecks(stl, built.decl, limitsFor(metal), refStl);
-    entries = run.entries;
-    meshInfo = run.mesh;
-    tCheck = run.ms;
+    size = sizeOf(built.bbox.min, built.bbox.max, 1 + v.shrinkagePct / 100);
+    choice = chooseLimits(tree, size.largestMm);
+    if (choice.kind !== "none") {
+      const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : "off";
+      stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${tree.metal ?? tree.material} mm shrinkage ${shrink}`);
+      const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
+      const refStl = writeBinaryStl(ref.metal, "flo2-cad reference");
+      tBuild = performance.now() - t0;
+      const run = runChecks(stl, built.decl, choice.limits, refStl, [JEWELRY_CHECKS]);
+      entries = run.entries;
+      meshInfo = run.mesh;
+      tCheck = run.ms;
+    }
   } catch (err) {
     entries = couldNotRun(`the piece could not be built: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const withFix = entries.map((e) => ({ ...e, fix: fixFor(e, v, metal) }));
-  const failingProngs = new Set((withFix.find((e) => e.id === "prong" && e.result === "fail")?.failing ?? []).map((f) => f.label));
-  const bezelFails = withFix.some((e) => e.id === "bezel_wall" && e.result === "fail");
+  const L3 = choice.kind === "none" ? null : choice.limits;
+  const name = materialName(tree);
+  const withFix = L3 ? entries.map((e) => ({ ...e, fix: fixFor(e, v, L3, name) })) : [];
+  const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
   for (const e of withFix) {
     if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
       const f = e.where?.feature;
-      if (f && failingProngs.has(f) || f === "bezel" && bezelFails || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
+      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
     }
   }
-  const verdict = withFix.every((e) => e.result === "pass") ? "pass" : "fail";
+  const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
   const shrinkApplied = v.shrinkagePct > 0;
   const s = v.head?.stone;
+  const volumeMm3 = L3 ? meshInfo.volumeMm3 : built?.volumeMm3 ?? 0;
+  const lim = limitsReport(choice, tree, size);
   const report = {
     format: "flo2-cad.check-report/1",
     piece: tree.name,
@@ -26874,7 +27312,7 @@ async function checkPiece(piece, mode, limits = programLimits()) {
     tree_sha256: sha256(canonicalJson(tree)),
     verdict,
     export: mode === "check" ? "not_requested" : verdict === "pass" ? "released" : "refused",
-    metal: { id: metal.id, name: metal.name, density_g_cm3: metal.density, casting_note: metal.castingNote },
+    metal: materialReport(tree),
     stl: stl ? { file: `${tree.name}.stl`, sha256: sha256(stl), bytes: stl.length, triangles: meshInfo.triangles, units: "mm" } : null,
     shrinkage: { applied: shrinkApplied, allowance: shrinkApplied ? `${v.shrinkagePct} %` : "off" },
     stone: s ? {
@@ -26885,10 +27323,11 @@ async function checkPiece(piece, mode, limits = programLimits()) {
       carat_for_reference: s.carat ?? null,
       placeholder: s.placeholder
     } : null,
-    volume_mm3: r2(meshInfo.volumeMm3),
-    weight_g: r2(meshInfo.volumeMm3 / 1e3 * metal.density),
+    volume_mm3: r22(volumeMm3),
+    weight_g: metal ? r22(volumeMm3 / 1e3 * metal.density) : null,
     checks: withFix,
-    limits: { ...limitsFor(metal), units: "mm", sources: [...metal.sources, ...SETTING.sources] },
+    limits: lim.limits,
+    limits_from: lim.limits_from,
     engine: { name: ENGINE_NAME, version: ENGINE_VERSION },
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
@@ -26898,16 +27337,16 @@ async function checkPiece(piece, mode, limits = programLimits()) {
     threeMf = write3mf(built.metal, {
       Title: tree.name,
       Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${tree.revision}; ${metal.name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : "not applied"}; stone not included`
+      Description: `revision ${tree.revision}; ${name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : "not applied"}; stone not included${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`
     });
   }
-  return { verdict, report, entries: withFix, fixes, stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
 async function describeNumbers(tree) {
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
-  const size = [0, 1, 2].map((k) => r2(built.bbox.max[k] - built.bbox.min[k]));
-  const weights = Object.values(METALS).map((m) => ({ metal: m.name, grams: r2(built.volumeMm3 / 1e3 * m.density) }));
-  return { volumeMm3: r2(built.volumeMm3), size, weights, dims: built.dims };
+  const size = [0, 1, 2].map((k) => r22(built.bbox.max[k] - built.bbox.min[k]));
+  const weights = Object.values(METALS).map((m) => ({ metal: m.name, grams: r22(built.volumeMm3 / 1e3 * m.density) }));
+  return { volumeMm3: r22(built.volumeMm3), size, weights, dims: built.dims };
 }
 async function evaluateProgram(p, limits = programLimits()) {
   const r = await runProgram(p.program, [{ tol: PREVIEW_TOL, scale: 1, wantStone: true }], limits);
@@ -26922,20 +27361,28 @@ function meshVolume(m) {
   }
   return v / 6;
 }
+function meshBounds(m, scale2) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < m.positions.length; i += 3) for (let k = 0; k < 3; k++) {
+    lo[k] = Math.min(lo[k], m.positions[i + k]);
+    hi[k] = Math.max(hi[k], m.positions[i + k]);
+  }
+  return m.positions.length ? sizeOf(lo, hi, scale2) : { boxMm: [0, 0, 0], largestMm: 0 };
+}
 function meshSize(m) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < m.positions.length; i += 3) for (let k = 0; k < 3; k++) {
     lo[k] = Math.min(lo[k], m.positions[i + k]);
     hi[k] = Math.max(hi[k], m.positions[i + k]);
   }
-  return [0, 1, 2].map((k) => m.positions.length ? r2(hi[k] - lo[k]) : 0);
+  return [0, 1, 2].map((k) => m.positions.length ? r22(hi[k] - lo[k]) : 0);
 }
 var NO_BAND = { innerDiameterMm: 0, outerDiameterMm: 0, widthMm: 0, thicknessMm: 0 };
 function stoneOfPart(part) {
   const s = part.head.stone;
   const named = part.stone.name ? ` ("${part.stone.name}")` : "";
   const own2 = part.stone.kind === "cabochon" ? ` cabochon${named}` : part.stone.shape === "custom" ? ` stone of its own shape${named}` : part.stone.shape === "round" ? " round brilliant" : " emerald cut";
-  return `${part.stone.shape === "round" ? `${mm2(s.lengthMm)}` : `${r2(s.lengthMm).toFixed(2)} \xD7 ${mm2(s.widthMm)}`}${own2}, ${mm2(s.depthMm)} deep`;
+  return `${part.stone.shape === "round" ? `${mm2(s.lengthMm)}` : `${r22(s.lengthMm).toFixed(2)} \xD7 ${mm2(s.widthMm)}`}${own2}, ${mm2(s.depthMm)} deep`;
 }
 function programPartsWords(parts) {
   const words = parts.map((part) => {
@@ -26947,7 +27394,7 @@ function programPartsWords(parts) {
 }
 function programSummary(p, view) {
   const parts = view?.run.parts;
-  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${METALS[p.metal].name}${parts ? `: ${programPartsWords(parts)}` : ""}. Shrinkage allowance: ${p.shrinkage}.`;
+  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${materialName(p)}${parts ? `: ${programPartsWords(parts)}` : ""}. Shrinkage allowance: ${p.shrinkage}.`;
 }
 function programDimensionLines(parts) {
   const out = [];
@@ -26966,13 +27413,13 @@ function programSeatLines(parts) {
 }
 async function previewProgram(p, views, view, limits = programLimits()) {
   const v = view ?? await evaluateProgram(p, limits);
-  const items = [{ positions: v.run.metal.positions, triangles: v.run.metal.triangles, kind: "metal", color: METAL_COLOR[p.metal] ?? [200, 200, 200] }];
+  const items = [{ positions: v.run.metal.positions, triangles: v.run.metal.triangles, kind: "metal", color: METAL_COLOR[p.metal ?? ""] ?? [200, 200, 200] }];
   if (v.run.stone) items.push({ positions: v.run.stone.positions, triangles: v.run.stone.triangles, kind: "stone", color: STONE_COLOR });
   const parts = v.run.parts ?? [];
   const shank = parts.find((x) => x.call === "ringShank");
   const setting = parts.some((x) => x.call !== "ringShank");
   const png = renderPreview(items, views, {
-    header: [`${p.name} rev ${p.revision} - ${METALS[p.metal].name} - written as a program`, parts.length ? programPartsWords(parts).replace(/×/g, "x") : "shapes of its own"],
+    header: [`${p.name} rev ${p.revision} - ${materialName(p)} - written as a program`, parts.length ? programPartsWords(parts).replace(/×/g, "x") : "shapes of its own"],
     warnings: [],
     focusAboveZ: shank && setting ? shank.band.outerDiameterMm / 2 - 1.2 : void 0
   });
@@ -26980,66 +27427,50 @@ async function previewProgram(p, views, view, limits = programLimits()) {
 }
 async function describeProgram(p, view) {
   const volumeMm3 = meshVolume(view.run.metal);
-  return { volumeMm3: r2(volumeMm3), size: meshSize(view.run.metal), weights: Object.values(METALS).map((m) => ({ metal: m.name, grams: r2(volumeMm3 / 1e3 * m.density) })) };
+  return { volumeMm3: r22(volumeMm3), size: meshSize(view.run.metal), weights: Object.values(METALS).map((m) => ({ metal: m.name, grams: r22(volumeMm3 / 1e3 * m.density) })) };
 }
-function programFixFor(e, metal, parts) {
+function programFixFor(e, L3, material, parts) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   const head = parts.find((x) => x.call !== "ringShank");
+  if (isSettingCheck(e)) return programSettingFix(e, head?.head, L3);
   const shank = parts.find((x) => x.call === "ringShank");
   const at2 = (p) => p ? ` at ${JSON.stringify(p)} mm` : "";
   switch (e.id) {
-    case "prong": {
-      const lines = (e.failing ?? []).map((f) => {
-        const k = Number(/prong (\d+)/.exec(f.label)?.[1] ?? 0);
-        const cur = head?.head.prongs?.[k - 1]?.thicknessMm ?? metal.limits.prong;
-        return `Thicken ${f.label} at ${f.where.clock}: its narrowest section is ${f.value} mm and it needs ${metal.limits.prong.toFixed(1)} mm; make it at least ${suggestThicker(cur, f.value, metal.limits.prong)} mm thick.`;
-      });
-      return `${lines.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
-    }
     case "band":
-      return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${metal.limits.band.toFixed(1)} mm. In the program, set band_thickness in its ringShank call to at least ${Math.max(1.6, suggestThicker(shank?.band.thicknessMm ?? metal.limits.band, e.value ?? 0, metal.limits.band))} mm.`;
-    case "bezel_wall":
-      return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1, suggestThicker(head?.head.bezel?.wallMm ?? metal.limits.wall, e.value ?? 0, metal.limits.wall))} mm.`;
-    case "bezel_lip": {
-      const cab = cabochonLipFix(e);
-      if (cab) return `${cabochonLipWords(e, cab)} In the program, set lip in its bezel call to ${cab.to} mm or more (or "auto").`;
-      const m = /\(([\d.]+) mm to ([\d.]+) mm/.exec(e.limit);
-      const lo = Number(m?.[1] ?? 0), hi = Number(m?.[2] ?? 0);
-      return `${(e.value ?? 0) < lo ? "Raise" : "Lower"} the bezel lip: it rises ${e.value} mm above the girdle. In the program, set lip in its bezel call to ${r2((lo + hi) / 2)} mm (or "auto").`;
-    }
+      return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${L3.band.toFixed(1)} mm. In the program, set band_thickness in its ringShank call to at least ${Math.max(1.6, suggestThicker2(shank?.band.thicknessMm ?? L3.band, e.value ?? 0, L3.band))} mm.`;
     case "sheet":
-      return `${(e.failing ?? []).map((f) => `The sheet "${f.label}" is ${f.value} mm measured square to its surface; a wall needs ${metal.limits.wall.toFixed(1)} mm. In the program, set thickness in the thicken call named "${f.label}" to at least ${Math.max(1, suggestThicker(f.nominal ?? f.value, f.value, metal.limits.wall))} mm.`).join(" ")}`;
-    case "prong_grip":
-      return `${(e.failing ?? []).map((f) => `${f.label} at ${f.where.clock} reaches only ${f.value} mm over the girdle`).join("; ")}; each must reach ${SETTING.gripMin} mm to hold the stone. In the program, set prong_grip in its prongHead call to 0.2 mm or more.`;
+      return `${(e.failing ?? []).map((f) => `The sheet "${f.label}" is ${f.value} mm measured square to its surface; a wall needs ${L3.wall.toFixed(1)} mm. In the program, set thickness in the thicken call named "${f.label}" to at least ${Math.max(1, suggestThicker2(f.nominal ?? f.value, f.value, L3.wall))} mm.`).join(" ")}`;
     case "wall":
     case "detail": {
-      const limit = e.id === "wall" ? metal.limits.wall : metal.limits.detail;
+      const limit = e.id === "wall" ? L3.wall : L3.detail;
       const where = e.where?.part === "added shape" ? ` in the shape named ${quoteIds(e.where.feature)}` : e.where?.part === "sheet" ? ` on the sheet "${e.where.feature}"` : e.where?.part === "band" ? " in the band" : e.where?.part === "head" ? ` in the setting (${e.where.feature})` : "";
       return `The metal${where} is only ${e.value} mm${at2(e.where?.point_mm)}, and ${e.id === "wall" ? "a wall" : "the finest detail"} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
     }
     case "gap":
-      return `Two surfaces are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${metal.limits.gap} mm in ${metal.name}, or close it completely.`;
+      return `Two surfaces are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
     case "watertight":
       return `The piece is not one closed solid (${e.measured}). Join every shape to the rest (union them so they overlap), or remove the loose one.`;
     case "surface_deviation":
-      return `The casting file's facets stand ${e.value} mm off the program's finer surface, over the ${metal.limits.surfaceDeviation} mm limit. Draw curves the program computes itself with segments(radius) points a circle, so a finer build makes a finer curve.`;
+      return `The casting file's facets stand ${e.value} mm off the program's finer surface, over the ${L3.surfaceDeviation} mm limit. Draw curves the program computes itself with segments(radius) points a circle, so a finer build makes a finer curve.`;
   }
   return null;
 }
 async function checkProgram(p, mode, limits) {
   const t0 = performance.now();
-  const metal = METALS[p.metal];
-  const pct = shrinkagePercent(p.shrinkage, p.metal, "tree.shrinkage");
+  const metal = metalOf(p);
+  const pct = shrinkagePercent(p.shrinkage, p, "tree.shrinkage");
   const scale2 = 1 + pct / 100;
   let stl = null;
   let mesh = null;
   let decl;
   let parts = [];
-  let entries;
+  let entries = [];
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
   let evaluated = null;
+  let size = null;
+  let choice = chooseLimits(p, null);
   try {
     const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale: scale2, blendSurface: true }, { tol: REFERENCE_TOL, scale: scale2, reuseBlends: true, positionsOnly: true }], limits);
     tBuild = performance.now() - t0;
@@ -27048,33 +27479,40 @@ async function checkProgram(p, mode, limits) {
     mesh = exp.metal;
     decl = exp.decl;
     parts = exp.parts ?? [];
-    stl = writeBinaryStl(mesh, `${ENGINE_NAME} ${ENGINE_VERSION} ${p.name} r${p.revision} ${p.metal} mm shrinkage ${pct > 0 ? `${pct}%` : "off"} program`);
-    const problems = declarationProblems(mesh, decl);
-    if (problems.length) {
-      entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(" ")}`);
-    } else {
-      const run = runChecks(stl, decl, limitsFor(metal), { positions: r.runs[1].metal.positions });
-      entries = run.entries;
-      meshInfo = run.mesh;
-      tCheck = run.ms;
+    size = meshBounds(mesh, scale2);
+    choice = chooseLimits(p, size.largestMm);
+    if (choice.kind !== "none") {
+      stl = writeBinaryStl(mesh, `${ENGINE_NAME} ${ENGINE_VERSION} ${p.name} r${p.revision} ${p.metal ?? p.material} mm shrinkage ${pct > 0 ? `${pct}%` : "off"} program`);
+      const problems = declarationProblems(mesh, decl);
+      if (problems.length) {
+        entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(" ")}`);
+      } else {
+        const run = runChecks(stl, decl, choice.limits, { positions: r.runs[1].metal.positions }, [JEWELRY_CHECKS]);
+        entries = run.entries;
+        meshInfo = run.mesh;
+        tCheck = run.ms;
+      }
     }
   } catch (err) {
     entries = couldNotRun(err instanceof ProgramFailed ? `the program could not run: ${err.plain}` : `the piece could not be built: ${err instanceof Error ? err.message : String(err)}`);
   }
-  const withFix = entries.map((e) => ({ ...e, fix: programFixFor(e, metal, parts) }));
-  const failingProngs = new Set((withFix.find((e) => e.id === "prong" && e.result === "fail")?.failing ?? []).map((f) => f.label));
-  const bezelFails = withFix.some((e) => e.id === "bezel_wall" && e.result === "fail");
+  const L3 = choice.kind === "none" ? null : choice.limits;
+  const name = materialName(p);
+  const withFix = L3 ? entries.map((e) => ({ ...e, fix: programFixFor(e, L3, name, parts) })) : [];
+  const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
   for (const e of withFix) {
     if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
       const f = e.where?.feature;
-      if (f && failingProngs.has(f) || f === "bezel" && bezelFails || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
+      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
     }
   }
-  const verdict = withFix.every((e) => e.result === "pass") ? "pass" : "fail";
+  const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
   const headPart = parts.find((x) => x.call !== "ringShank");
   const hs = headPart?.head.stone;
+  const volumeMm3 = L3 ? meshInfo.volumeMm3 : mesh ? meshVolume(mesh) : 0;
+  const lim = limitsReport(choice, p, size);
   const report = {
     format: "flo2-cad.check-report/1",
     piece: p.name,
@@ -27083,7 +27521,7 @@ async function checkProgram(p, mode, limits) {
     program: { sha256: sha256(p.program), lines: p.program.split("\n").length, evaluated: evaluated ?? "did not run" },
     verdict,
     export: mode === "check" ? "not_requested" : verdict === "pass" ? "released" : "refused",
-    metal: { id: metal.id, name: metal.name, density_g_cm3: metal.density, casting_note: metal.castingNote },
+    metal: materialReport(p),
     stl: stl ? { file: `${p.name}.stl`, sha256: sha256(stl), bytes: stl.length, triangles: meshInfo.triangles, units: "mm" } : null,
     shrinkage: { applied: pct > 0, allowance: pct > 0 ? `${pct} %` : "off" },
     stone: headPart && hs ? {
@@ -27094,10 +27532,11 @@ async function checkProgram(p, mode, limits) {
       carat_for_reference: null,
       placeholder: []
     } : null,
-    volume_mm3: r2(meshInfo.volumeMm3),
-    weight_g: r2(meshInfo.volumeMm3 / 1e3 * metal.density),
+    volume_mm3: r22(volumeMm3),
+    weight_g: metal ? r22(volumeMm3 / 1e3 * metal.density) : null,
     checks: withFix,
-    limits: { ...limitsFor(metal), units: "mm", sources: [...metal.sources, ...SETTING.sources] },
+    limits: lim.limits,
+    limits_from: lim.limits_from,
     engine: { name: ENGINE_NAME, version: ENGINE_VERSION },
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
@@ -27107,10 +27546,10 @@ async function checkProgram(p, mode, limits) {
     threeMf = write3mf(mesh, {
       Title: p.name,
       Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${p.revision}; ${metal.name}; shrinkage ${pct > 0 ? `${pct} % applied` : "not applied"}; stone not included; written as a program`
+      Description: `revision ${p.revision}; ${name}; shrinkage ${pct > 0 ? `${pct} % applied` : "not applied"}; stone not included; written as a program${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`
     });
   }
-  return { verdict, report, entries: withFix, fixes, stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
 
 // src/program/guide.ts
@@ -27268,8 +27707,31 @@ function paramSchema(p) {
       return { type: "string", description, examples: ["2.00 ct"] };
     case "lip":
       return { type: "string", description: `${description} Write a height with its unit, e.g. "0.7 mm", or "auto".`, examples: ["auto", "0.7 mm"] };
+    case "material":
+      return { type: "string", description, examples: ["bronze"] };
+    case "process":
+      return { type: ["string", "null"], description, examples: ["lost_wax", "sand casting"] };
+    case "limits":
+      return { type: ["object", "null"], description, required: [...SUPPLIED_KEYS_ALL], additionalProperties: false, properties: SUPPLIED_PROPERTIES };
   }
 }
+var SUPPLIED_KEYS_ALL = [...SUPPLIED_FIELDS.map((f) => f.key), "shrinkage"];
+function suppliedEntry(help, example) {
+  return {
+    type: "object",
+    description: `${help}, with its source.`,
+    required: ["value", "source"],
+    additionalProperties: false,
+    properties: {
+      value: { type: "string", description: `The figure with its unit, e.g. "${example}".`, examples: [example] },
+      source: { type: "string", description: "Where the figure comes from: the caster's or foundry's word (with its date), or a datasheet." }
+    }
+  };
+}
+var SUPPLIED_PROPERTIES = {
+  ...Object.fromEntries(SUPPLIED_FIELDS.map((f) => [f.key, suppliedEntry(f.help.replace(/^./, (c) => c.toUpperCase()), f.key === "surface_deviation" ? "0.01 mm" : "1.0 mm")])),
+  shrinkage: suppliedEntry('The linear shrinkage allowance, which shrinkage "on" applies', "1.5 %")
+};
 var PIECE_PROPERTIES = Object.fromEntries(PARAMS.map((p) => [p.key, paramSchema(p)]));
 var TREE = {
   type: "object",
@@ -27280,8 +27742,11 @@ var TREE = {
     name: { type: "string" },
     revision: { type: "integer", minimum: 1 },
     template: { type: "string", enum: [...TEMPLATES], description: "A tree only: the template it was started from." },
-    metal: { type: "string" },
+    metal: { type: "string", description: 'One of the four metals by its id; or, instead, "material".' },
+    material: { type: "string", description: 'Any other material, by name (e.g. "bronze"), in place of "metal".' },
+    process: { type: "string", description: 'How it will be cast: "lost_wax", or another process in words. Absent, lost wax is assumed.' },
     shrinkage: { type: "string" },
+    limits: { type: "object", description: "Limits the person supplied, each with its source, kept in the piece's file." },
     root: {
       type: "object",
       description: 'A tree only. The top node: {"id", "op" or "part", "feature", "params", "children"}. describe_piece lists the parts and every operation with its settings, among them "thicken", which gives a petal or leaf outline laid on a curved surface a stated thickness.'
@@ -27314,15 +27779,16 @@ var TOOLS = [
     name: "start_piece",
     title: "Start a piece",
     description: [
-      'Start a new piece of jewelry from a ready-made design, sized to the wearer, or from a program you write (pass "program" instead of "template": any shape at all, see below).',
+      'Start a new cast piece: a piece of jewelry from a ready-made design, sized to the wearer, or any piece from a program you write (pass "program" instead of "template": any shape at all, see below).',
       `"solitaire_ring" is a band with one round stone in a 4- or 6-prong head; "plain_band" is the band alone; "emerald_bezel_solitaire" is Emily's design: an emerald-cut stone in a full platinum 950 bezel, set east-west, on a plain round band.`,
       "The head (prong_head or bezel), the stone (round or emerald cut), the metal (silver, 14k or 18k gold, platinum 950) and every size are settings, so any template can become any of these.",
+      `Say what it will be cast in and how: "metal" for one of those four, or "material" for anything else (e.g. "bronze"); "process" for how it is cast ("lost_wax", or another in words; left out, lost wax is assumed). The casting limits follow the material, the process and the piece's size: the four metals by lost wax up to 88 mm at the largest are the jewelry profile. For anything else, give the caster's or foundry's limits as "limits", each with its source, or the check will give no verdict.`,
       "Size the stone from its MEASURED dimensions on its grading report (length, width and depth in mm, or diameter and depth for a round), never from a carat chart. Until you give them, the stone's size is a placeholder and the replies and picture say so.",
       "Only the template and the ring size are needed; everything you leave out gets a safe default that sits comfortably above the casting limits.",
       'Every measurement is in millimetres and must be written with its unit ("1.6 mm"). A ring size must name its system: US, UK or EU.',
       "Returns a picture of the piece, a plain-language summary, and the piece's tree: its saved recipe, kept as <name>.tree.json.",
       "Starting a piece replaces the one open in this conversation (the old one is still saved).",
-      'Give EITHER "template" with "ring_size" (and any settings), OR "program" (with "name", "metal" and "shrinkage" if you like; the program sets everything else).'
+      'Give EITHER "template" with "ring_size" (and any settings), OR "program" (with "name", "metal" or "material", "process", "shrinkage" and "limits" if you like; the program sets everything else).'
     ].join(" "),
     inputSchema: {
       type: "object",
@@ -27344,11 +27810,11 @@ var TOOLS = [
     name: "change_piece",
     title: "Change the piece",
     description: [
-      "Change the piece: resize it, give the stone's measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band or the metal, turn the stone east-west or north-south, rename it, make it a plain band, or set a shrinkage allowance.",
+      `Change the piece: resize it, give the stone's measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band, the metal or material, or the process, turn the stone east-west or north-south, rename it, make it a plain band, set a shrinkage allowance, or give the caster's own limits with their sources ("limits").`,
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
       'Or pass a whole edited `tree`, with or without `set`. That is how you add shapes of your own: add operation nodes to the root\'s children, such as a cupped or curled petal or leaf ("thicken"), a wire ("sweep") or a fillet ("smooth_union"); describe_piece lists every operation and its settings. Then "<id>.<setting>" in `set` reaches any of them, e.g. {"petal_1.thickness": "1.0 mm"}.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
-      'Or pass "program": the whole piece written as a program, for any shape the settings and operations cannot make. A template piece then goes on as a program (describe_piece shows it written as one), and a piece already written as a program takes its next version this way; its set takes only name, metal and shrinkage.',
+      'Or pass "program": the whole piece written as a program, for any shape the settings and operations cannot make. A template piece then goes on as a program (describe_piece shows it written as one), and a piece already written as a program takes its next version this way; its set takes only name, metal, material, process, shrinkage and limits.',
       "Returns the new picture, what changed, and the updated tree; the piece's revision number goes up by one."
     ].join(" "),
     inputSchema: {
@@ -27402,9 +27868,11 @@ var TOOLS = [
     title: "Check it will cast",
     description: [
       "Check whether the piece will print and cast, without exporting it.",
-      `It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece's metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of a faceted stone's crown, or rising at least a third of a declared cabochon's dome; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.`,
+      'Its limits follow its material, its process and its size (the largest side of its bounding box). They come from a named limit profile, each limit cited: the first is "precious metals cast by lost wax, at jewelry scale" (sterling silver 925, 14k and 18k yellow gold, platinum 950; lost wax from a printed castable resin or a carved wax; 2.4 to 88 mm at the largest). Or they are the limits the person supplied with the piece, each with its source, and the reply names them as theirs.',
+      `It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every limit: one watertight solid; walls (0.8 mm in the jewelry profile); a ring band (1.0 mm); each prong at its narrowest (1.0 mm); a bezel rim (0.8 mm), with a lip covering 50-75 % of a faceted stone's crown, or rising at least a third of a declared cabochon's dome; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details (0.35 mm); gaps (0.3 mm, 0.8 mm in platinum); the surface within 0.01 mm of the intended shape. The stone and setting checks apply only to a piece with a stone or a setting.`,
       "Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.",
-      "A failed check is a normal answer, not an error: tell the person what to change."
+      "When no profile covers the piece's material, process and size together and it carries no limits of its own (a bronze sculpture, a 300 mm silver bowl), the answer is NO VERDICT: it says which did not match and how to go on, and never judges with another profile's numbers.",
+      "A failed check, or no verdict, is a normal answer, not an error: tell the person what to change."
     ].join(" "),
     inputSchema: { type: "object", additionalProperties: false, properties: { tree: TREE } },
     annotations: annotations("check_piece", "Check it will cast")
@@ -27414,7 +27882,7 @@ var TOOLS = [
     title: "Make the casting files",
     description: [
       "Make the files to send to a printer or caster: <name>.stl (binary STL, millimetres) with <name>.3mf beside it, and <name>.check.json, the check report the caster reads.",
-      "The files are released ONLY if every casting check passes on the file as written. Otherwise nothing is exported, and the reply says what to thicken and where; that is a normal answer, not an error, so tell the person and offer the change.",
+      "The files are released ONLY if every casting check passes on the file as written, against the piece's limits (its profile's, or the ones supplied with it, which the report then names as the person's). Otherwise nothing is exported, and the reply says what to thicken and where, or that there is no verdict and how to go on; that is a normal answer, not an error, so tell the person and offer the change.",
       "The stone is never in the casting files. The report says whether a shrinkage allowance was applied. A platinum piece goes to a SPECIALIST platinum caster (it is cast at about 1850-2200 \xB0C), and the reply says so."
     ].join(" "),
     inputSchema: { type: "object", additionalProperties: false, properties: { tree: TREE } },
@@ -27424,7 +27892,7 @@ var TOOLS = [
     name: "describe_piece",
     title: "Describe the piece",
     description: [
-      "Read back what the piece is now, in a jeweler's terms: the ring size (with its system and the inner diameter in mm), the band's width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.",
+      "Read back what the piece is now, in a maker's terms: the ring size (with its system and the inner diameter in mm), the band's width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal or material and the casting limits it is held to (its limit profile, or the limits supplied with it, or that there are none), the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.",
       "It also gives the dimensions the piece is built to, in mm, each the figure the engine itself uses: the band's inner and outer diameter, width and thickness; the stone's seat (its size across at the girdle and the clearance a side); a bezel's wall, its outside size, the lip height it works out, and how far it stands above the band; each prong's thickness, its narrowest section where the seat is cut, and how far it reaches over the girdle; and the room under the stone's point. Work a fit, a weight or a cost from these, never from an assumed size.",
       "Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece's tree. It also lists what a program can call, and shows a template piece written as a program, ready to change. For a piece written as a program, it gives the dimensions each library part in it was built to.",
       "Changes nothing and makes no files."
@@ -27435,13 +27903,35 @@ var TOOLS = [
 ];
 
 // src/session.ts
-var PROGRAM_PIECE_SETTINGS = ["name", "metal", "shrinkage"];
+var PROGRAM_PIECE_SETTINGS = ["name", "metal", "material", "process", "shrinkage", "limits"];
+var BOTH = 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.';
+function castingLimitsTexts(cast, box) {
+  const size = { boxMm: box, largestMm: Math.max(...box) };
+  const choice = chooseLimits(cast, size.largestMm);
+  if (choice.kind === "none") {
+    const w = noVerdictWords(cast, size, choice.matches);
+    return [`There are no cited casting limits for this piece's material, process and size together, so check_piece gives no verdict for it and export_for_casting releases nothing. ${w.why.join(" ")} How to go on: ${w.howToGoOn.join(" ")}`];
+  }
+  const L3 = choice.limits;
+  const note = metalOf(cast)?.castingNote;
+  return [
+    `Casting limits in ${materialName(cast)}${limitsTag(choice)}: walls ${L3.wall} mm, band ${L3.band} mm, prongs ${L3.prong} mm at their narrowest, details ${L3.detail} mm, gaps ${L3.gap} mm, surface within ${L3.surfaceDeviation} mm.${note ? ` ${note}` : ""}`,
+    limitsLine({ choice, size }, cast)
+  ];
+}
+function noVerdictTexts(piece, r, lead, tail) {
+  const w = r.choice.kind === "none" ? noVerdictWords(piece, r.size, r.choice.matches) : { why: [], howToGoOn: [] };
+  const size = r.size ? `${Math.round(r.size.largestMm * 100) / 100} mm at its largest` : "its size not measured (it could not be built)";
+  return [`${lead} It never applies another profile's numbers. ${w.why.join(" ")}`, `How to go on:
+${w.howToGoOn.map((h) => `- ${h}`).join("\n")}`, `Checked as: ${materialName(piece)}, cast by ${processWords(piece)}, ${size}. ${tail}`];
+}
 var ALLOWED_ARGS = Object.fromEntries(
   TOOLS.map((t) => [t.name, new Set(Object.keys(t.inputSchema.properties ?? {}))])
 );
 function fmt(v) {
-  if (v === void 0) return "(none)";
+  if (v === void 0 || v === null) return "(none)";
   if (typeof v === "string") return v;
+  if (typeof v === "object" && "wall" in v && "shrinkage" in v) return "the supplied limits, each with its source";
   if (v && typeof v === "object" && "system" in v) {
     const r = v;
     return `${String(r.system)} ${String(r.size)}`;
@@ -27521,7 +28011,7 @@ var Session = class {
     if (seat) texts[0] += ` ${seat}`;
     const ph = placeholderNote(v);
     if (ph) texts.push(`PLACEHOLDER: ${ph} The picture says so too.`);
-    const note = METALS[v.metal].castingNote;
+    const note = metalOf(tree)?.castingNote;
     if (note) texts.push(note);
     texts.push(treeText(tree));
     return reply(texts, files);
@@ -27547,7 +28037,7 @@ var Session = class {
     files.push(treeFile(p));
     const parts = view.run.parts ?? [];
     const texts = [`${lead} ${programSummary(p, view)}`, ...programSeatLines(parts), ...logText(view.logs)];
-    const note = METALS[p.metal].castingNote;
+    const note = metalOf(p)?.castingNote;
     if (note) texts.push(note);
     texts.push(treeText(p));
     return reply(texts, files);
@@ -27566,16 +28056,21 @@ var Session = class {
       if (k === "program" || k === "preview" || PROGRAM_PIECE_SETTINGS.includes(k)) continue;
       throw new CallError(
         k,
-        k === "template" ? 'start_piece takes a template or a program, not both. To start from a template and go on as a program, start the template, then pass "program" to change_piece (describe_piece shows the template as a program).' : 'a piece written as a program sets its band, stone and setting in the program (ringShank, prongHead, bezel ...); start_piece takes only "program", "name", "metal" and "shrinkage" with it.'
+        k === "template" ? 'start_piece takes a template or a program, not both. To start from a template and go on as a program, start the template, then pass "program" to change_piece (describe_piece shows the template as a program).' : `a piece written as a program sets its band, stone and setting in the program (ringShank, prongHead, bezel ...); start_piece takes only "program" and ${PROGRAM_PIECE_SETTINGS.map((x) => `"${x}"`).join(", ")} with it.`
       );
     }
+    if (args["metal"] !== void 0 && args["material"] !== void 0) throw new CallError("material", BOTH);
     for (const k of PROGRAM_PIECE_SETTINGS) if (args[k] !== void 0) checkParam(PARAM_BY_KEY.get(k), args[k], k);
     const wantPreview = this.#previewFlag(args);
     const p = programPiece(checkProgramSource(args["program"], "program"), {
       ...args["name"] !== void 0 ? { name: args["name"] } : {},
       ...args["metal"] !== void 0 ? { metal: args["metal"] } : {},
-      ...args["shrinkage"] !== void 0 ? { shrinkage: args["shrinkage"] } : {}
+      ...args["material"] !== void 0 ? { material: args["material"] } : {},
+      ...args["process"] !== void 0 ? { process: args["process"] } : {},
+      ...args["shrinkage"] !== void 0 ? { shrinkage: args["shrinkage"] } : {},
+      ...args["limits"] !== void 0 ? { limits: args["limits"] } : {}
     });
+    checkCastStatement(p, "");
     const view = await this.#evaluate(p, "program");
     this.#piece = p;
     return this.#withProgram(p, "Started.", wantPreview, view);
@@ -27616,13 +28111,14 @@ var Session = class {
         next = { ...base, program: src, revision: base.revision + 1 };
         lines.push(src === base.program ? "nothing in the program (it is the same)" : "the program");
       } else {
-        next = { ...programPiece(src, { name: base.name, metal: base.metal, shrinkage: base.shrinkage }), revision: base.revision + 1 };
+        next = { ...programPiece(src, { name: base.name, metal: base.metal, material: base.material, process: base.process, shrinkage: base.shrinkage, limits: base.limits }), revision: base.revision + 1 };
         lines.push(`the piece: it is now written as a program (it was built from the "${base.template}" template)`);
       }
     } else {
       next = { ...base, revision: base.revision + 1 };
       if (!set) lines.push("the whole piece, as passed");
     }
+    if (set?.["metal"] !== void 0 && set["material"] !== void 0) throw new CallError("set.material", BOTH);
     for (const [k, v] of Object.entries(set ?? {})) {
       if (!PROGRAM_PIECE_SETTINGS.includes(k)) {
         throw new CallError(
@@ -27630,9 +28126,10 @@ var Session = class {
           PARAM_BY_KEY.has(k) || /\./.test(k) ? `this piece is written as a program, so "${k}" is changed in its program (the call that makes that part); pass the edited program as "program". set takes only ${PROGRAM_PIECE_SETTINGS.join(", ")} here.` : `"${k}" is not a setting; a piece written as a program takes ${PROGRAM_PIECE_SETTINGS.join(", ")} in set, and everything else in its program.`
         );
       }
-      checkParam(PARAM_BY_KEY.get(k), v, `set.${k}`);
+      if (!removes(k, v)) checkParam(PARAM_BY_KEY.get(k), v, `set.${k}`);
       const before = next[k];
-      next[k] = v;
+      if (k === "metal" || k === "material" || k === "process" || k === "limits") setCastStatement(next, k, v);
+      else next[k] = v;
       lines.push(`${k}: ${fmt(before)} \u2192 ${fmt(v)}`);
     }
     validatePiece(next, "tree");
@@ -27664,18 +28161,23 @@ var Session = class {
   #verdictText(tree, r) {
     const stl = r.report["stl"];
     const lines = r.entries.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? "not measured"}${c.where ? ` [${c.where.description}]` : ""}`);
-    const head = stl ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${r.report["metal"].name}:` : `Checks for "${tree.name}" revision ${tree.revision}: the casting file could not be made, so no check could run.`;
+    const head = stl ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${materialName(tree)}${limitsTag(r.choice)}:` : `Checks for "${tree.name}" revision ${tree.revision}: the casting file could not be made, so no check could run.`;
     return [head, ...lines].join("\n");
   }
   async check(args) {
     const tree = this.#open(args);
     const r = await checkPiece(tree, "check", this.#limits);
+    const reportFile = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + "\n", "utf8") };
+    if (r.verdict === "no_verdict") {
+      const lead = `NO VERDICT: flo2-cad has no cited casting limits for this piece's material, process and size together, so it does not judge whether "${tree.name}" revision ${tree.revision} will cast, and export_for_casting will not release it.`;
+      return reply(noVerdictTexts(tree, r, lead, `Full report: ${tree.name}.check.json.`), [reportFile]);
+    }
     const head = r.verdict === "pass" ? "Every casting check passes on the file as an export would write it; export_for_casting will release it." : `It would NOT cast as it is. What to thicken and where:
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
-    const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${r.report["shrinkage"].allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`];
+    const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${r.report["shrinkage"].allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`, limitsLine(r, tree)];
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
     if (ph) texts.push(`PLACEHOLDER: ${ph} The checks are only as true as the stone's size.`);
-    return reply(texts, [{ name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + "\n", "utf8") }]);
+    return reply(texts, [reportFile]);
   }
   async export(args) {
     const tree = this.#open(args);
@@ -27683,21 +28185,27 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
     const report = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + "\n", "utf8") };
     const sh = r.report["shrinkage"];
     const shrink = `Shrinkage allowance: ${sh.applied ? `APPLIED, ${sh.allowance}` : "not applied (off)"}.`;
-    const note = METALS[tree.metal].castingNote;
+    const note = metalOf(tree)?.castingNote;
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
+    if (r.verdict === "no_verdict") {
+      const lead = `NOT EXPORTED: "${tree.name}" revision ${tree.revision} has no verdict: flo2-cad has no cited casting limits for its material, process and size together, so it does not judge whether it will cast, and no casting file was released.`;
+      return reply(noVerdictTexts(tree, r, lead, `The report is ${tree.name}.check.json. A preview is still available with preview_piece.`), [report]);
+    }
     if (r.verdict !== "pass" || !r.stl || !r.threeMf) {
       const texts2 = [
         `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
         this.#verdictText(tree, r),
-        `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`
+        `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,
+        limitsLine(r, tree)
       ];
       return reply(texts2, [report]);
     }
     const texts = [
-      `EXPORTED "${tree.name}" revision ${tree.revision} in ${METALS[tree.metal].name}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
+      `EXPORTED "${tree.name}" revision ${tree.revision} in ${materialName(tree)}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
       this.#verdictText(tree, r),
-      shrink
+      shrink,
+      limitsLine(r, tree)
     ];
     if (note) texts.push(note);
     if (ph) texts.push(`PLACEHOLDER: ${ph} Do not cast this until the stone's real size is in.`);
@@ -27718,13 +28226,12 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
       const limit = p.limit ? `, limit ${p.limit}` : "";
       return `- ${p.key} (now ${fmt(getSetting(tree, p.key))}${range}${dflt}${limit}): ${p.help}`;
     });
-    const metal = METALS[v.metal];
     const texts = [
       summary(tree, v),
       `Dimensions as built (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:
 ${dimensionLines(n.dims).join("\n")}`,
       `Overall size ${n.size[0]} \xD7 ${n.size[1]} \xD7 ${n.size[2]} mm (across the hand \xD7 along the finger \xD7 height). Metal volume about ${n.volumeMm3} mm\xB3 (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join("; ")}.`,
-      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ""}`,
+      ...castingLimitsTexts(tree, n.size),
       `Settings change_piece can set:
 ${catalog.join("\n")}
 Any part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
@@ -27744,14 +28251,13 @@ ${programGuide(this.#limits)}`,
     const view = await this.#evaluate(p, "tree.program");
     const n = await describeProgram(p, view);
     const parts = view.run.parts ?? [];
-    const metal = METALS[p.metal];
     const dims = programDimensionLines(parts);
     const texts = [
       programSummary(p, view),
       ...dims.length ? [`Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:
 ${dims.join("\n")}`] : [],
       `Overall size ${n.size[0]} \xD7 ${n.size[1]} \xD7 ${n.size[2]} mm (across the hand \xD7 along the finger \xD7 height). Metal volume about ${n.volumeMm3} mm\xB3 (any stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join("; ")}.`,
-      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ""}`,
+      ...castingLimitsTexts(p, n.size),
       `This piece is written as a program. Change it by passing the whole edited program as "program" to change_piece; set takes only ${PROGRAM_PIECE_SETTINGS.join(", ")}. What a program can call:
 ${programGuide(this.#limits)}
 An example, a cabochon in a bezel:

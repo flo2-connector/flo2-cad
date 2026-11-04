@@ -1,8 +1,10 @@
 # flo2-cad: the Agent CAD engine
 
-flo2-cad is an MCP server that a chat agent drives to design jewelry that is ready for casting. The person talks to
-the agent and sees a picture after each change. The engine refuses to release an STL or 3MF until the file, as
-written, passes every casting check. It runs in three places:
+flo2-cad is an MCP server that a chat agent drives to design cast pieces that are ready for casting: rings and other
+jewelry first, and any shape at all written as a program. The person talks to the agent and sees a picture after each
+change. The engine refuses to release an STL or 3MF until the file, as written, passes every casting check against
+limits that fit the piece's material, process and size, each cited. It is a general engine: jewelry is its first
+**limit profile** and a **layer** on it (`src/jewelry/`), not the whole of it. It runs in three places:
 
 - on flo2.io, behind the flo2 connector;
 - on a laptop, as an MCP server or as a plugin;
@@ -11,6 +13,12 @@ written, passes every casting check. It runs in three places:
 The spec is the flo2-hosted design "Agent CAD engine" (`38eca9450f850bf7`). Build agents start from
 [AGENTS.md](AGENTS.md); agents that design jewelry start from
 [skills/design-jewelry/SKILL.md](skills/design-jewelry/SKILL.md).
+
+**Limits follow the material, the process and the size** (0.3.0; see
+[Limits: named profiles, no verdict, or your own](#limits-named-profiles-no-verdict-or-your-own)). A piece states what it
+is cast in and how; its size is measured. It is checked against the named profile that covers all three, or against
+limits the person supplies with their sources. With neither, the answer is **no verdict**, never another profile's
+numbers.
 
 **First increment: one solitaire ring, end to end.**
 
@@ -39,13 +47,15 @@ The seam with flo2 is fixed, so this list is final for the increment. Any change
 | `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview`. Or, instead of a template: `program` (with `name`, `metal`, `shrinkage`) | summary (with the seat and the head's outside size), the tree as text, `<name>.preview.png`, `<name>.tree.json` |
 | `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `program?` (the whole piece as a program; a template piece goes on as one), `preview?` | what changed, the summary, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
 | `preview_piece` | read | `tree?`, `views?` (1 to 4 of `three_quarter`, `front`, `side`, `top`, `setting_closeup`) | `<name>.preview.png` |
-| `check_piece` | read | `tree?` | pass or fail for each limit, what to thicken and where, `<name>.check.json` |
-| `export_for_casting` | write | `tree?` | if every check passes: `<name>.stl`, `<name>.3mf` and `<name>.check.json`. If not: `<name>.check.json` and what to thicken and where (`isError: false`) |
+| `check_piece` | read | `tree?` | pass or fail for each limit, what to thicken and where, and where the limits came from; or no verdict, what did not match and how to go on; `<name>.check.json` |
+| `export_for_casting` | write | `tree?` | if every check passes: `<name>.stl`, `<name>.3mf` and `<name>.check.json`. If not, or with no verdict: `<name>.check.json` and what to change (`isError: false`) |
 | `describe_piece` | read | `tree?` | the piece in jeweler's terms, the dimensions it is built to (below), its weight in each metal, every setting, the tree |
 
 **Settings.** `start_piece` takes these, and so does `change_piece` under `set`:
 
-- `metal`
+- `metal` (one of the four), or `material` (any other, by name, e.g. `"bronze"`)
+- `process` (`lost_wax`, or another in words; left out, lost wax is assumed)
+- `limits` (the caster's own, each with its source; below)
 - `ring_size`
 - `band_width`, `band_thickness`, `band_profile` (comfort_fit, half_round, flat, round)
 - `stone_setting` (prong_head, bezel, none)
@@ -126,7 +136,8 @@ file, `<name>.tree.json`, which flo2 already versions and passes back as `tree`;
 ```
 
 `preview_piece`, `check_piece`, `export_for_casting` and `describe_piece` take it as they take a tree. `set` on a
-program piece takes only `name`, `metal` and `shrinkage`; everything else is in the program. `describe_piece` of a
+program piece takes only `name`, `metal` (or `material`), `process`, `shrinkage` and `limits`; everything else is in
+the program. `describe_piece` of a
 template piece shows it written as a program (the same piece, by the same calls), and lists what a program can call.
 
 **What a program calls** (`src/program/library.ts`; `describe_piece` prints the full list):
@@ -163,7 +174,7 @@ return union(band, bezel({ stone: moonstone, on: band, wall: 1.0 }));
 ```
 
 `kind: 'cabochon'` declares the stone a cabochon, so its bezel lip is held to the cabochon's own rule: it rises at
-least a third of the dome (J. Cogswell, *Creative Stonesetting*, `src/metals.ts`). `cabochon({ diameter: 8, height:
+least a third of the dome (J. Cogswell, *Creative Stonesetting*, `src/jewelry/rules.ts`). `cabochon({ diameter: 8, height:
 2.6 })` makes the same stone from the person's own measurements, round or oval. The engine never guesses a cabochon
 from its shape: undeclared, a stone is checked as faceted.
 
@@ -220,9 +231,87 @@ the container bounds what an escape reaches; on a laptop, the child runs as the 
 it. Where there is no `/proc` (macOS, Windows) the resident-memory watch is off: the heap and kernel caps and the time
 limit still hold, but memory a program takes in typed arrays is bounded only by the time limit.
 
+## Limits: named profiles, no verdict, or your own
+
+`dec:idea-limit-profiles-by-material-process-and-size` (accepted 2026-11-04, options (a) and (b)), serving
+`req:limits-follow-the-material-process-and-size` and `req:flo2-cad-designs-any-cast-piece`.
+
+**A piece states its material and its process; its size is measured.**
+
+- **Material.** `"metal"` names one of the four metals by its id, exactly as before (`sterling_silver_925`,
+  `gold_14k_yellow`, `gold_18k_yellow`, `platinum_950`). Any other material is named in words as `"material"`
+  (`"bronze"`, `"silicon bronze"`, `"copper"`). A piece states one or the other, never both; a material spelled as one of
+  the four metals is refused with its id.
+- **Process.** `"process"` is `"lost_wax"` (lost wax casting from a pattern printed in castable resin or wax, or carved
+  in wax), or another process in words (`"sand casting"`, `"ceramic shell"`). A piece that states none is checked as
+  lost wax, as every piece was before, and every check and export reply says that is what was assumed.
+- **Size** is the largest side of the piece's bounding box, in mm, as finished (the casting file before any shrinkage
+  allowance).
+
+All three are kept in the piece's own file, beside its name and shrinkage. A piece that states none of the new fields
+has the same file as before.
+
+**A profile** is one cited set of limits for a material family, a process and a size range: every limit the checker
+reads (walls, a ring band, prongs, details, gaps, surface) and the shrinkage allowance, each with its source
+(`src/limits/profiles.ts`). The engine picks the profile that covers all three of the piece's. There is one so far:
+
+| Profile | Materials | Process | Size (largest side) |
+|---|---|---|---|
+| precious metals cast by lost wax, at jewelry scale | sterling silver 925, 14k and 18k yellow gold, platinum 950 | lost wax, from a printed castable resin or wax, or a carved wax | 2.4 to 88 mm |
+
+Its limits are the ones below, unchanged: rings check exactly as before, and a test replays main 362c473's replies
+and reports for eight ring pieces to hold that. Its **size range** is cited from the services its limits come from
+(pages read 2026-11-04):
+
+- **88 mm at most.** Materialise's silver and gold pages give "Maximum part dimensions" of "88 x 88 x 125 mm";
+  Shapeways' silver, gold and platinum pages give a "Maximum Bounding Box 89 × 89 × 100 mm". A piece is read by its
+  largest side alone, so the bound is the largest side that fits both boxes whatever the other two sides are: 88 mm.
+  A piece up to 100 mm long but slim may still fit Shapeways' box lengthwise; it gets no verdict here.
+- **2.4 mm at least.** Shapeways: "Minimum Bounding Box 2.4 × 2.4 × 0.6 mm" and "Your model must be within the
+  minimum and maximum bounding box sizes". Materialise gives no smallest part.
+
+**No matching profile means no verdict.** A bronze piece, a silver piece sand cast, or a 300 mm silver bowl gets this
+answer from `check_piece`: there are no cited casting limits for its material, process and size together, so it is not
+judged; which of the three did not match; and how to go on (the caster's own limits, or a metal, process or size the
+profile covers). No check runs, nothing is measured against another profile's numbers, and `export_for_casting`
+refuses, as it refuses a failed check. The report says `"verdict": "no_verdict"`. Shrinkage `"on"`, which applies the
+cited allowance, is refused where there is none to cite: give a percentage, or supply limits.
+
+**Limits you supply.** A piece may carry its caster's or foundry's limits as `"limits"`: every limit the checker reads
+and the shrinkage allowance, each a value with its unit and its source.
+
+```json
+"limits": {
+  "wall":              { "value": "1.5 mm",  "source": "the foundry's design guide, rev. 3, 2026-10-01" },
+  "band":              { "value": "1.8 mm",  "source": "..." },
+  "prong":             { "value": "1.6 mm",  "source": "..." },
+  "detail":            { "value": "0.5 mm",  "source": "..." },
+  "gap":               { "value": "0.6 mm",  "source": "..." },
+  "surface_deviation": { "value": "0.01 mm", "source": "..." },
+  "shrinkage":         { "value": "1.4 %",   "source": "..." }
+}
+```
+
+`band` and `prong` are checked only where the piece has a ring band or prongs. The set is kept in the piece's file and
+used in place of any profile's, whatever the material, process and size; every check report and export names them as
+the person's, with their sources (`"limits_from": {"kind": "supplied", ...}`). A set missing a limit, a unit or a source
+is refused, naming the field path (`limits.gap.source`). `set {"limits": null}` removes them.
+
+**Every report says where its limits came from**: `"limits_from"` gives the profile (its id and name, the material,
+the process and whether it was stated or assumed, the size measured and the range, and each limit with its source), the
+supplied set, or why there are none. The reply's checks line names the profile, and one line says what covered the piece.
+
+**The jewelry layer.** The stone, setting and seat rules (prong grip, a faceted stone's and a cabochon's bezel lip,
+the seat clearances, the template stones' placeholder sizes) and the checks of a stone's setting (prong thickness and
+grip, bezel wall and lip) live in `src/jewelry/`, behind one boundary, `src/jewelry/index.ts`. They apply only to a piece
+that declares a stone or a setting. The general checker and the limit profiles import nothing of the layer, and the rest
+of the engine reaches it only through its boundary; `test/jewelry-boundary.test.ts` holds both. The setting rules are
+craft standards, not casting limits, so they do not change with a profile or with supplied limits.
+
 ## What "casting-ready" means here
 
-Every number below has a cited source. The sources are in `src/metals.ts`, in each check report, and on the design.
+Every number below has a cited source. These are the first profile's figures (`src/limits/profiles.ts`) and the
+jewelry layer's setting rules (`src/jewelry/rules.ts`); the sources are there, in each check report, and on the design.
 
 | Check | Limit | Measured how, on the STL as written |
 |---|---|---|
@@ -238,7 +327,7 @@ Every number below has a cited source. The sources are in `src/metals.ts`, in ea
 | Gaps | ≥ 0.3 mm (0.8 mm in platinum, Stuller) | facing surfaces, along the surface's direction as for the walls |
 | Surface | ≤ 0.01 mm off the intended shape | distance from a 0.0015 mm reference tessellation to the written facets; for a `smooth_union`, whose intended surface is its distance field's zero level, from points on that surface at the corners, edge midpoints and centroid of every facet the file has from it. The build holds a blend's facets to that surface, its creases (a wire's bend, a box's edge) included: a level set alone cut across them |
 
-How each metal is handled:
+How each metal of the first profile is handled:
 
 - **Limits.** Silver, gold and platinum share the services' figures, except the platinum gap above. Library
   defaults sit above each limit with a margin.
@@ -304,7 +393,7 @@ The program-built solitaire is the template's mesh: the same triangle count, vol
 
 ```sh
 node dist/main.js                 # MCP on stdio; needs only Node 24
-node dist/main.js --version       # flo2-cad 0.2.0 (manifold-3d 3.5.4)
+node dist/main.js --version       # flo2-cad 0.3.0 (manifold-3d 3.5.4)
 node dist/main.js --list-tools    # the published tool list as JSON
 
 docker build -t flo2-cad .
@@ -329,7 +418,11 @@ from the repo needs no build step:
   - `scripts/verify-kernel.mjs`, run in CI, downloads the tarball, checks it against the registry and compares every
     vendored file byte for byte.
 - **Checker.** `src/checker/` never imports the kernel, the library or the exporter, and a test holds that. It reads
-  the written STL with its own parser.
+  the written STL with its own parser. Its checks are the general ones; the checks of a stone's setting are the
+  jewelry layer's (`src/jewelry/checks.ts`), which the engine passes in as a layer and which, like the checker, import
+  only the checker and Node.
+- **Limits.** `src/limits/`: the named profiles with their sources (`profiles.ts`), how a piece's material, process
+  and size pick one or none (`choose.ts`), and limits a person supplies (`supplied.ts`).
 - **Bundle.** The MCP SDK v2 and zod are bundled into `dist/main.js`. Their licences are in
   `dist/THIRD-PARTY-NOTICES.txt`. `dist/program-child.js` beside it is the process a program is evaluated in; it
   bundles only the engine's own library and kernel loader. No sandbox library is added: the confinement is Node's own
@@ -346,6 +439,12 @@ npm run measure
 
 ## Known limits of the first increment
 
+- **One limit profile.** Only the four metals cast by lost wax, 2.4 to 88 mm at the largest, have cited limits. A
+  profile is added only when a real piece needs one, with its own sources. Until then any other material, process or
+  size gets no verdict unless the piece carries its caster's limits. Scale rules inside a profile, hollow casting and
+  sectioning a large figure are for later (options (c) and (d) of the decision).
+- **Size is the largest side.** A piece is read by the largest side of its bounding box, as the decision states, not
+  by all three sides against each service's box, so the profile stops at 88 mm.
 - **Tall heads.** The stone's point sits above the band, so prong heads and bezels stand tall. A low setting that
   sinks the pavilion into the band is not built yet.
 - **Emerald-cut proportions** inside the measured depth (crown, pavilion, corners) are modelling assumptions, because

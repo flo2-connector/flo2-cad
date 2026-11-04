@@ -13,6 +13,7 @@
 
 import { kernel, segmentsFor, type CrossSection, type Kernel, type Manifold, type Mesh, type Vec2, type Vec3 } from '../kernel/manifold.js';
 import type { BandDecl, BezelDecl, BlendDecl, FeatureDecl, P2, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
+import { BEZEL_CLEARANCE, SEAT_CLEARANCE } from '../jewelry/index.js';
 import type { PieceTree, PieceView, StoneView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
 import { projectOntoSurface } from './field.js';
@@ -222,12 +223,8 @@ export function prongPlacesAround(outline: P2[], count: number): { at: P2; out: 
 // its geometry from these numbers, and describe_piece and the summaries report the
 // same numbers, so what is reported is what is built and the two cannot drift
 // (fact:describe-piece-does-not-report-the-bezel-seat-so-a-chat-assumed-it-2026-10-05).
-// They are the piece as finished, before any shrinkage allowance.
-
-/** Every seat is cut as the stone's own shape grown by this all round. Under a bezel's lip, the wall stands further off. */
-export const SEAT_CLEARANCE = 0.03;
-/** A bezel's inner wall stands this far off the girdle all round, so the stone drops in. */
-export const BEZEL_CLEARANCE = 0.05;
+// They are the piece as finished, before any shrinkage allowance. The seat's clearances,
+// SEAT_CLEARANCE and BEZEL_CLEARANCE, are the jewelry layer's (src/jewelry/rules.ts).
 
 /** A size seen from above: an emerald cut's length (its long side) and width, or a round's diameter as both. */
 export interface Across {
