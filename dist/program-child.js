@@ -60,85 +60,7 @@ function sphereSegments(radius, tol) {
   return Math.ceil(segmentsFor(radius, tol * 0.6, 16) / 4) * 4;
 }
 
-// src/metals.ts
-var METAL_IDS = ["sterling_silver_925", "gold_14k_yellow", "gold_18k_yellow", "platinum_950"];
-var SHAPEWAYS_SHRINK = 'Shapeways (silver, gold and platinum pages): "the metal shrinks by approximately 1-1.5%"; finishing takes the overall reduction to about 3%; ring inside diameters stay within \xB10.05-0.10 mm.';
-var COMMON = [
-  "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
-  "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY).",
-  SHAPEWAYS_SHRINK
-];
-var METALS = {
-  sterling_silver_925: {
-    id: "sterling_silver_925",
-    name: "sterling silver 925",
-    density: 10.4,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 10.40 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  gold_14k_yellow: {
-    id: "gold_14k_yellow",
-    name: "14k yellow gold",
-    density: 13.07,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 13.07 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  gold_18k_yellow: {
-    id: "gold_18k_yellow",
-    name: "18k yellow gold",
-    density: 15.58,
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.3, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: null,
-    sources: [
-      "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      ...COMMON,
-      "Density 15.58 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
-    ]
-  },
-  platinum_950: {
-    id: "platinum_950",
-    name: "platinum 950 (Pt950/Ru)",
-    density: 20.7,
-    // The gap is Stuller's 0.8 mm platinum figure, stricter than the 0.3 mm clearance of the services.
-    limits: { wall: 0.8, band: 1, prong: 1, detail: 0.35, gap: 0.8, surfaceDeviation: 0.01 },
-    shrinkagePct: 1.5,
-    castingNote: "Platinum 950 melts at about 1780-1795 \xB0C and is cast at about 1850-2200 \xB0C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup.",
-    sources: [
-      "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
-      'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".',
-      ...COMMON,
-      "Melting range Pt950/Ru 1780-1795 \xB0C and density 20.7 g/cm\xB3: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
-      'Casting at about 1850-2200 \xB0C, "special equipment is needed", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/'
-    ]
-  }
-};
-var STRICTEST = Object.keys(METALS).reduce(
-  (acc, id) => {
-    const l = METALS[id].limits;
-    return {
-      wall: Math.max(acc.wall, l.wall),
-      band: Math.max(acc.band, l.band),
-      prong: Math.max(acc.prong, l.prong),
-      detail: Math.max(acc.detail, l.detail),
-      gap: Math.max(acc.gap, l.gap),
-      surfaceDeviation: Math.min(acc.surfaceDeviation, l.surfaceDeviation)
-    };
-  },
-  { wall: 0, band: 0, prong: 0, detail: 0, gap: 0, surfaceDeviation: Infinity }
-);
+// src/jewelry/rules.ts
 var SETTING = {
   /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
   gripMin: 0.15,
@@ -159,6 +81,158 @@ var SETTING = {
     `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
   ]
 };
+var SEAT_CLEARANCE = 0.03;
+var BEZEL_CLEARANCE = 0.05;
+var STONE_DEFAULTS = {
+  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
+  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
+};
+var HEAD_DEFAULTS = {
+  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
+  prong_grip: "0.2 mm",
+  /** Gap between the stone's culet (its point) and the top of the band. */
+  culet_clearance: "0.3 mm"
+};
+
+// src/metals.ts
+var METAL_IDS = ["sterling_silver_925", "gold_14k_yellow", "gold_18k_yellow", "platinum_950"];
+var METALS = {
+  sterling_silver_925: {
+    id: "sterling_silver_925",
+    name: "sterling silver 925",
+    density: 10.4,
+    castingNote: null
+  },
+  gold_14k_yellow: {
+    id: "gold_14k_yellow",
+    name: "14k yellow gold",
+    density: 13.07,
+    castingNote: null
+  },
+  gold_18k_yellow: {
+    id: "gold_18k_yellow",
+    name: "18k yellow gold",
+    density: 15.58,
+    castingNote: null
+  },
+  platinum_950: {
+    id: "platinum_950",
+    name: "platinum 950 (Pt950/Ru)",
+    density: 20.7,
+    castingNote: "Platinum 950 melts at about 1780-1795 \xB0C and is cast at about 1850-2200 \xB0C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup."
+  }
+};
+
+// src/limits/profiles.ts
+var LIMIT_KEYS = ["wall", "band", "prong", "detail", "gap", "surfaceDeviation"];
+var PROCESSES = {
+  lost_wax: {
+    words: "lost wax",
+    detail: "lost wax (investment) casting, from a pattern printed in castable resin or wax, or carved in wax",
+    source: 'Materialise (silver and gold): "Your model is first printed in wax, placed in a container, and covered in a liquid plaster" and "the wax is burned out, creating a cavity in the now-hardened plaster" (https://www.materialise.com/en/academy/industrial/design-am/silver, .../gold); Shapeways (silver, gold and platinum): process "Lost Wax Casting" (https://www.shapeways.com/materials/silver, .../gold, .../platinum). Pages read 2026-11-04. A pattern printed in castable resin, or carved in wax, is cast the same way.'
+  }
+};
+var DEFAULT_PROCESS = "lost_wax";
+function isProcessId(v) {
+  return Object.hasOwn(PROCESSES, v);
+}
+var MATERIALISE = "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold";
+var SHAPEWAYS_SHRINK = 'Shapeways (silver, gold and platinum pages): "the metal shrinks by approximately 1-1.5%"; finishing takes the overall reduction to about 3%; ring inside diameters stay within \xB10.05-0.10 mm.';
+var COMMON = [
+  `${MATERIALISE}: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.`,
+  "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY).",
+  SHAPEWAYS_SHRINK
+];
+function shared(page, gap) {
+  return {
+    wall: { value: 0.8, source: `${MATERIALISE}: walls 0.8 mm for a high-gloss finish; ${page}: walls 0.8 mm.` },
+    band: { value: 1, source: `${MATERIALISE}: "when making something small such as the band of a ring, the wall thickness should be at least 1 mm".` },
+    prong: { value: 1, source: `${page}: wire 1.0 mm unsupported (joined on one side only; 0.8 mm supported).` },
+    detail: { value: 0.35, source: `${MATERIALISE}: "The smallest features in your design should be at least 0.35 mm in diameter and 0.4 mm in height".` },
+    gap,
+    surfaceDeviation: { value: 0.01, source: "con:surface-deviation-tolerance (Formlabs Form 4 50 \xB5m XY and 25 \xB5m layers; Asiga PRO 4K45 32 \xB5m XY)." }
+  };
+}
+var CLEARANCE = { value: 0.3, source: `${MATERIALISE}: "we advise a minimum gap of 0.3 mm"; Shapeways: clearance 0.3 mm.` };
+var SHRINK = { value: 1.5, source: SHAPEWAYS_SHRINK };
+var PRECIOUS_METALS_LOST_WAX_JEWELRY = {
+  id: "precious-metals-lost-wax-jewelry-scale",
+  name: "precious metals cast by lost wax, at jewelry scale",
+  family: "precious metals",
+  processes: ["lost_wax"],
+  size: {
+    minMm: {
+      value: 2.4,
+      source: 'Shapeways (silver, gold and platinum): "Minimum Bounding Box 2.4 \xD7 2.4 \xD7 0.6 mm" and "Your model must be within the minimum and maximum bounding box sizes" (https://www.shapeways.com/materials/silver, .../gold, .../platinum, read 2026-11-04). A piece under 2.4 mm at its largest is below it. Materialise gives no smallest part.'
+    },
+    maxMm: {
+      value: 88,
+      source: `Materialise (silver and gold): "Maximum part dimensions" "88 x 88 x 125 mm" (https://www.materialise.com/en/academy/industrial/design-am/silver, .../gold); Shapeways (silver, gold and platinum): "Maximum Bounding Box 89 \xD7 89 \xD7 100 mm" (https://www.shapeways.com/materials/silver, .../gold, .../platinum). Pages read 2026-11-04. The piece is read by its largest side alone, so the bound is the largest side that fits both services' boxes whatever its other two sides are: the smaller box side, 88 mm. A piece longer than that may still fit one box lengthwise; it gets no verdict here.`
+    }
+  },
+  materials: {
+    sterling_silver_925: {
+      limits: shared("https://www.shapeways.com/materials/silver", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 10.40 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    gold_14k_yellow: {
+      limits: shared("https://www.shapeways.com/materials/gold", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 13.07 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    gold_18k_yellow: {
+      limits: shared("https://www.shapeways.com/materials/gold", CLEARANCE),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        ...COMMON,
+        "Density 15.58 g/cm\xB3: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/"
+      ]
+    },
+    platinum_950: {
+      // The gap is Stuller's 0.8 mm platinum figure, stricter than the 0.3 mm clearance of the services.
+      limits: shared("https://www.shapeways.com/materials/platinum", {
+        value: 0.8,
+        source: 'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".'
+      }),
+      shrinkagePct: SHRINK,
+      sources: [
+        "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        'Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): "0.8mm minimum DBR [distance between rails] for Platinum and Palladium".',
+        ...COMMON,
+        "Melting range Pt950/Ru 1780-1795 \xB0C and density 20.7 g/cm\xB3: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
+        'Casting at about 1850-2200 \xB0C, "special equipment is needed", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/'
+      ]
+    }
+  }
+};
+var PROFILES = [PRECIOUS_METALS_LOST_WAX_JEWELRY];
+function limitValues(m) {
+  return Object.fromEntries(LIMIT_KEYS.map((k) => [k, m.limits[k].value]));
+}
+var STRICTEST = Object.values(PRECIOUS_METALS_LOST_WAX_JEWELRY.materials).reduce(
+  (acc, m) => {
+    const l = limitValues(m);
+    return {
+      wall: Math.max(acc.wall, l.wall),
+      band: Math.max(acc.band, l.band),
+      prong: Math.max(acc.prong, l.prong),
+      detail: Math.max(acc.detail, l.detail),
+      gap: Math.max(acc.gap, l.gap),
+      surfaceDeviation: Math.min(acc.surfaceDeviation, l.surfaceDeviation)
+    };
+  },
+  { wall: 0, band: 0, prong: 0, detail: 0, gap: 0, surfaceDeviation: Infinity }
+);
 
 // src/units.ts
 var QUANTITY = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(\S.*?)?\s*$/;
@@ -322,6 +396,103 @@ function caratText(v, path) {
   return `${num} ct`;
 }
 
+// src/limits/supplied.ts
+var SUPPLIED_FIELDS = [
+  { key: "wall", limit: "wall", words: "walls", help: "the thinnest wall anywhere" },
+  { key: "band", limit: "band", words: "band", help: "a ring's band across its narrowest section (checked only where the piece has a ring band)" },
+  { key: "prong", limit: "prong", words: "prongs", help: "a wire joined at one end only, such as a prong, across its narrowest section (checked only where the piece has prongs)" },
+  { key: "detail", limit: "detail", words: "details", help: "the smallest raised detail" },
+  { key: "gap", limit: "gap", words: "gaps", help: "the smallest gap between two parts of the piece" },
+  { key: "surface_deviation", limit: "surfaceDeviation", words: "surface within", help: "the most the file's facets may stand off the intended surface" }
+];
+var SUPPLIED_KEYS = [...SUPPLIED_FIELDS.map((f) => f.key), "shrinkage"];
+var SOURCE_MAX = 600;
+var EXAMPLE = `{"value": "1.0 mm", "source": "the foundry's design guide, rev. 3, 2026-10-01"}`;
+var SUPPLIED_HELP = `Casting limits the person supplies, kept in the piece's file and used in place of any limit profile's: every limit the checker reads, ${SUPPLIED_FIELDS.map((f) => `"${f.key}" (${f.help})`).join(", ")}, and "shrinkage" (the linear shrinkage allowance in %, which shrinkage "on" then applies), each as ${EXAMPLE}. Every one needs its value with its unit and its source: the caster's or foundry's word (with its date) or a datasheet. A set missing any of them is refused.`;
+function readSupplied(v, path) {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) {
+    throw new CallError(path, `supplied limits are an object giving ${SUPPLIED_KEYS.join(", ")}, each as ${EXAMPLE}.`);
+  }
+  const o = v;
+  for (const k of Object.keys(o)) {
+    if (!SUPPLIED_KEYS.includes(k)) throw new CallError(at(path, k), `is not a limit the checker reads; a supplied set gives ${SUPPLIED_KEYS.join(", ")}.`);
+  }
+  const entry = (k) => {
+    const p = at(path, k);
+    const e = o[k];
+    if (e === void 0) {
+      throw new CallError(p, `missing. A supplied set gives every limit the checker reads and the shrinkage allowance (${SUPPLIED_KEYS.join(", ")}), each with its source, for example ${EXAMPLE}; ask the caster or foundry for any you do not have.`);
+    }
+    if (e === null || typeof e !== "object" || Array.isArray(e)) throw new CallError(p, `each supplied limit is its value and its source, for example ${EXAMPLE}.`);
+    const r = e;
+    for (const f of Object.keys(r)) if (f !== "value" && f !== "source") throw new CallError(at(p, f), 'is not part of a supplied limit; it has a "value" and a "source".');
+    if (r["value"] === void 0) throw new CallError(at(p, "value"), `missing: give the figure with its unit, for example ${k === "shrinkage" ? '"1.5 %"' : '"1.0 mm"'}.`);
+    const source = r["source"];
+    if (typeof source !== "string" || !source.trim()) {
+      throw new CallError(at(p, "source"), `missing: every supplied limit says where it comes from, the caster's or foundry's word (with its date) or a datasheet, for example "the foundry's design guide, rev. 3, 2026-10-01".`);
+    }
+    if (source.length > SOURCE_MAX) throw new CallError(at(p, "source"), `is ${source.length} characters; a source is at most ${SOURCE_MAX}: name it, and keep the document itself in the design.`);
+    return { value: r["value"], source };
+  };
+  const limits = {};
+  const each = {};
+  for (const f of SUPPLIED_FIELDS) {
+    const e = entry(f.key);
+    const mm2 = lengthMm(e.value, at(at(path, f.key), "value"));
+    if (!(mm2 > 0)) throw new CallError(at(at(path, f.key), "value"), "must be more than 0 mm.");
+    limits[f.limit] = mm2;
+    each[f.key] = { value: e.value, source: e.source };
+  }
+  const s = entry("shrinkage");
+  const pct = percent(s.value, at(at(path, "shrinkage"), "value"));
+  if (!(pct >= 0 && pct <= 5)) throw new CallError(at(at(path, "shrinkage"), "value"), `a shrinkage allowance is between 0 and 5 %, for example "1.5 %"; got "${String(s.value)}".`);
+  each["shrinkage"] = { value: s.value, source: s.source };
+  return { limits, shrinkagePct: pct, each };
+}
+
+// src/limits/choose.ts
+function materialName(s) {
+  return s.metal ? METALS[s.metal].name : s.material ?? "an unnamed material";
+}
+function processOf(s) {
+  const id = s.process ?? DEFAULT_PROCESS;
+  const known = isProcessId(id) ? id : null;
+  return { id, stated: s.process !== void 0, words: known ? PROCESSES[known].words : id, known };
+}
+var NAME_TEXT = /^[\p{L}\p{N}][\p{L}\p{N} _.,'()/%+&-]{0,79}$/u;
+function checkMaterial(v, path) {
+  if (typeof v !== "string" || !NAME_TEXT.test(v.trim()) || v !== v.trim()) {
+    throw new CallError(path, 'a material is named in words, 1 to 80 letters, digits, spaces and simple punctuation, for example "bronze" or "silicon bronze".');
+  }
+  const low = v.toLowerCase();
+  const metal = METAL_IDS.find((id) => id === low || METALS[id].name.toLowerCase() === low);
+  if (metal) throw new CallError(path, `"${v}" is one of the metals flo2-cad knows by id: give it as {"metal": "${metal}"}, not as a material.`);
+  return v;
+}
+function checkProcess(v, path) {
+  if (typeof v !== "string" || !NAME_TEXT.test(v.trim()) || v !== v.trim()) {
+    throw new CallError(path, `a process is "lost_wax" (${PROCESSES.lost_wax.detail}), or another named in words, for example "sand casting" or "ceramic shell".`);
+  }
+  return v;
+}
+function matchProfile(profile, s, sizeMm) {
+  const p = processOf(s);
+  return {
+    profile,
+    material: s.metal !== void 0 && profile.materials[s.metal] !== void 0,
+    process: p.known !== null && profile.processes.includes(p.known),
+    size: sizeMm === null ? null : sizeMm >= profile.size.minMm.value && sizeMm <= profile.size.maxMm.value
+  };
+}
+function citedShrinkage(s) {
+  if (s.limits !== void 0) return readSupplied(s.limits, "tree.limits").shrinkagePct;
+  for (const p of PROFILES) {
+    const m = matchProfile(p, s, null);
+    if (m.material && m.process && s.metal) return p.materials[s.metal].shrinkagePct.value;
+  }
+  return null;
+}
+
 // src/library/thicken.ts
 var SURFACES = ["flat", "sphere", "cylinder"];
 var SHEET_AXES = ["x", "y"];
@@ -370,7 +541,7 @@ function sheetSpec(n) {
   const p = n.params ?? {};
   const surface = p["surface"] ?? "flat";
   return {
-    outline: p["outline"].map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y")]),
+    outline: p["outline"].map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]),
     thickness: lengthMm(p["thickness"], "thickness"),
     surface,
     radius: surface === "flat" ? Infinity : lengthMm(p["radius"], "radius"),
@@ -659,10 +830,6 @@ var ORIENTATIONS = ["east_west", "north_south"];
 var COUNT_KEYS = /* @__PURE__ */ new Set(["prong_count", "prong", "count", "segments"]);
 var NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 var NODE_ID = /^[a-z][a-z0-9_]{0,39}$/;
-var STONE_DEFAULTS = {
-  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
-  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
-};
 var PARAMS = [
   {
     key: "name",
@@ -679,7 +846,22 @@ var PARAMS = [
     kind: "enum",
     values: METAL_IDS,
     default: "sterling_silver_925",
-    help: "The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage; platinum goes to a specialist caster."
+    help: 'The metal it will be cast in: sterling_silver_925, gold_14k_yellow, gold_18k_yellow or platinum_950. Each has its own cited casting limits and shrinkage, in the limit profile "precious metals cast by lost wax, at jewelry scale"; platinum goes to a specialist caster. For any other material, give "material" instead.'
+  },
+  {
+    key: "material",
+    kind: "material",
+    help: `What it will be cast in, when that is not one of the four metals: a plain name, such as "bronze", "silicon bronze" or "copper". Give "metal" or "material", not both. No limit profile covers any other material yet, so check_piece gives no verdict for it (and nothing is exported) unless the piece carries its caster's limits with their sources ("limits").`
+  },
+  {
+    key: "process",
+    kind: "process",
+    help: 'How it will be cast: "lost_wax" (lost wax casting, from a pattern printed in castable resin or wax, or carved in wax: the process the jewelry profile covers), or another process in words, such as "sand casting" or "ceramic shell", which no profile covers yet. Left out, lost wax is assumed, and every check and export says so. null removes it.'
+  },
+  {
+    key: "limits",
+    kind: "limits",
+    help: `${SUPPLIED_HELP} null removes them.`
   },
   { key: "band_width", kind: "length", min: 1, max: 12, default: "2.2 mm", help: "How wide the band is, measured along the finger." },
   {
@@ -765,7 +947,7 @@ var PARAMS = [
     key: "shrinkage",
     kind: "shrinkage",
     default: "off",
-    help: `"off", "on" (the metal's cited allowance, 1.5 %), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.`
+    help: `"off", "on" (the cited allowance for the piece's material and process: 1.5 % for the four metals by lost wax, or the supplied limits' own), or an allowance such as "1.2 %" that enlarges the piece so it shrinks back to size in casting. Every export says whether it was applied.`
   }
 ];
 var PARAM_BY_KEY = new Map(PARAMS.map((p) => [p.key, p]));
@@ -780,9 +962,9 @@ function checkParam(spec, v, path) {
       ringInnerDiameterMm(v, path);
       return;
     case "length": {
-      const mm = lengthMm(v, path);
-      if (spec.min !== void 0 && mm < spec.min) throw new CallError(path, `${mm} mm is below the smallest the library can build (${spec.min} mm).`);
-      if (spec.max !== void 0 && mm > spec.max) throw new CallError(path, `${mm} mm is above the largest the library builds (${spec.max} mm).`);
+      const mm2 = lengthMm(v, path);
+      if (spec.min !== void 0 && mm2 < spec.min) throw new CallError(path, `${mm2} mm is below the smallest the library can build (${spec.min} mm).`);
+      if (spec.max !== void 0 && mm2 > spec.max) throw new CallError(path, `${mm2} mm is above the largest the library builds (${spec.max} mm).`);
       return;
     }
     case "enum":
@@ -791,7 +973,16 @@ function checkParam(spec, v, path) {
       }
       return;
     case "shrinkage":
-      shrinkagePercent(v, "sterling_silver_925", path);
+      shrinkagePercent(v, { metal: "sterling_silver_925" }, path);
+      return;
+    case "material":
+      checkMaterial(v, path);
+      return;
+    case "process":
+      checkProcess(v, path);
+      return;
+    case "limits":
+      readSupplied(v, path);
       return;
     case "carat":
       caratText(v, path);
@@ -799,27 +990,30 @@ function checkParam(spec, v, path) {
     case "lip":
       if (v === "auto") return;
       {
-        const mm = lengthMm(v, path);
-        if (mm < 0.1 || mm > 4) throw new CallError(path, `${mm} mm is outside what the library builds (0.1 to 4 mm), or "auto".`);
+        const mm2 = lengthMm(v, path);
+        if (mm2 < 0.1 || mm2 > 4) throw new CallError(path, `${mm2} mm is outside what the library builds (0.1 to 4 mm), or "auto".`);
       }
       return;
   }
 }
-function shrinkagePercent(v, metal, path) {
+function shrinkagePercent(v, cast, path) {
   if (v === "off") return 0;
-  if (v === "on") return METALS[metal].shrinkagePct;
+  if (v === "on") {
+    const pct2 = citedShrinkage(cast);
+    if (pct2 === null) {
+      throw new CallError(
+        path,
+        `"on" uses the cited allowance for the piece's material and process, and there is none for ${materialName(cast)} cast by ${processOf(cast).words}. Give the allowance the caster or foundry gives, such as "1.5 %", or supply limits with their sources ("limits"), whose shrinkage "on" then applies.`
+      );
+    }
+    return pct2;
+  }
   const pct = percent(v, path);
   if (pct <= 0 || pct > 5) {
     throw new CallError(path, `a shrinkage allowance is "off", "on", or between 0 and 5 %, for example "1.5 %"; got "${String(v)}".`);
   }
   return pct;
 }
-var HEAD_DEFAULTS = {
-  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
-  prong_grip: "0.2 mm",
-  /** Gap between the stone's culet (its point) and the top of the band. */
-  culet_clearance: "0.3 mm"
-};
 function bandDefaults(profile) {
   return profile === "round" ? { width: "2.0 mm", thickness: "2.0 mm" } : { width: PARAM_BY_KEY.get("band_width").default, thickness: PARAM_BY_KEY.get("band_thickness").default };
 }
@@ -991,8 +1185,8 @@ function validateOp(op, p, path) {
     if (v === void 0) continue;
     const kp = at(path, k);
     if (kind === "length") {
-      const mm = lengthMm(v, kp);
-      if (mm < 0 && !["x", "y", "z"].includes(k)) throw new CallError(kp, "must not be negative.");
+      const mm2 = lengthMm(v, kp);
+      if (mm2 < 0 && !["x", "y", "z"].includes(k)) throw new CallError(kp, "must not be negative.");
     } else if (kind === "angle") validateUnitsDeep(v, kp, k);
     else if (kind === "plane") {
       if (!["xy", "yz", "xz"].includes(v)) throw new CallError(kp, 'the mirror plane is "xy", "yz" or "xz".');
@@ -1003,9 +1197,9 @@ function validateOp(op, p, path) {
     } else {
       const dim = kind === "points2" ? 2 : 3;
       if (!Array.isArray(v) || v.length < 2) throw new CallError(kp, `a list of at least 2 points, each [${dim === 2 ? '"x mm", "y mm"' : '"x mm", "y mm", "z mm"'}].`);
-      v.forEach((pt, i) => {
-        if (!Array.isArray(pt) || pt.length !== dim) throw new CallError(at(kp, i), `a point is ${dim} lengths, e.g. [${dim === 2 ? '"1 mm", "2 mm"' : '"1 mm", "2 mm", "0 mm"'}].`);
-        pt.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
+      v.forEach((pt2, i) => {
+        if (!Array.isArray(pt2) || pt2.length !== dim) throw new CallError(at(kp, i), `a point is ${dim} lengths, e.g. [${dim === 2 ? '"1 mm", "2 mm"' : '"1 mm", "2 mm", "0 mm"'}].`);
+        pt2.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
       });
       if (kind === "points2" && v.length < 3) throw new CallError(kp, "a profile needs at least 3 points.");
     }
@@ -1045,7 +1239,7 @@ function validateThicken(p, path) {
     const rc = lengthMm(p["round_corners"], at(path, "round_corners"));
     if (rc < 0 || rc > ROUND_CORNERS_MAX_MM) throw new CallError(at(path, "round_corners"), `${rc} mm is outside what the library builds (0 to ${ROUND_CORNERS_MAX_MM} mm).`);
   }
-  const outline = p["outline"].map((pt, i) => [lengthMm(pt[0], at(at(at(path, "outline"), i), 0)), lengthMm(pt[1], at(at(at(path, "outline"), i), 1))]);
+  const outline = p["outline"].map((pt2, i) => [lengthMm(pt2[0], at(at(at(path, "outline"), i), 0)), lengthMm(pt2[1], at(at(at(path, "outline"), i), 1))]);
   if (Math.abs(signedArea2(outline)) / 2 < 0.01) throw new CallError(at(path, "outline"), "the outline encloses no area; give the sheet's edge as a closed loop of points, in order round it.");
   if (surface !== "flat") {
     const r = lengthMm(p["radius"], at(path, "radius"));
@@ -1117,7 +1311,7 @@ function headView(kind, hp, stone) {
 // src/library/field.ts
 var L = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
-var pts3 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y"), lengthMm(pt[2], "z")]);
+var pts3 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
 function smin(a, b, k) {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - h * h * k / 4;
@@ -1728,8 +1922,8 @@ var PREVIEW_TOL = 0.03;
 // src/library/ops.ts
 var L2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
-var pts2 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y")]);
-var pts32 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y"), lengthMm(pt[2], "z")]);
+var pts2 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]);
+var pts32 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
 function ccw(pts) {
   let a = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -2087,8 +2281,6 @@ function prongPlacesAround(outline, count) {
     return { at: [dir[0] * best.s, dir[1] * best.s], out: best.out };
   });
 }
-var SEAT_CLEARANCE = 0.03;
-var BEZEL_CLEARANCE = 0.05;
 function stoneSpec(sv) {
   if (sv.shape === "custom") throw new Error("engine bug: a stone of its own shape has no round or emerald-cut spec");
   return { shape: sv.shape, lengthMm: sv.lengthMm, widthMm: sv.widthMm, depthMm: sv.depthMm, orientation: sv.orientation };

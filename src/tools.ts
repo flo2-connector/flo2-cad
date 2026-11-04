@@ -4,9 +4,11 @@
 //
 // Each tool is classed read or write for that allowlist; `readOnlyHint` says
 // which. The descriptions are written for a CHAT agent working for someone who
-// makes jewelry, not for an engineer.
+// makes cast pieces (jewelry first), not for an engineer. flo2-cad is a general
+// engine for cast pieces; jewelry is its first limit profile and a layer on it.
 
 import type { JSONObject, Tool } from '@modelcontextprotocol/server';
+import { SUPPLIED_FIELDS } from './limits/supplied.js';
 import { PROGRAM_FORMAT, PROGRAM_MAX_CHARS, PROGRAM_UNITS } from './piece/program.js';
 import { PARAMS, TEMPLATES, TREE_FORMAT, type ParamSpec } from './piece/tree.js';
 
@@ -67,8 +69,35 @@ function paramSchema(p: ParamSpec): JsonSchema {
       return { type: 'string', description, examples: ['2.00 ct'] };
     case 'lip':
       return { type: 'string', description: `${description} Write a height with its unit, e.g. "0.7 mm", or "auto".`, examples: ['auto', '0.7 mm'] };
+    case 'material':
+      return { type: 'string', description, examples: ['bronze'] };
+    case 'process':
+      return { type: ['string', 'null'], description, examples: ['lost_wax', 'sand casting'] };
+    case 'limits':
+      return { type: ['object', 'null'], description, required: [...SUPPLIED_KEYS_ALL], additionalProperties: false, properties: SUPPLIED_PROPERTIES };
   }
 }
+
+const SUPPLIED_KEYS_ALL = [...SUPPLIED_FIELDS.map((f) => f.key), 'shrinkage'];
+
+/** One supplied limit: its value with its unit, and its source. */
+function suppliedEntry(help: string, example: string): JsonSchema {
+  return {
+    type: 'object',
+    description: `${help}, with its source.`,
+    required: ['value', 'source'],
+    additionalProperties: false,
+    properties: {
+      value: { type: 'string', description: `The figure with its unit, e.g. "${example}".`, examples: [example] },
+      source: { type: 'string', description: "Where the figure comes from: the caster's or foundry's word (with its date), or a datasheet." },
+    },
+  };
+}
+
+const SUPPLIED_PROPERTIES: Record<string, JsonSchema> = {
+  ...Object.fromEntries(SUPPLIED_FIELDS.map((f) => [f.key, suppliedEntry(f.help.replace(/^./, (c) => c.toUpperCase()), f.key === 'surface_deviation' ? '0.01 mm' : '1.0 mm')])),
+  shrinkage: suppliedEntry('The linear shrinkage allowance, which shrinkage "on" applies', '1.5 %'),
+};
 
 const PIECE_PROPERTIES: Record<string, JsonSchema> = Object.fromEntries(PARAMS.map((p) => [p.key, paramSchema(p)]));
 
@@ -81,8 +110,11 @@ const TREE: JsonSchema = {
     name: { type: 'string' },
     revision: { type: 'integer', minimum: 1 },
     template: { type: 'string', enum: [...TEMPLATES], description: 'A tree only: the template it was started from.' },
-    metal: { type: 'string' },
+    metal: { type: 'string', description: 'One of the four metals by its id; or, instead, "material".' },
+    material: { type: 'string', description: 'Any other material, by name (e.g. "bronze"), in place of "metal".' },
+    process: { type: 'string', description: 'How it will be cast: "lost_wax", or another process in words. Absent, lost wax is assumed.' },
     shrinkage: { type: 'string' },
+    limits: { type: 'object', description: "Limits the person supplied, each with its source, kept in the piece's file." },
     root: {
       type: 'object',
       description:
@@ -120,15 +152,16 @@ export const TOOLS: Tool[] = [
     name: 'start_piece',
     title: 'Start a piece',
     description: [
-      'Start a new piece of jewelry from a ready-made design, sized to the wearer, or from a program you write (pass "program" instead of "template": any shape at all, see below).',
+      'Start a new cast piece: a piece of jewelry from a ready-made design, sized to the wearer, or any piece from a program you write (pass "program" instead of "template": any shape at all, see below).',
       '"solitaire_ring" is a band with one round stone in a 4- or 6-prong head; "plain_band" is the band alone; "emerald_bezel_solitaire" is Emily\'s design: an emerald-cut stone in a full platinum 950 bezel, set east-west, on a plain round band.',
       'The head (prong_head or bezel), the stone (round or emerald cut), the metal (silver, 14k or 18k gold, platinum 950) and every size are settings, so any template can become any of these.',
+      'Say what it will be cast in and how: "metal" for one of those four, or "material" for anything else (e.g. "bronze"); "process" for how it is cast ("lost_wax", or another in words; left out, lost wax is assumed). The casting limits follow the material, the process and the piece\'s size: the four metals by lost wax up to 88 mm at the largest are the jewelry profile. For anything else, give the caster\'s or foundry\'s limits as "limits", each with its source, or the check will give no verdict.',
       'Size the stone from its MEASURED dimensions on its grading report (length, width and depth in mm, or diameter and depth for a round), never from a carat chart. Until you give them, the stone\'s size is a placeholder and the replies and picture say so.',
       'Only the template and the ring size are needed; everything you leave out gets a safe default that sits comfortably above the casting limits.',
       'Every measurement is in millimetres and must be written with its unit ("1.6 mm"). A ring size must name its system: US, UK or EU.',
       'Returns a picture of the piece, a plain-language summary, and the piece\'s tree: its saved recipe, kept as <name>.tree.json.',
       'Starting a piece replaces the one open in this conversation (the old one is still saved).',
-      'Give EITHER "template" with "ring_size" (and any settings), OR "program" (with "name", "metal" and "shrinkage" if you like; the program sets everything else).',
+      'Give EITHER "template" with "ring_size" (and any settings), OR "program" (with "name", "metal" or "material", "process", "shrinkage" and "limits" if you like; the program sets everything else).',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -150,11 +183,11 @@ export const TOOLS: Tool[] = [
     name: 'change_piece',
     title: 'Change the piece',
     description: [
-      'Change the piece: resize it, give the stone\'s measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band or the metal, turn the stone east-west or north-south, rename it, make it a plain band, or set a shrinkage allowance.',
+      'Change the piece: resize it, give the stone\'s measured size, switch between a prong head and a full bezel or between 4 and 6 prongs, thicken the prongs or the bezel, change the band, the metal or material, or the process, turn the stone east-west or north-south, rename it, make it a plain band, set a shrinkage allowance, or give the caster\'s own limits with their sources ("limits").',
       'Put only what changes in `set`; everything else stays as it was. For a setting the named ones do not cover, use "<part>.<setting>", e.g. {"head.seat_height": "3 mm"} or {"head.prong_overrides": [{"prong": 2, "thickness": "1.3 mm"}]}; describe_piece lists every part and setting.',
       'Or pass a whole edited `tree`, with or without `set`. That is how you add shapes of your own: add operation nodes to the root\'s children, such as a cupped or curled petal or leaf ("thicken"), a wire ("sweep") or a fillet ("smooth_union"); describe_piece lists every operation and its settings. Then "<id>.<setting>" in `set` reaches any of them, e.g. {"petal_1.thickness": "1.0 mm"}.',
       'Measurements need their unit ("1.2 mm"). Values below a casting limit are accepted so the person can see them, but such a piece will not export.',
-      'Or pass "program": the whole piece written as a program, for any shape the settings and operations cannot make. A template piece then goes on as a program (describe_piece shows it written as one), and a piece already written as a program takes its next version this way; its set takes only name, metal and shrinkage.',
+      'Or pass "program": the whole piece written as a program, for any shape the settings and operations cannot make. A template piece then goes on as a program (describe_piece shows it written as one), and a piece already written as a program takes its next version this way; its set takes only name, metal, material, process, shrinkage and limits.',
       'Returns the new picture, what changed, and the updated tree; the piece\'s revision number goes up by one.',
     ].join(' '),
     inputSchema: {
@@ -208,9 +241,11 @@ export const TOOLS: Tool[] = [
     title: 'Check it will cast',
     description: [
       'Check whether the piece will print and cast, without exporting it.',
-      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every casting limit of the piece\'s metal: one watertight solid; walls at least 0.8 mm; the band at least 1.0 mm; each prong at least 1.0 mm at its narrowest; a bezel rim at least 0.8 mm, with a lip covering 50-75 % of a faceted stone\'s crown, or rising at least a third of a declared cabochon\'s dome; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details at least 0.35 mm; gaps at least 0.3 mm (0.8 mm in platinum); the surface within 0.01 mm of the intended shape.',
+      'Its limits follow its material, its process and its size (the largest side of its bounding box). They come from a named limit profile, each limit cited: the first is "precious metals cast by lost wax, at jewelry scale" (sterling silver 925, 14k and 18k yellow gold, platinum 950; lost wax from a printed castable resin or a carved wax; 2.4 to 88 mm at the largest). Or they are the limits the person supplied with the piece, each with its source, and the reply names them as theirs.',
+      'It writes the casting file in memory exactly as an export would, reads that file back, and measures it against every limit: one watertight solid; walls (0.8 mm in the jewelry profile); a ring band (1.0 mm); each prong at its narrowest (1.0 mm); a bezel rim (0.8 mm), with a lip covering 50-75 % of a faceted stone\'s crown, or rising at least a third of a declared cabochon\'s dome; prongs reaching over the girdle; each thickened sheet (a petal or leaf made with "thicken") at least 0.8 mm, measured square to its surface; details (0.35 mm); gaps (0.3 mm, 0.8 mm in platinum); the surface within 0.01 mm of the intended shape. The stone and setting checks apply only to a piece with a stone or a setting.',
       'Returns pass or fail for each limit with the thinnest place found, and for anything that fails, what to thicken and where on the piece. The full report comes back as <name>.check.json.',
-      'A failed check is a normal answer, not an error: tell the person what to change.',
+      'When no profile covers the piece\'s material, process and size together and it carries no limits of its own (a bronze sculpture, a 300 mm silver bowl), the answer is NO VERDICT: it says which did not match and how to go on, and never judges with another profile\'s numbers.',
+      'A failed check, or no verdict, is a normal answer, not an error: tell the person what to change.',
     ].join(' '),
     inputSchema: { type: 'object', additionalProperties: false, properties: { tree: TREE } },
     annotations: annotations('check_piece', 'Check it will cast'),
@@ -220,7 +255,7 @@ export const TOOLS: Tool[] = [
     title: 'Make the casting files',
     description: [
       'Make the files to send to a printer or caster: <name>.stl (binary STL, millimetres) with <name>.3mf beside it, and <name>.check.json, the check report the caster reads.',
-      'The files are released ONLY if every casting check passes on the file as written. Otherwise nothing is exported, and the reply says what to thicken and where; that is a normal answer, not an error, so tell the person and offer the change.',
+      'The files are released ONLY if every casting check passes on the file as written, against the piece\'s limits (its profile\'s, or the ones supplied with it, which the report then names as the person\'s). Otherwise nothing is exported, and the reply says what to thicken and where, or that there is no verdict and how to go on; that is a normal answer, not an error, so tell the person and offer the change.',
       'The stone is never in the casting files. The report says whether a shrinkage allowance was applied. A platinum piece goes to a SPECIALIST platinum caster (it is cast at about 1850-2200 °C), and the reply says so.',
     ].join(' '),
     inputSchema: { type: 'object', additionalProperties: false, properties: { tree: TREE } },
@@ -230,7 +265,7 @@ export const TOOLS: Tool[] = [
     name: 'describe_piece',
     title: 'Describe the piece',
     description: [
-      'Read back what the piece is now, in a jeweler\'s terms: the ring size (with its system and the inner diameter in mm), the band\'s width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal and its casting limits, the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.',
+      'Read back what the piece is now, in a maker\'s terms: the ring size (with its system and the inner diameter in mm), the band\'s width, thickness and profile, the stone (its measured size, and which sizes are still placeholders) and its setting, the metal or material and the casting limits it is held to (its limit profile, or the limits supplied with it, or that there are none), the overall size, the metal volume, and the estimated weight in sterling silver, 14k and 18k gold and platinum 950.',
       'It also gives the dimensions the piece is built to, in mm, each the figure the engine itself uses: the band\'s inner and outer diameter, width and thickness; the stone\'s seat (its size across at the girdle and the clearance a side); a bezel\'s wall, its outside size, the lip height it works out, and how far it stands above the band; each prong\'s thickness, its narrowest section where the seat is cut, and how far it reaches over the girdle; and the room under the stone\'s point. Work a fit, a weight or a cost from these, never from an assumed size.',
       'Also lists every part and every setting change_piece can change, with its allowed range, its default and its casting limit, and includes the piece\'s tree. It also lists what a program can call, and shows a template piece written as a program, ready to change. For a piece written as a program, it gives the dimensions each library part in it was built to.',
       'Changes nothing and makes no files.',

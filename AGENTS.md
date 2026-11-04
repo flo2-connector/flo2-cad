@@ -72,10 +72,25 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
     `"1.5 %"`.
   - A bare number or a foreign unit is refused, and the agent does the conversion.
   - A ring size names its system: US, UK or EU.
-- **Metals and limits.** Silver, 14k and 18k gold, and Pt950 each have their own cited limits and shrinkage, kept in
-  `src/metals.ts` with their sources.
+- **Limits follow the material, the process and the size** (`dec:idea-limit-profiles-by-material-process-and-size`,
+  accepted 2026-11-04, options (a) and (b)).
+  - A piece states its material (`metal`, one of the four by id, or `material`, any other by name) and its process
+    (`process`; absent, lost wax is assumed and the reply says so). Its size is measured: the largest side of its
+    bounding box.
+  - Limits come from a NAMED PROFILE that covers all three, each limit cited, in `src/limits/profiles.ts`. The first is
+    "precious metals cast by lost wax, at jewelry scale": silver, 14k and 18k gold and Pt950, each with its own cited
+    limits and shrinkage, 2.4 to 88 mm at the largest (Shapeways' and Materialise's part sizes).
+  - No profile covering all three means NO VERDICT, naming what did not match; never another profile's numbers. Export
+    refuses without a verdict.
+  - A piece may carry limits the person supplies (`limits`), each with its source. They are used in place of a
+    profile's, and every report and export names them as the person's. A set missing a limit or a source is refused by
+    its field path.
+  - A profile is added only when a real piece needs one, with its own sources.
   - Every platinum export says it goes to a specialist caster.
   - Library defaults sit above each limit with a margin.
+- **Jewelry is a layer.** The stone, setting and seat rules and the checks of a stone's setting live in `src/jewelry/`,
+  reached only through `src/jewelry/index.ts`, and apply only to a piece that declares a stone or a setting. The general
+  checker and `src/limits/` import nothing of it; `test/jewelry-boundary.test.ts` holds that.
 - **Export only when every check passes on the written file.**
   - A check that cannot run counts as a fail.
   - Previews are never blocked.
@@ -112,13 +127,15 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 |---|---|
 | `src/main.ts`, `src/server.ts`, `src/session.ts` | the agent tool surface (MCP, both eras) |
 | `src/tools.ts` | **the published tool list and argument schemas** |
-| `src/units.ts`, `src/metals.ts` | unit enforcement, ring sizes, and the metals with their cited limits |
+| `src/units.ts`, `src/metals.ts` | unit enforcement, ring sizes, and the four metals (name, density, casting note) |
+| `src/limits/` | the named limit profiles with their sources (`profiles.ts`), how a piece's material, process and size choose one or none (`choose.ts`), and limits a person supplies (`supplied.ts`) |
+| `src/jewelry/` | the jewelry layer, behind `index.ts`: the stone, setting and seat rules (`rules.ts`), the checks of a stone's setting (`checks.ts`) and what to change when one fails (`fixes.ts`) |
 | `src/piece/tree.ts` | the piece tree: templates, settings, validation |
 | `src/piece/program.ts` | a piece written as a program: its file, its validation |
 | `src/program/` | a program's evaluation: the library and kernel calls it reaches (`library.ts`), its context (`prelude.ts`), the child process (`child.ts`), the confinement and limits (`run.ts`), what comes back (`verify.ts`) |
 | `src/kernel/manifold.ts` | loads the vendored kernel |
 | `src/library/` | jewelry parts (band, prong head, bezel, stones) and the general operations |
-| `src/checker/` | the independent casting checker and its own STL parser |
+| `src/checker/` | the independent casting checker (the general checks, and the layer hook the jewelry checks run through) and its own STL parser |
 | `src/render/` | the software preview renderer and its bitmap font |
 | `src/files/` | PNG, binary STL, ZIP and 3MF writers |
 | `src/engine.ts` | build, preview, check, export, and what-to-thicken |

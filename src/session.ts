@@ -10,6 +10,8 @@ import {
   describeProgram,
   dimensionLines,
   evaluateProgram,
+  limitsLine,
+  limitsTag,
   placeholderNote,
   preview,
   previewProgram,
@@ -21,9 +23,29 @@ import {
   type ProgramView,
 } from './engine.js';
 import { pieceDims } from './library/build.js';
-import { METALS, type MetalId } from './metals.js';
+import { chooseLimits, materialName, metalOf, noVerdictWords, processWords, type CastStatement, type PieceSize } from './limits/choose.js';
+import type { SuppliedFile } from './limits/supplied.js';
+import type { MetalId } from './metals.js';
 import { checkProgramSource, isProgramPiece, programPiece, validatePiece, type Piece, type ProgramPiece } from './piece/program.js';
-import { applySet, checkParam, checkStartArgs, getSetting, OP_HELP, OP_PARAMS, OPERATIONS, PARAM_BY_KEY, PARAMS, PARTS, readPiece, treeFromTemplate, validateTree, type PieceTree } from './piece/tree.js';
+import {
+  applySet,
+  checkCastStatement,
+  checkParam,
+  checkStartArgs,
+  getSetting,
+  OP_HELP,
+  OP_PARAMS,
+  OPERATIONS,
+  PARAM_BY_KEY,
+  PARAMS,
+  PARTS,
+  readPiece,
+  removes,
+  setCastStatement,
+  treeFromTemplate,
+  validateTree,
+  type PieceTree,
+} from './piece/tree.js';
 import { CABOCHON_EXAMPLE, programGuide } from './program/guide.js';
 import { ProgramFailed, programLimits, type ProgramLimits } from './program/run.js';
 import { treeAsProgram } from './program/from-tree.js';
@@ -32,15 +54,44 @@ import { MIME, callError, reply, type OutFile, type ToolReply } from './reply.js
 import { DEFAULT_VIEWS, PREVIEW_VIEWS, TOOLS, type ToolName } from './tools.js';
 
 /** The settings a piece written as a program keeps beside its program; everything else is in the program. */
-const PROGRAM_PIECE_SETTINGS = ['name', 'metal', 'shrinkage'] as const;
+const PROGRAM_PIECE_SETTINGS = ['name', 'metal', 'material', 'process', 'shrinkage', 'limits'] as const;
+
+const BOTH = 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.';
+
+/**
+ * What describe_piece says of the limits a piece of this size is held to: its profile's, its
+ * supplied ones, or that there are none (so no verdict), with where they come from.
+ */
+function castingLimitsTexts(cast: CastStatement, box: [number, number, number]): string[] {
+  const size: PieceSize = { boxMm: box, largestMm: Math.max(...box) };
+  const choice = chooseLimits(cast, size.largestMm);
+  if (choice.kind === 'none') {
+    const w = noVerdictWords(cast, size, choice.matches);
+    return [`There are no cited casting limits for this piece's material, process and size together, so check_piece gives no verdict for it and export_for_casting releases nothing. ${w.why.join(' ')} How to go on: ${w.howToGoOn.join(' ')}`];
+  }
+  const L = choice.limits;
+  const note = metalOf(cast)?.castingNote;
+  return [
+    `Casting limits in ${materialName(cast)}${limitsTag(choice)}: walls ${L.wall} mm, band ${L.band} mm, prongs ${L.prong} mm at their narrowest, details ${L.detail} mm, gaps ${L.gap} mm, surface within ${L.surfaceDeviation} mm.${note ? ` ${note}` : ''}`,
+    limitsLine({ choice, size }, cast),
+  ];
+}
+
+/** Why a check or an export has no verdict, and how to go on. */
+function noVerdictTexts(piece: Piece, r: Awaited<ReturnType<typeof checkPiece>>, lead: string, tail: string): string[] {
+  const w = r.choice.kind === 'none' ? noVerdictWords(piece, r.size, r.choice.matches) : { why: [], howToGoOn: [] };
+  const size = r.size ? `${Math.round(r.size.largestMm * 100) / 100} mm at its largest` : 'its size not measured (it could not be built)';
+  return [`${lead} It never applies another profile's numbers. ${w.why.join(' ')}`, `How to go on:\n${w.howToGoOn.map((h) => `- ${h}`).join('\n')}`, `Checked as: ${materialName(piece)}, cast by ${processWords(piece)}, ${size}. ${tail}`];
+}
 
 const ALLOWED_ARGS: Readonly<Record<string, ReadonlySet<string>>> = Object.fromEntries(
   TOOLS.map((t) => [t.name, new Set(Object.keys((t.inputSchema.properties ?? {}) as object))]),
 );
 
 function fmt(v: unknown): string {
-  if (v === undefined) return '(none)';
+  if (v === undefined || v === null) return '(none)';
   if (typeof v === 'string') return v;
+  if (typeof v === 'object' && 'wall' in v && 'shrinkage' in v) return 'the supplied limits, each with its source';
   if (v && typeof v === 'object' && 'system' in v) {
     const r = v as { system: unknown; size?: unknown };
     return `${String(r.system)} ${String(r.size)}`;
@@ -128,7 +179,7 @@ export class Session {
     if (seat) texts[0] += ` ${seat}`;
     const ph = placeholderNote(v);
     if (ph) texts.push(`PLACEHOLDER: ${ph} The picture says so too.`);
-    const note = METALS[v.metal].castingNote;
+    const note = metalOf(tree)?.castingNote;
     if (note) texts.push(note);
     texts.push(treeText(tree));
     return reply(texts, files);
@@ -156,7 +207,7 @@ export class Session {
     files.push(treeFile(p));
     const parts = view.run.parts ?? [];
     const texts = [`${lead} ${programSummary(p, view)}`, ...programSeatLines(parts), ...logText(view.logs)];
-    const note = METALS[p.metal].castingNote;
+    const note = metalOf(p)?.castingNote;
     if (note) texts.push(note);
     texts.push(treeText(p));
     return reply(texts, files);
@@ -179,16 +230,22 @@ export class Session {
         k,
         k === 'template'
           ? 'start_piece takes a template or a program, not both. To start from a template and go on as a program, start the template, then pass "program" to change_piece (describe_piece shows the template as a program).'
-          : 'a piece written as a program sets its band, stone and setting in the program (ringShank, prongHead, bezel ...); start_piece takes only "program", "name", "metal" and "shrinkage" with it.',
+          : `a piece written as a program sets its band, stone and setting in the program (ringShank, prongHead, bezel ...); start_piece takes only "program" and ${PROGRAM_PIECE_SETTINGS.map((x) => `"${x}"`).join(', ')} with it.`,
       );
     }
+    if (args['metal'] !== undefined && args['material'] !== undefined) throw new CallError('material', BOTH);
     for (const k of PROGRAM_PIECE_SETTINGS) if (args[k] !== undefined) checkParam(PARAM_BY_KEY.get(k)!, args[k], k);
     const wantPreview = this.#previewFlag(args);
     const p = programPiece(checkProgramSource(args['program'], 'program'), {
       ...(args['name'] !== undefined ? { name: args['name'] as string } : {}),
       ...(args['metal'] !== undefined ? { metal: args['metal'] as MetalId } : {}),
+      ...(args['material'] !== undefined ? { material: args['material'] as string } : {}),
+      ...(args['process'] !== undefined ? { process: args['process'] as string } : {}),
       ...(args['shrinkage'] !== undefined ? { shrinkage: args['shrinkage'] as string } : {}),
+      ...(args['limits'] !== undefined ? { limits: args['limits'] as SuppliedFile } : {}),
     });
+    // The shrinkage allowance is read against what the piece is cast in, and how.
+    checkCastStatement(p as unknown as Record<string, unknown>, '');
     const view = await this.#evaluate(p, 'program');
     this.#piece = p;
     return this.#withProgram(p, 'Started.', wantPreview, view);
@@ -231,13 +288,14 @@ export class Session {
         next = { ...base, program: src, revision: base.revision + 1 };
         lines.push(src === base.program ? 'nothing in the program (it is the same)' : 'the program');
       } else {
-        next = { ...programPiece(src, { name: base.name, metal: base.metal, shrinkage: base.shrinkage }), revision: base.revision + 1 };
+        next = { ...programPiece(src, { name: base.name, metal: base.metal, material: base.material, process: base.process, shrinkage: base.shrinkage, limits: base.limits }), revision: base.revision + 1 };
         lines.push(`the piece: it is now written as a program (it was built from the "${base.template}" template)`);
       }
     } else {
       next = { ...(base as ProgramPiece), revision: base.revision + 1 };
       if (!set) lines.push('the whole piece, as passed');
     }
+    if (set?.['metal'] !== undefined && set['material'] !== undefined) throw new CallError('set.material', BOTH);
     for (const [k, v] of Object.entries(set ?? {})) {
       if (!(PROGRAM_PIECE_SETTINGS as readonly string[]).includes(k)) {
         throw new CallError(
@@ -247,9 +305,10 @@ export class Session {
             : `"${k}" is not a setting; a piece written as a program takes ${PROGRAM_PIECE_SETTINGS.join(', ')} in set, and everything else in its program.`,
         );
       }
-      checkParam(PARAM_BY_KEY.get(k)!, v, `set.${k}`);
+      if (!removes(k, v)) checkParam(PARAM_BY_KEY.get(k)!, v, `set.${k}`);
       const before = (next as unknown as Record<string, unknown>)[k];
-      (next as unknown as Record<string, unknown>)[k] = v;
+      if (k === 'metal' || k === 'material' || k === 'process' || k === 'limits') setCastStatement(next, k, v);
+      else (next as unknown as Record<string, unknown>)[k] = v;
       lines.push(`${k}: ${fmt(before)} → ${fmt(v)}`);
     }
     // The shrinkage allowance is read against the metal it is for.
@@ -285,7 +344,7 @@ export class Session {
     const stl = r.report['stl'] as { file: string; sha256: string; triangles: number } | null;
     const lines = r.entries.map((c) => `- ${c.name} (limit ${c.limit}): ${c.result.toUpperCase()}, ${c.measured ?? 'not measured'}${c.where ? ` [${c.where.description}]` : ''}`);
     const head = stl
-      ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${(r.report['metal'] as { name: string }).name}:`
+      ? `Checks for "${tree.name}" revision ${tree.revision}, on ${stl.file} as written (${stl.triangles} triangles, sha256 ${stl.sha256.slice(0, 12)}...), in ${materialName(tree)}${limitsTag(r.choice)}:`
       : `Checks for "${tree.name}" revision ${tree.revision}: the casting file could not be made, so no check could run.`;
     return [head, ...lines].join('\n');
   }
@@ -293,14 +352,19 @@ export class Session {
   async check(args: Record<string, unknown>): Promise<ToolReply> {
     const tree = this.#open(args);
     const r = await checkPiece(tree, 'check', this.#limits);
+    const reportFile: OutFile = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + '\n', 'utf8') };
+    if (r.verdict === 'no_verdict') {
+      const lead = `NO VERDICT: flo2-cad has no cited casting limits for this piece's material, process and size together, so it does not judge whether "${tree.name}" revision ${tree.revision} will cast, and export_for_casting will not release it.`;
+      return reply(noVerdictTexts(tree, r, lead, `Full report: ${tree.name}.check.json.`), [reportFile]);
+    }
     const head =
       r.verdict === 'pass'
         ? 'Every casting check passes on the file as an export would write it; export_for_casting will release it.'
         : `It would NOT cast as it is. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`;
-    const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${(r.report['shrinkage'] as { allowance: string }).allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`];
+    const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${(r.report['shrinkage'] as { allowance: string }).allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`, limitsLine(r, tree)];
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
     if (ph) texts.push(`PLACEHOLDER: ${ph} The checks are only as true as the stone's size.`);
-    return reply(texts, [{ name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + '\n', 'utf8') }]);
+    return reply(texts, [reportFile]);
   }
 
   async export(args: Record<string, unknown>): Promise<ToolReply> {
@@ -309,20 +373,26 @@ export class Session {
     const report: OutFile = { name: `${tree.name}.check.json`, mimeType: MIME.json, bytes: Buffer.from(JSON.stringify(r.report, null, 2) + '\n', 'utf8') };
     const sh = r.report['shrinkage'] as { applied: boolean; allowance: string };
     const shrink = `Shrinkage allowance: ${sh.applied ? `APPLIED, ${sh.allowance}` : 'not applied (off)'}.`;
-    const note = METALS[tree.metal].castingNote;
+    const note = metalOf(tree)?.castingNote;
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
+    if (r.verdict === 'no_verdict') {
+      const lead = `NOT EXPORTED: "${tree.name}" revision ${tree.revision} has no verdict: flo2-cad has no cited casting limits for its material, process and size together, so it does not judge whether it will cast, and no casting file was released.`;
+      return reply(noVerdictTexts(tree, r, lead, `The report is ${tree.name}.check.json. A preview is still available with preview_piece.`), [report]);
+    }
     if (r.verdict !== 'pass' || !r.stl || !r.threeMf) {
       const texts = [
         `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`,
         this.#verdictText(tree, r),
         `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,
+        limitsLine(r, tree),
       ];
       return reply(texts, [report]);
     }
     const texts = [
-      `EXPORTED "${tree.name}" revision ${tree.revision} in ${METALS[tree.metal].name}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
+      `EXPORTED "${tree.name}" revision ${tree.revision} in ${materialName(tree)}: ${tree.name}.stl (binary STL, millimetres) and ${tree.name}.3mf, with the check report ${tree.name}.check.json. Every check passed on the STL as written. The stone is not in the files.`,
       this.#verdictText(tree, r),
       shrink,
+      limitsLine(r, tree),
     ];
     if (note) texts.push(note);
     if (ph) texts.push(`PLACEHOLDER: ${ph} Do not cast this until the stone's real size is in.`);
@@ -344,12 +414,11 @@ export class Session {
       const limit = p.limit ? `, limit ${p.limit}` : '';
       return `- ${p.key} (now ${fmt(getSetting(tree, p.key))}${range}${dflt}${limit}): ${p.help}`;
     });
-    const metal = METALS[v.metal];
     const texts = [
       summary(tree, v),
       `Dimensions as built (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n${dimensionLines(n.dims).join('\n')}`,
       `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (the stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
-      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ''}`,
+      ...castingLimitsTexts(tree, n.size),
       `Settings change_piece can set:\n${catalog.join('\n')}\nAny part's setting can also be set as "<part>.<setting>": the parts here are ${listParts(tree)}. Head settings beyond the named ones: head.prong_grip (how far each prong reaches over the girdle), head.culet_clearance (room under the stone's point), head.prong_overrides (one prong's own thickness, e.g. [{"prong": 2, "thickness": "1.5 mm"}]; prongs are counted clockwise from 12 o'clock seen from above, the finger pointing to 12).`,
       `A tree's parts: ${PARTS.join(', ')}. To add a shape of your own, add a node {"id", "op", "params", "children"} to the root's children (ids are lower-case letters, digits and "_", unique in the piece) and pass the edited tree to change_piece. The operations, with their settings:\n${operationGuide()}`,
       `A shape the parts and operations above cannot make (a cabochon, a lion's face, a ship's hull) is written as a PROGRAM: pass "program" to change_piece and the piece goes on as a program. This piece, written as one (the same piece):\n${treeAsProgram(tree)}\nWhat a program can call:\n${programGuide(this.#limits)}`,
@@ -364,13 +433,12 @@ export class Session {
     const view = await this.#evaluate(p, 'tree.program');
     const n = await describeProgram(p, view);
     const parts = view.run.parts ?? [];
-    const metal = METALS[p.metal];
     const dims = programDimensionLines(parts);
     const texts = [
       programSummary(p, view),
       ...(dims.length ? [`Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n${dims.join('\n')}`] : []),
       `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (any stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
-      `Casting limits in ${metal.name}: walls ${metal.limits.wall} mm, band ${metal.limits.band} mm, prongs ${metal.limits.prong} mm at their narrowest, details ${metal.limits.detail} mm, gaps ${metal.limits.gap} mm, surface within ${metal.limits.surfaceDeviation} mm.${metal.castingNote ? ` ${metal.castingNote}` : ''}`,
+      ...castingLimitsTexts(p, n.size),
       `This piece is written as a program. Change it by passing the whole edited program as "program" to change_piece; set takes only ${PROGRAM_PIECE_SETTINGS.join(', ')}. What a program can call:\n${programGuide(this.#limits)}\nAn example, a cabochon in a bezel:\n${CABOCHON_EXAMPLE}`,
       ...logText(view.logs),
       treeText(p),

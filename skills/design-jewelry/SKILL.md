@@ -1,6 +1,6 @@
 ---
 name: design-jewelry
-description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, a ring with petals, leaves or a flower on it, or any other shape (a cabochon, a signet, a sculpted piece) written as a program, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, writing a piece as a program, refusals and what to thicken, and platinum.
+description: Design a casting-ready ring with someone who makes jewelry, using the flo2-cad tools. Use when a person wants to design, resize, preview, check or export a ring, a solitaire, a bezel or prong setting, a band, a ring with petals, leaves or a flower on it, or any other shape (a cabochon, a signet, a sculpted piece) written as a program, for printing and casting. It covers what to ask, units, stone sizes from a grading report, adding shapes such as cupped petals, writing a piece as a program, refusals and what to thicken, the limits that apply (a ring's limit profile, no verdict, a caster's own limits), and platinum.
 compatibility: Needs the flo2-cad MCP server, which provides start_piece, change_piece, preview_piece, check_piece, export_for_casting and describe_piece.
 ---
 
@@ -18,7 +18,10 @@ The tools do the geometry, and your job is the conversation.
      needs its diameter and depth. An emerald cut needs its length, width and depth. The carat weight alone is not
      enough.
    - The **setting**: prongs (4 or 6) or a full bezel.
-   - The **metal**: sterling silver, 14k or 18k gold, or platinum 950.
+   - The **metal**: sterling silver, 14k or 18k gold, or platinum 950. Anything else, such as bronze or copper, is a
+     `material` (see "The limits follow the metal, the process and the size" below).
+   - **How it will be cast**, if they know: lost wax from a printed or carved wax is what a ring's limits are for. If
+     they will cast it another way, say so with `process`.
    - The **band**: its profile (comfort fit, half round, flat or round wire), width and thickness.
 
    You do not need everything first. The tools fill safe defaults and say what is a placeholder.
@@ -92,6 +95,47 @@ design that way.
 - The **orientation** of an emerald cut: `east_west` puts its long side across the finger, and `north_south` puts it
   along the finger.
 
+## The limits follow the metal, the process and the size
+
+The casting limits are not one fixed list. They depend on what the piece is cast in, how it is cast, and how big it is.
+
+- **A limit profile** is one cited set of limits for a family of metals, a casting process and a range of sizes. Each
+  limit in it has its source. The engine picks the profile that covers all three for the piece.
+- **A ring's profile** is "precious metals cast by lost wax, at jewelry scale": sterling silver, 14k and 18k gold or
+  platinum 950, cast by lost wax from a printed castable resin or a carved wax, up to 88 mm at the largest. Every ring
+  and pendant you make with the templates is in it. It is the only profile so far.
+- **Say what it is cast in, and how.** `"metal"` for one of the four metals. `"material"` for anything else, in words:
+  `{"material": "bronze"}`. `"process"` for how it is cast: `"lost_wax"`, or another way in words, such as
+  `"sand casting"`. If the piece says no process, the engine assumes lost wax, and the check says so. Tell the person.
+- **The size is measured**, from the piece itself: its largest side, in mm.
+
+### No verdict
+
+If no profile covers the piece's metal, process and size together, `check_piece` gives **no verdict**. It does not say
+pass or fail, and `export_for_casting` releases nothing. A bronze piece, a silver piece sand cast, and a silver bowl
+300 mm across all get this answer.
+
+- This is a normal answer, not an error. The engine has no cited limits for that piece, and it will not judge it with
+  a ring's numbers.
+- The reply says which did not match (the metal, the process or the size) and how to go on.
+- Tell the person plainly. Then either change what did not match, if that is what they meant (a ring in silver, cast
+  by lost wax), or ask for their caster's limits.
+
+### Limits from their caster
+
+A caster or foundry often has its own limits for its metal and process. The person can give them, and the engine
+checks the piece against them instead.
+
+- Ask the caster for each one: the thinnest wall, a ring band, a prong (a wire held at one end only), the smallest
+  detail, the smallest gap, the surface accuracy, and the shrinkage allowance.
+- Give them with `change_piece` and `set`, each with its value, its unit and its source:
+  `{"limits": {"wall": {"value": "1.5 mm", "source": "the foundry's design guide, rev. 3, 2026-10-01"}, ...}}`.
+  The source is where the number comes from: the caster's word with its date, or a datasheet.
+- **Never make up a number or a source.** If the person does not have one, ask the caster. A set missing a limit or a
+  source is refused, and the message names the one that is missing.
+- They are kept in the piece's file. Every check and export names them as the person's, with their sources.
+  `{"limits": null}` takes them out again.
+
 ## When the export is refused
 
 A refusal is a normal answer, not an error. The engine refuses to release a file that would not cast. Each limit has
@@ -103,7 +147,7 @@ a cited source, and every check runs on the exact file it would have sent.
 - Tell the person plainly and offer the change the reply suggests. Make it with `change_piece`, show the new
   picture, and check again.
 
-The limits, so you can explain them:
+The limits of a ring's profile, so you can explain them (a piece with its caster's limits is held to those instead):
 
 | Limit | Value |
 |---|---|
@@ -195,8 +239,8 @@ The templates, parts and operations above cover bands, solitaires and petals. Fo
 signet, a lion's face, a ship) do not wait for a new feature: write the piece as a short JavaScript program. The
 engine runs it confined, keeps it as the piece's file, and previews, checks and exports it like any piece.
 
-- **How.** `start_piece` with `"program"` (and `"name"`, `"metal"`, `"shrinkage"` if you like) instead of a
-  template. `change_piece` with the whole edited `"program"` makes the next version. A template piece can go on as a
+- **How.** `start_piece` with `"program"` (and `"name"`, `"metal"` or `"material"`, `"process"`, `"shrinkage"` and
+  `"limits"` if you like) instead of a template. `change_piece` with the whole edited `"program"` makes the next version. A template piece can go on as a
   program: `describe_piece` shows it written as one, ready to edit.
 - **What it can call.** `describe_piece` lists everything, with settings. In short:
   - the **library**, today's parts: `ringShank`, `roundStone`, `emeraldStone`, `cabochon`, `stone` (a stone of your
@@ -258,8 +302,9 @@ faceted stone, by 50 % to 75 % of its crown.
 ## Shrinkage
 
 - Metal shrinks about 1 to 1.5 % in casting.
-- The allowance is per piece and off by default: `"shrinkage": "on"` uses the metal's figure (1.5 %), or give one
-  such as `"1.2 %"`.
+- The allowance is per piece and off by default: `"shrinkage": "on"` uses the cited figure (1.5 % for the four metals
+  by lost wax, or the caster's own if their limits are in), or give one such as `"1.2 %"`. For a material no profile
+  covers, and no caster's limits, `"on"` is refused: give a percentage.
 - Every export says whether it was applied. Ask the caster before turning it on: many casters compensate themselves.
 
 ## Picking up later

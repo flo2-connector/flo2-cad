@@ -44,7 +44,8 @@ import { Arena, buildBand, buildHead, clockOf, finishMetal, pieceDims, polygonsT
 import { buildOp } from '../library/ops.js';
 import { outsideConvex, stoneShape, type StoneShapeInfo } from '../library/stones.js';
 import { compose, IDENTITY, reflection, rotation, translation, type Affine, type BlendMeshes, type BlendRecord, type OpContext } from '../library/thicken.js';
-import { bandDefaults, checkHeadSettings, checkParam, HEAD_DEFAULTS, headView, PARAM_BY_KEY, stoneView, validateOpNode, type PieceView, type StoneView, type TreeNode } from '../piece/tree.js';
+import { HEAD_DEFAULTS } from '../jewelry/index.js';
+import { bandDefaults, checkHeadSettings, checkParam, headView, PARAM_BY_KEY, stoneView, validateOpNode, type PieceView, type StoneView, type TreeNode } from '../piece/tree.js';
 import { angleDeg, caratText, lengthMm, ringInnerDiameterMm } from '../units.js';
 
 /** No coordinate of a program's piece lies further than this from the origin (a model ship included). */

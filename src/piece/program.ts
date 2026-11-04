@@ -10,10 +10,13 @@
 //   { "format": "flo2-cad.program/1", "name", "revision", "metal", "shrinkage",
 //     "units": "mm", "program": "<the JavaScript source>" }
 //
+// with, as on a tree, "material" in place of "metal" for any other material, and optionally
+// "process" and "limits" (src/limits/choose.ts):
+//
 // The program is the piece's whole source: its band, stone and setting are calls in it,
 // so the named settings of a template (band_width, prong_thickness, ...) are changed in
-// the program, not with `set`. The metal, the name and the shrinkage allowance are the
-// piece's own, as on a tree.
+// the program, not with `set`. The metal (or material), the process, any supplied limits, the
+// name and the shrinkage allowance are the piece's own, as on a tree.
 //
 // UNITS (con:no-number-without-its-unit). The file states its unit, "mm", once: inside the
 // program a bare number is a length in millimetres, or an angle in degrees where an angle
@@ -21,8 +24,9 @@
 // refused with the conversion, exactly as on a tree.
 
 import { CallError, at } from '../errors.js';
-import { METAL_IDS, type MetalId } from '../metals.js';
-import { shrinkagePercent, TREE_FORMAT, validateTree, type PieceTree } from './tree.js';
+import type { SuppliedFile } from '../limits/supplied.js';
+import type { MetalId } from '../metals.js';
+import { checkCastStatement, TREE_FORMAT, validateTree, type PieceTree } from './tree.js';
 
 export const PROGRAM_FORMAT = 'flo2-cad.program/1';
 /** The unit a program's bare numbers are in. */
@@ -34,9 +38,15 @@ export interface ProgramPiece {
   format: typeof PROGRAM_FORMAT;
   name: string;
   revision: number;
-  metal: MetalId;
-  /** "off" (the default), "on" (the metal's cited allowance) or an allowance such as "1.5 %". */
+  /** One of the four metals, by its id; or, instead, `material`: any other, by name. */
+  metal?: MetalId;
+  material?: string;
+  /** How it will be cast; absent, lost wax is assumed and the check says so. */
+  process?: string;
+  /** "off" (the default), "on" (the cited allowance) or an allowance such as "1.5 %". */
   shrinkage: string;
+  /** Limits the person supplies, each with its source, used in place of a profile's. */
+  limits?: SuppliedFile;
   units: typeof PROGRAM_UNITS;
   program: string;
 }
@@ -49,7 +59,7 @@ export function isProgramPiece(p: Piece): p is ProgramPiece {
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const FIELDS = ['format', 'name', 'revision', 'metal', 'shrinkage', 'units', 'program'] as const;
+const FIELDS = ['format', 'name', 'revision', 'metal', 'material', 'process', 'shrinkage', 'limits', 'units', 'program'] as const;
 
 /** A program's source, as an argument or in a piece file: non-empty text of bounded length. */
 export function checkProgramSource(v: unknown, path: string): string {
@@ -70,21 +80,22 @@ export function validateProgramPiece(v: unknown, path = 'tree'): ProgramPiece {
     throw new CallError(at(path, 'name'), 'a piece name is 1 to 64 letters, digits, "-" or "_", starting with a letter or digit, for example "moon-cabochon".');
   }
   if (!Number.isInteger(t['revision']) || (t['revision'] as number) < 1) throw new CallError(at(path, 'revision'), 'must be a whole number, 1 or more (it counts the changes, so it has no unit).');
-  if (!(METAL_IDS as readonly unknown[]).includes(t['metal'])) throw new CallError(at(path, 'metal'), `must be one of ${METAL_IDS.join(', ')}.`);
-  shrinkagePercent(t['shrinkage'], t['metal'] as MetalId, at(path, 'shrinkage'));
+  checkCastStatement(t, path);
   if (t['units'] !== PROGRAM_UNITS) throw new CallError(at(path, 'units'), `must be "${PROGRAM_UNITS}": a program's bare numbers are millimetres (and degrees where an angle is asked for).`);
   checkProgramSource(t['program'], at(path, 'program'));
   return v as ProgramPiece;
 }
 
-/** A new program piece at revision 1. */
-export function programPiece(program: string, o: { name?: string; metal?: MetalId; shrinkage?: string }): ProgramPiece {
+/** A new program piece at revision 1: in sterling silver unless it names a metal or a material. */
+export function programPiece(program: string, o: { name?: string; metal?: MetalId; material?: string; process?: string; shrinkage?: string; limits?: SuppliedFile }): ProgramPiece {
   return {
     format: PROGRAM_FORMAT,
     name: o.name ?? 'piece',
     revision: 1,
-    metal: o.metal ?? 'sterling_silver_925',
+    ...(o.material !== undefined ? { material: o.material } : { metal: o.metal ?? 'sterling_silver_925' }),
+    ...(o.process !== undefined ? { process: o.process } : {}),
     shrinkage: o.shrinkage ?? 'off',
+    ...(o.limits !== undefined ? { limits: o.limits } : {}),
     units: PROGRAM_UNITS,
     program,
   };

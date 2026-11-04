@@ -25,13 +25,22 @@
 //
 // A check that cannot run is a FAIL (owner, round 1, Q6): any exception inside
 // a check becomes result "could_not_run", which blocks the export.
+//
+// These are the GENERAL checks, whatever the piece is. The checks of a stone's setting
+// (prong thickness, prong grip, bezel wall and lip) are a LAYER on them, the jewelry layer
+// (src/jewelry/checks.ts), which the engine passes in (CheckLayer, below). The checker imports
+// no layer: a layer is applied only to a piece that declares what it checks, and asks the
+// checker's own measurements (exported below) for its readings. The limits a check reads are
+// the piece's, from its limit profile or supplied with it (src/limits/); the checker holds
+// whatever it is given.
 
 import { Bvh, CORNER, EDGE, IN_FACE } from './bvh.js';
-import type { AddedDecl, BandDecl, FeatureDecl, P2, ProngDecl, SheetDecl } from './features.js';
+import type { AddedDecl, BandDecl, FeatureDecl, P2, SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
 import { surfaceDirections } from './surface.js';
 
+/** The casting limits a check reads, in mm: the piece's limit profile's, or the ones supplied with it. */
 export interface CheckLimits {
   wall: number;
   band: number;
@@ -39,11 +48,6 @@ export interface CheckLimits {
   detail: number;
   gap: number;
   surfaceDeviation: number;
-  gripMin: number;
-  lipMinOfCrown: number;
-  lipMaxOfCrown: number;
-  /** A cabochon's bezel lip, as a share of its dome above the girdle: the least it may rise. */
-  lipMinOfCabochon: number;
 }
 
 export interface Where {
@@ -85,9 +89,50 @@ export interface CheckRunResult {
   ms: number;
 }
 
-const r3 = (x: number) => Math.round(x * 1000) / 1000;
-const mm = (x: number) => `${r3(x)} mm`;
-const pt = (p: V3): [number, number, number] => [r3(p[0]), r3(p[1]), r3(p[2])];
+/** The part a place belongs to, as a check's `where` names it. */
+export interface Part {
+  part: string;
+  feature?: string;
+  clock?: string;
+  meets?: string[];
+}
+
+/** What a layer's checks measure with: the file, its thickness readings, the declarations and the limits. */
+export interface LayerContext {
+  bvh: Bvh;
+  samples: readonly Sample[];
+  decl: FeatureDecl;
+  L: CheckLimits;
+}
+
+/** One check a layer adds. It runs guarded, as every check does: one that throws reads could_not_run. */
+export interface LayerCheck {
+  id: CheckEntry['id'];
+  name: string;
+  limit: string;
+  run(): CheckEntry | CheckEntry[];
+}
+
+/**
+ * A LAYER of checks on the general ones, for what a piece declares beyond the general parts:
+ * the jewelry layer (src/jewelry/checks.ts) checks a stone's setting. The engine passes the
+ * layers in; the checker imports none. A layer whose `applies` is false for the piece is not
+ * asked anything, so it changes nothing for a piece that declares nothing it checks.
+ */
+export interface CheckLayer {
+  /** Whether the piece declares anything this layer checks. */
+  applies(decl: FeatureDecl): boolean;
+  /** The layer's part that holds a place, if one does; asked before the general parts are. */
+  partAt?(p: V3, decl: FeatureDecl): Part | null;
+  /** Whether a thickness reading at p is judged by one of the layer's own checks instead of the wall check. */
+  judgesWallAt?(p: V3, decl: FeatureDecl): boolean;
+  /** The layer's checks, in the order they run. They run after the band's, before the sheets'. */
+  checks(ctx: LayerContext): LayerCheck[];
+}
+
+export const r3 = (x: number) => Math.round(x * 1000) / 1000;
+export const mm = (x: number) => `${r3(x)} mm`;
+export const pt = (p: V3): [number, number, number] => [r3(p[0]), r3(p[1]), r3(p[2])];
 
 /** Clock position seen from above, the finger pointing to 12 o'clock (+Y). */
 export function clockAt(x: number, y: number): string {
@@ -103,9 +148,10 @@ export function clockAt(x: number, y: number): string {
  * Runs every check on the written STL. `reference` is the same piece tessellated
  * far more finely (also STL bytes, read with the same parser): the surface check
  * measures how far the true surface stands off the written facets
- * (ver:surface-deviation-check).
+ * (ver:surface-deviation-check). `layers` add their own checks, for a piece that declares
+ * what they check (the engine passes the jewelry layer).
  */
-export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, reference?: Uint8Array | ReferencePoints): CheckRunResult {
+export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, reference?: Uint8Array | ReferencePoints, layers: readonly CheckLayer[] = []): CheckRunResult {
   const t0 = performance.now();
   let mesh: ReadMesh;
   try {
@@ -120,6 +166,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
     };
   }
   const bvh = new Bvh(mesh.positions, mesh.triangles);
+  const on = layers.filter((l) => l.applies(decl));
   const entries: CheckEntry[] = [];
   const guard = (id: CheckEntry['id'], name: string, limit: string, fn: () => CheckEntry | CheckEntry[]) => {
     try {
@@ -141,22 +188,15 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
   // The surface's direction at each triangle: its own normal, except that a sliver takes the surface's it was cut from (surface.ts).
   const surface = surfaceDirections(bvh, L.surfaceDeviation).normal;
   const samples = sampleThickness(bvh, surface);
-  guard('wall', 'Wall thickness', mm(L.wall), () => wallEntry(bvh, samples, L, decl));
-  guard('detail', 'Smallest detail', mm(L.detail), () => detailEntry(bvh, samples, L, decl));
+  guard('wall', 'Wall thickness', mm(L.wall), () => wallEntry(bvh, samples, L, decl, on));
+  guard('detail', 'Smallest detail', mm(L.detail), () => detailEntry(bvh, samples, L, decl, on));
   if (decl.band) guard('band', 'Ring band thickness', mm(L.band), () => bandEntry(bvh, decl.band!, L));
-  if (decl.prongs.length) {
-    guard('prong', 'Prong thickness', mm(L.prong), () => prongEntry(bvh, decl.prongs, L));
-    if (decl.stone) guard('prong_grip', 'Prongs grip the stone', `each reaches ${mm(L.gripMin)} over the girdle`, () => gripEntry(bvh, decl, L));
-  }
-  if (decl.bezel && decl.stone) {
-    guard('bezel_wall', 'Bezel wall thickness', mm(L.wall), () => bezelWallEntry(bvh, samples, decl, L));
-    guard('bezel_lip', 'Bezel lip height', decl.stone.kind === 'cabochon' ? "at least a third of the cabochon's dome" : `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown`, () => bezelLipEntry(bvh, decl, L));
-  }
+  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L })) guard(c.id, c.name, c.limit, c.run);
   if (decl.sheets?.length) guard('sheet', 'Sheet thickness', `${mm(L.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets!, L));
   guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
   guard('surface_deviation', 'Surface smoothness', mm(L.surfaceDeviation), () => {
     if (!reference) throw new Error('no finer reference tessellation was supplied');
-    return surfaceEntry(bvh, L, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl);
+    return surfaceEntry(bvh, L, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl, on);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
@@ -259,7 +299,7 @@ function watertight(mesh: ReadMesh, bvh: Bvh): { entry: CheckEntry; shells: numb
 
 // --------------------------------------------------------------- thickness
 
-interface Sample {
+export interface Sample {
   t: number;
   p: V3;
   thickness: number;
@@ -576,7 +616,7 @@ function vertexFans(bvh: Bvh): { start: Int32Array; tris: Int32Array } {
   return { start, tris };
 }
 
-function minSample(samples: Sample[], keep: (s: Sample) => boolean = () => true): Sample | null {
+export function minSample(samples: readonly Sample[], keep: (s: Sample) => boolean = () => true): Sample | null {
   let best: Sample | null = null;
   for (const s of samples) if (keep(s) && (!best || s.thickness < best.thickness)) best = s;
   return best;
@@ -594,13 +634,12 @@ function minSample(samples: Sample[], keep: (s: Sample) => boolean = () => true)
  * half its thickness of the sheet's middle surface, and every sheet that close is named
  * (where two meet).
  */
-function partAt(p: V3, decl: FeatureDecl, centre?: V3): { part: string; feature?: string; clock?: string; meets?: string[] } {
-  for (const pr of decl.prongs) {
-    if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
-      return { part: 'head', feature: pr.label, clock: pr.clock };
-    }
+function partAt(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], centre?: V3): Part {
+  // A layer's own parts first (the jewelry layer's prongs and bezel: src/jewelry/checks.ts).
+  for (const l of layers) {
+    const own = l.partAt?.(p, decl);
+    if (own) return own;
   }
-  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: 'head', feature: 'bezel', clock: clockAt(p[0], p[1]) };
   const bandAt = () => ({ part: 'band', feature: `${Math.round(((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360)}° round the band from the top` });
   const sheetPart = (q: V3) => {
     const [sheet, ...others] = sheetsAt(q, decl);
@@ -640,8 +679,8 @@ export function quoteIds(ids: string): string {
     .join(' or ');
 }
 
-function whereOf(p: V3, decl: FeatureDecl, what: string, centre?: V3): Where {
-  const a = partAt(p, decl, centre);
+function whereOf(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], what: string, centre?: V3): Where {
+  const a = partAt(p, decl, layers, centre);
   const where = { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), ...(a.meets ? { meets: a.meets } : {}), point_mm: pt(p) };
   if (a.part === 'added shape') return { ...where, description: `${what} in the added shape ${quoteIds(a.feature!)}` };
   if (a.part === 'sheet') return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}` };
@@ -661,15 +700,11 @@ function onBlend(p: V3, label: string, what: string): Where {
   return { part: 'blend', feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
 }
 
-const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
+export const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
 
-/** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
-function onProngColumn(p: V3, decl: FeatureDecl): boolean {
-  return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
-}
-
-function wallEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl): CheckEntry {
-  const m = minSample(samples, (s) => !onProngColumn(s.p, decl));
+function wallEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
+  // A reading a layer's own check judges instead (the jewelry layer's prong columns, by their narrowest section) is left to it.
+  const m = minSample(samples, (s) => !layers.some((l) => l.judgesWallAt?.(s.p, decl)));
   if (!m) throw new Error('no thickness could be measured');
   return {
     id: 'wall',
@@ -678,12 +713,12 @@ function wallEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDec
     result: m.thickness >= L.wall ? 'pass' : 'fail',
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, 'thinnest wall', m.centre),
+    where: whereOf(m.p, decl, layers, 'thinnest wall', m.centre),
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`,
   };
 }
 
-function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl): CheckEntry {
+function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
   const m = minSample(samples);
   if (!m) throw new Error('no thickness could be measured');
   return {
@@ -693,7 +728,7 @@ function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: Feature
     result: m.thickness >= L.detail ? 'pass' : 'fail',
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, 'the thinnest feature', m.centre),
+    where: whereOf(m.p, decl, layers, 'the thinnest feature', m.centre),
     method: MAXSPHERE,
   };
 }
@@ -795,10 +830,10 @@ function sheetEntry(bvh: Bvh, S: Float64Array, sheets: SheetDecl[], L: CheckLimi
 // section needs no skip zone, so the band is now measured all the way round, under a
 // head or an added shape too, and a thin band there is refused like anywhere else.
 
-type Seg = [P2, P2];
+export type Seg = [P2, P2];
 
 /** Where a plane (normal · p = offset) cuts the candidate triangles, in the plane's 2D coordinates; `want` drops segments that cannot matter. */
-function slice(bvh: Bvh, normal: V3, offset: number, to2d: (x: number, y: number, z: number) => P2, candidates: Uint32Array, want: (a: P2, b: P2) => boolean): Seg[] {
+export function slice(bvh: Bvh, normal: V3, offset: number, to2d: (x: number, y: number, z: number) => P2, candidates: Uint32Array, want: (a: P2, b: P2) => boolean): Seg[] {
   const segs: Seg[] = [];
   const P = bvh.pos, T = bvh.tri;
   const ends: P2[] = [];
@@ -845,7 +880,7 @@ function distToSegs(segs: Seg[], x: number, y: number): number {
 }
 
 /** The region a section is clipped to: its bounding box, and how far a point lies inside its edge (negative outside). */
-interface Region {
+export interface Region {
   box: [number, number, number, number];
   depth(x: number, y: number): number;
 }
@@ -878,7 +913,7 @@ export function largestCircleIn(segs: Seg[], region: Region): { d: number; at: P
 }
 
 /** Triangles whose bounds pass `keep` (min and max x, y, z, and the largest distance of a corner from the Y axis). */
-function trianglesWhere(bvh: Bvh, keep: (lo: V3, hi: V3, rhoMax: number) => boolean): Uint32Array {
+export function trianglesWhere(bvh: Bvh, keep: (lo: V3, hi: V3, rhoMax: number) => boolean): Uint32Array {
   const out: number[] = [];
   const P = bvh.pos, T = bvh.tri;
   const lo: V3 = [0, 0, 0], hi: V3 = [0, 0, 0];
@@ -924,172 +959,6 @@ function bandEntry(bvh: Bvh, band: BandDecl, L: CheckLimits): CheckEntry {
     value: r3(worst!.d),
     where: { part: 'band', feature: `${worst!.deg}° round the band from the top`, point_mm: pt(worst!.p), description: `the band's thinnest section, ${worst!.deg}° round from the top` },
     method: "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
-  };
-}
-
-function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
-  const results: { label: string; value: number; where: Where }[] = [];
-  for (const pr of prongs) {
-    let worst: { d: number; z: number; at: P2 } | null = null;
-    const R = pr.nominalDiameter / 2 + 0.35;
-    const [ax, ay] = pr.axis;
-    const cand = trianglesWhere(bvh, (lo, hi) => lo[2] <= pr.sectionToZ && hi[2] >= pr.sectionFromZ && lo[1] <= ay + R && hi[1] >= ay - R && hi[0] >= ax - R);
-    const region: Region = { box: [ax - R, ax + R, ay - R, ay + R], depth: (x, y) => R - Math.hypot(x - ax, y - ay) };
-    const at = (z: number) => {
-      const segs = slice(bvh, [0, 0, 1], z, (x, y) => [x, y], cand, (p, q) => Math.max(p[0], q[0]) >= ax - R && Math.max(p[1], q[1]) >= ay - R && Math.min(p[1], q[1]) <= ay + R);
-      const ins = largestCircleIn(segs, region);
-      if (ins && (!worst || ins.d < worst.d)) worst = { d: ins.d, z, at: ins.at };
-    };
-    // Every 0.1 mm up the column, then every 0.02 mm around the narrowest.
-    const steps = Math.max(8, Math.ceil((pr.sectionToZ - pr.sectionFromZ) / 0.1));
-    for (let i = 0; i <= steps; i++) at(pr.sectionFromZ + ((pr.sectionToZ - pr.sectionFromZ) * i) / steps);
-    const zc = (worst as { z: number } | null)?.z;
-    if (zc !== undefined) for (let dz = -0.1; dz <= 0.1001; dz += 0.02) if (zc + dz >= pr.sectionFromZ && zc + dz <= pr.sectionToZ) at(zc + dz);
-    if (!worst) throw new Error(`no section of ${pr.label} could be measured`);
-    const w = worst as { d: number; z: number; at: P2 };
-    results.push({
-      label: pr.label,
-      value: r3(w.d),
-      where: {
-        part: 'head',
-        feature: pr.label,
-        clock: pr.clock,
-        point_mm: pt([w.at[0], w.at[1], w.z]),
-        description: `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`,
-      },
-    });
-  }
-  const failing = results.filter((r) => r.value < L.prong);
-  const thinnest = results.reduce((a, b) => (b.value < a.value ? b : a));
-  return {
-    id: 'prong',
-    name: 'Prong thickness',
-    limit: mm(L.prong),
-    result: failing.length ? 'fail' : 'pass',
-    measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(' of ')[0]} ${r.value}`).join(', ')} mm`,
-    value: thinnest.value,
-    where: thinnest.where,
-    ...(failing.length ? { failing } : {}),
-    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
-  };
-}
-
-function gripEntry(bvh: Bvh, decl: FeatureDecl, L: CheckLimits): CheckEntry {
-  const s = decl.stone!;
-  const results: { label: string; value: number; where: Where }[] = [];
-  const P = bvh.pos;
-  for (const pr of decl.prongs) {
-    let reach = -Infinity;
-    let at: V3 = [pr.axis[0], pr.axis[1], s.girdleTopZ];
-    for (let i = 0; i < P.length; i += 3) {
-      const x = P[i]!, y = P[i + 1]!, z = P[i + 2]!;
-      if (z < s.girdleTopZ + 0.02 || Math.hypot(x - pr.axis[0], y - pr.axis[1]) > pr.nominalDiameter / 2 + 0.05) continue;
-      const inset = signedInset(s.outline, x, y);
-      if (inset > reach) {
-        reach = inset;
-        at = [x, y, z];
-      }
-    }
-    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: 'head', feature: pr.label, clock: pr.clock, point_mm: pt(at), description: `${pr.label}, at ${pr.clock}` } });
-  }
-  const failing = results.filter((r) => r.value < L.gripMin);
-  const least = results.reduce((a, b) => (b.value < a.value ? b : a));
-  return {
-    id: 'prong_grip',
-    name: 'Prongs grip the stone',
-    limit: `each prong reaches at least ${mm(L.gripMin)} in over the girdle`,
-    result: failing.length ? 'fail' : 'pass',
-    measured: `${mm(least.value)} (${least.label})`,
-    value: least.value,
-    where: least.where,
-    ...(failing.length ? { failing } : {}),
-    method: 'how far each prong\'s metal above the girdle reaches inside the girdle outline, from the written STL',
-  };
-}
-
-/** How far (x, y) lies INSIDE a convex outline (positive inside). */
-function signedInset(poly: P2[], x: number, y: number): number {
-  let best = Infinity;
-  const n = poly.length;
-  let area = 0;
-  for (let i = 0; i < n; i++) {
-    const a = poly[i]!, b = poly[(i + 1) % n]!;
-    area += a[0] * b[1] - b[0] * a[1];
-  }
-  const sign = area >= 0 ? 1 : -1;
-  for (let i = 0; i < n; i++) {
-    const a = poly[i]!, b = poly[(i + 1) % n]!;
-    const ex = b[0] - a[0], ey = b[1] - a[1];
-    const l = Math.hypot(ex, ey) || 1;
-    // Distance to the edge's line, positive on the inner side.
-    const d = (sign * (ex * (y - a[1]) - ey * (x - a[0]))) / l;
-    best = Math.min(best, d);
-  }
-  return best;
-}
-
-function inPolygon(poly: P2[], x: number, y: number, grow = 0): boolean {
-  if (grow > 0) return signedInset(poly, x, y) > -grow;
-  return signedInset(poly, x, y) >= 0;
-}
-
-function bezelWallEntry(_bvh: Bvh, samples: Sample[], decl: FeatureDecl, L: CheckLimits): CheckEntry {
-  const bz = decl.bezel!, st = decl.stone!;
-  const inBezel = (s: Sample) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
-  const m = minSample(samples, inBezel);
-  if (!m) throw new Error('no point on the bezel could be measured');
-  return {
-    id: 'bezel_wall',
-    name: 'Bezel wall thickness',
-    limit: mm(L.wall),
-    result: m.thickness >= L.wall ? 'pass' : 'fail',
-    measured: mm(m.thickness),
-    value: r3(m.thickness),
-    where: { part: 'head', feature: 'bezel', clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
-    method: MAXSPHERE + ', on the bezel rim around and above the girdle',
-  };
-}
-
-function bezelLipEntry(bvh: Bvh, decl: FeatureDecl, L: CheckLimits): CheckEntry {
-  const bz = decl.bezel!, st = decl.stone!;
-  const P = bvh.pos;
-  let top = -Infinity;
-  let at: V3 = [0, 0, 0];
-  for (let i = 0; i < P.length; i += 3) {
-    const x = P[i]!, y = P[i + 1]!, z = P[i + 2]!;
-    if (!inPolygon(bz.outer, x, y, 0.05)) continue;
-    if (z > top) {
-      top = z;
-      at = [x, y, z];
-    }
-  }
-  const lip = top - st.girdleTopZ;
-  const share = lip / st.crownHeight;
-  if (st.kind === 'cabochon') {
-    // A cabochon declared so is held to its own rule, the least share of its dome the bezel
-    // must rise to be pushed over it (metals.ts SETTING, from Cogswell), with no upper limit.
-    const need = L.lipMinOfCabochon * st.crownHeight;
-    return {
-      id: 'bezel_lip',
-      name: 'Bezel lip height',
-      limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
-      result: share >= L.lipMinOfCabochon - 1e-6 ? 'pass' : 'fail',
-      measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
-      value: r3(lip),
-      where: { part: 'head', feature: 'bezel', point_mm: pt(at), description: 'the top of the bezel, measured from the top of the girdle' },
-      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
-    };
-  }
-  const ok = share >= L.lipMinOfCrown - 1e-6 && share <= L.lipMaxOfCrown + 1e-6;
-  return {
-    id: 'bezel_lip',
-    name: 'Bezel lip height',
-    limit: `${Math.round(L.lipMinOfCrown * 100)}-${Math.round(L.lipMaxOfCrown * 100)} % of the crown (${mm(L.lipMinOfCrown * st.crownHeight)} to ${mm(L.lipMaxOfCrown * st.crownHeight)} for this stone)`,
-    result: ok ? 'pass' : 'fail',
-    measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
-    value: r3(lip),
-    where: { part: 'head', feature: 'bezel', point_mm: pt(at), description: 'the top of the bezel, measured from the top of the girdle' },
-    method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth",
   };
 }
 
@@ -1151,7 +1020,7 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
  * lies, and only past that out to the cap: the same distance as one search to the
  * cap, found without visiting everything within 0.2 mm of every point.
  */
-function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: FeatureDecl): CheckEntry {
+function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
   let worst: { dev: number; p: V3; blend?: string } = { dev: 0, p: [0, 0, 0] };
   const cap = Math.max(0.2, L.surfaceDeviation * 20);
   const first = Math.min(cap, L.surfaceDeviation * 2);
@@ -1181,7 +1050,7 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
     result: worst.dev <= L.surfaceDeviation ? 'pass' : 'fail',
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''})`,
     value: r3(worst.dev),
-    where: worst.blend !== undefined ? onBlend(worst.p, worst.blend, 'the facets stand furthest from the curved surface') : whereOf(worst.p, decl, 'the facets stand furthest from the curved surface'),
+    where: worst.blend !== undefined ? onBlend(worst.p, worst.blend, 'the facets stand furthest from the curved surface') : whereOf(worst.p, decl, layers, 'the facets stand furthest from the curved surface'),
     method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`,
   };
 }
