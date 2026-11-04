@@ -1,0 +1,2263 @@
+{
+ "captured_on": "main 362c473",
+ "cases": [
+  {
+   "name": "the solitaire in silver, US 7: checked and described",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "template": "solitaire_ring",
+      "ring_size": {
+       "system": "US",
+       "size": "7"
+      },
+      "name": "g-sol",
+      "preview": false
+     }
+    },
+    {
+     "tool": "check_piece",
+     "args": {}
+    },
+    {
+     "tool": "describe_piece",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Solitaire ring \"g-sol\", revision 1, in sterling silver 925: US size 7 (inner diameter 17.32 mm), comfort-fit band 2.2 mm wide and 1.6 mm thick, one 6.5 mm round brilliant, 4 mm deep (1 ct on its report) in a 4-prong head (prongs 1.4 mm). Shrinkage allowance: off. Seat 6.56 mm across, 0.03 mm clearance a side; head 9.20 mm across at its widest; prongs 1.17 mm at their narrowest.",
+      "PLACEHOLDER: The stone's diameter, depth, carat are placeholders (a typical 1.00 ct round, 6.5 mm × 4.0 mm). Give the measured diameter and depth from the stone's grading report. The picture says so too.",
+      "The piece's tree, revision 1 (saved as g-sol.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-sol\",\"revision\":1,\"template\":\"solitaire_ring\",\"metal\":\"sterling_silver_925\",\"shrinkage\":\"off\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"US\",\"size\":\"7\"},\"width\":\"2.2 mm\",\"thickness\":\"1.6 mm\",\"profile\":\"comfort_fit\"}},{\"id\":\"head\",\"part\":\"prong_head\",\"feature\":\"prong\",\"params\":{\"stone\":{\"shape\":\"round\",\"diameter\":\"6.5 mm\",\"depth\":\"4.0 mm\",\"carat\":\"1.00 ct\",\"placeholder\":[\"diameter\",\"depth\",\"carat\"]},\"prong_count\":4,\"prong_thickness\":\"1.4 mm\",\"prong_grip\":\"0.2 mm\",\"culet_clearance\":\"0.3 mm\",\"prong_overrides\":[]}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-sol.tree.json"
+     ]
+    },
+    {
+     "tool": "check_piece",
+     "isError": false,
+     "texts": [
+      "Every casting check passes on the file as an export would write it; export_for_casting will release it.",
+      "Checks for \"g-sol\" revision 1, on g-sol.stl as written (10384 triangles, sha256 1d162de9e0a6...), in sterling silver 925:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 279.488 mm³\n- Wall thickness (limit 0.8 mm): PASS, 1.434 mm [thinnest wall on the band: 343° round the band from the top]\n- Smallest detail (limit 0.35 mm): PASS, 0.963 mm (the thinnest feature anywhere) [the thinnest feature on the head: prong 3 of 4 (at 7:30 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.595 mm [the band's thinnest section, 45° round from the top]\n- Prong thickness (limit 1 mm): PASS, 1.17 mm (prong 1 of 4); each: prong 1 1.17, prong 2 1.17, prong 3 1.17, prong 4 1.17 mm [prong 1 of 4, at 1:30 seen from above with the finger pointing to 12 o'clock, 13.443 mm up]\n- Prongs grip the stone (limit each prong reaches at least 0.15 mm in over the girdle): PASS, 0.191 mm (prong 1 of 4) [prong 1 of 4, at 1:30]\n- Smallest gap (limit 0.3 mm): PASS, 1.552 mm [the narrowest gap between two facing surfaces]\n- Surface smoothness (limit 0.01 mm): PASS, 0.008 mm (checked at 14404 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the head: prong 1 of 4 (at 1:30 seen from above, the finger pointing to 12)]",
+      "Shrinkage allowance: off. The stone is not part of the casting file. Full report: g-sol.check.json.",
+      "PLACEHOLDER: The stone's diameter, depth, carat are placeholders (a typical 1.00 ct round, 6.5 mm × 4.0 mm). Give the measured diameter and depth from the stone's grading report. The checks are only as true as the stone's size."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-sol",
+      "revision": 1,
+      "tree_sha256": "0165cb1f71ad60a087e4d9ed0c435b9fcf155bf0bfe38ae9c449bd7452a3965e",
+      "verdict": "pass",
+      "export": "not_requested",
+      "metal": {
+       "id": "sterling_silver_925",
+       "name": "sterling silver 925",
+       "density_g_cm3": 10.4,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-sol.stl",
+       "sha256": "1d162de9e0a61c9acc759c78a1ddf6f9827de37e7184637f8340a2c2fc0e8813",
+       "bytes": 519284,
+       "triangles": 10384,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "round",
+       "measured_mm": {
+        "diameter": 6.5,
+        "depth": 4
+       },
+       "orientation": null,
+       "carat_for_reference": "1 ct",
+       "placeholder": [
+        "diameter",
+        "depth",
+        "carat"
+       ]
+      },
+      "volume_mm3": 279.49,
+      "weight_g": 2.91,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 279.488 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.434 mm",
+        "value": 1.434,
+        "where": {
+         "part": "band",
+         "feature": "343° round the band from the top",
+         "point_mm": [
+          -2.484,
+          0.823,
+          8.363
+         ],
+         "description": "thinnest wall on the band: 343° round the band from the top"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "0.963 mm (the thinnest feature anywhere)",
+        "value": 0.963,
+        "where": {
+         "part": "head",
+         "feature": "prong 3 of 4",
+         "clock": "7:30",
+         "point_mm": [
+          -2.114,
+          -2.503,
+          13.464
+         ],
+         "description": "the thinnest feature on the head: prong 3 of 4 (at 7:30 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.595 mm",
+        "value": 1.595,
+        "where": {
+         "part": "band",
+         "feature": "45° round the band from the top",
+         "point_mm": [
+          6.687,
+          -0.019,
+          6.687
+         ],
+         "description": "the band's thinnest section, 45° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "prong",
+        "name": "Prong thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.17 mm (prong 1 of 4); each: prong 1 1.17, prong 2 1.17, prong 3 1.17, prong 4 1.17 mm",
+        "value": 1.17,
+        "where": {
+         "part": "head",
+         "feature": "prong 1 of 4",
+         "clock": "1:30",
+         "point_mm": [
+          2.723,
+          2.737,
+          13.443
+         ],
+         "description": "prong 1 of 4, at 1:30 seen from above with the finger pointing to 12 o'clock, 13.443 mm up"
+        },
+        "method": "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
+        "fix": null
+       },
+       {
+        "id": "prong_grip",
+        "name": "Prongs grip the stone",
+        "limit": "each prong reaches at least 0.15 mm in over the girdle",
+        "result": "pass",
+        "measured": "0.191 mm (prong 1 of 4)",
+        "value": 0.191,
+        "where": {
+         "part": "head",
+         "feature": "prong 1 of 4",
+         "clock": "1:30",
+         "point_mm": [
+          2.104,
+          2.215,
+          13.673
+         ],
+         "description": "prong 1 of 4, at 1:30"
+        },
+        "method": "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "pass",
+        "measured": "1.552 mm",
+        "value": 1.552,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          1.172,
+          -1.1,
+          9.473
+         ],
+         "description": "the narrowest gap between two facing surfaces"
+        },
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.008 mm (checked at 14404 points of a 0.0015 mm reference)",
+        "value": 0.008,
+        "where": {
+         "part": "head",
+         "feature": "prong 1 of 4",
+         "clock": "1:30",
+         "point_mm": [
+          2.159,
+          2.159,
+          14.629
+         ],
+         "description": "the facets stand furthest from the curved surface on the head: prong 1 of 4 (at 1:30 seen from above, the finger pointing to 12)"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 10.40 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 574,
+       "check": 1828,
+       "total": 2405
+      }
+     },
+     "files": [
+      "cadfile:///g-sol.check.json"
+     ]
+    },
+    {
+     "tool": "describe_piece",
+     "isError": false,
+     "texts": [
+      "Solitaire ring \"g-sol\", revision 1, in sterling silver 925: US size 7 (inner diameter 17.32 mm), comfort-fit band 2.2 mm wide and 1.6 mm thick, one 6.5 mm round brilliant, 4 mm deep (1 ct on its report) in a 4-prong head (prongs 1.4 mm). Shrinkage allowance: off.",
+      "PLACEHOLDER: The stone's diameter, depth, carat are placeholders (a typical 1.00 ct round, 6.5 mm × 4.0 mm). Give the measured diameter and depth from the stone's grading report.",
+      "Dimensions as built (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n- Band: inner diameter 17.32 mm, outer diameter 20.52 mm, 2.20 mm wide, 1.60 mm thick.\n- Seat: 6.56 mm across at the girdle, cut for the 6.50 mm stone, so 0.03 mm clearance a side.\n- Prongs: 4, each 1.40 mm thick and 1.17 mm at its narrowest, where the seat is cut; each reaches 0.20 mm in over the girdle. The head is 9.20 mm across at its widest, at its rail.\n- Culet clearance: 0.30 mm from the stone's point down to the top of the band.",
+      "Overall size 20.52 × 9.2 × 25.52 mm (across the hand × along the finger × height). Metal volume about 275.39 mm³ (the stone excluded). Estimated weight: 2.86 g in sterling silver 925; 3.6 g in 14k yellow gold; 4.29 g in 18k yellow gold; 5.7 g in platinum 950 (Pt950/Ru).",
+      "Casting limits in sterling silver 925: walls 0.8 mm, band 1 mm, prongs 1 mm at their narrowest, details 0.35 mm, gaps 0.3 mm, surface within 0.01 mm."
+     ],
+     "report": null,
+     "files": []
+    }
+   ]
+  },
+  {
+   "name": "the emerald bezel solitaire in platinum 950, US 6.5: exported",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "template": "emerald_bezel_solitaire",
+      "ring_size": {
+       "system": "US",
+       "size": "6.5"
+      },
+      "name": "g-emerald",
+      "preview": false
+     }
+    },
+    {
+     "tool": "export_for_casting",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Bezel solitaire \"g-emerald\", revision 1, in platinum 950 (Pt950/Ru): US size 6.5 (inner diameter 16.91 mm), round band 2 mm wide and 2 mm thick, one 8.5 × 6 × 4.1 mm emerald cut, set east-west (2 ct on its report) in a full bezel (rim 1 mm thick, lip auto). Shrinkage allowance: off. Seat 8.60 × 6.10 mm across, 0.05 mm clearance a side; bezel 10.60 × 8.10 mm across outside, lip 0.65 mm above the girdle.",
+      "PLACEHOLDER: The stone's length, width, depth, carat are placeholders (a typical 2.00 ct emerald cut, 8.5 mm × 6.0 mm × 4.1 mm). Give the measured length, width and depth from the stone's grading report. The picture says so too.",
+      "Platinum 950 melts at about 1780-1795 °C and is cast at about 1850-2200 °C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup.",
+      "The piece's tree, revision 1 (saved as g-emerald.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-emerald\",\"revision\":1,\"template\":\"emerald_bezel_solitaire\",\"metal\":\"platinum_950\",\"shrinkage\":\"off\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"US\",\"size\":\"6.5\"},\"width\":\"2.0 mm\",\"thickness\":\"2.0 mm\",\"profile\":\"round\"}},{\"id\":\"head\",\"part\":\"bezel\",\"feature\":\"wall\",\"params\":{\"stone\":{\"shape\":\"emerald\",\"length\":\"8.5 mm\",\"width\":\"6.0 mm\",\"depth\":\"4.1 mm\",\"carat\":\"2.00 ct\",\"orientation\":\"east_west\",\"placeholder\":[\"length\",\"width\",\"depth\",\"carat\"]},\"wall\":\"1.0 mm\",\"lip\":\"auto\",\"culet_clearance\":\"0.3 mm\"}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-emerald.tree.json"
+     ]
+    },
+    {
+     "tool": "export_for_casting",
+     "isError": false,
+     "texts": [
+      "EXPORTED \"g-emerald\" revision 1 in platinum 950 (Pt950/Ru): g-emerald.stl (binary STL, millimetres) and g-emerald.3mf, with the check report g-emerald.check.json. Every check passed on the STL as written. The stone is not in the files.",
+      "Checks for \"g-emerald\" revision 1, on g-emerald.stl as written (14204 triangles, sha256 995901c5c4d8...), in platinum 950 (Pt950/Ru):\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 411.427 mm³\n- Wall thickness (limit 0.8 mm): PASS, 0.998 mm [thinnest wall on the head: bezel (at 3:53 seen from above, the finger pointing to 12)]\n- Smallest detail (limit 0.35 mm): PASS, 0.998 mm (the thinnest feature anywhere) [the thinnest feature on the head: bezel (at 3:53 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.994 mm [the band's thinnest section, 175° round from the top]\n- Bezel wall thickness (limit 0.8 mm): PASS, 0.998 mm [the bezel rim at 3:53 seen from above, 0.137 mm above the girdle]\n- Bezel lip height (limit 50-75 % of the crown (0.544 mm to 0.815 mm for this stone)): PASS, 0.65 mm above the girdle, 60 % of the 1.087 mm crown [the top of the bezel, measured from the top of the girdle]\n- Smallest gap (limit 0.8 mm): PASS, 1.604 mm [the narrowest gap between two facing surfaces]\n- Surface smoothness (limit 0.01 mm): PASS, 0.004 mm (checked at 12058 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the head: bezel (at 8:04 seen from above, the finger pointing to 12)]",
+      "Shrinkage allowance: not applied (off).",
+      "Platinum 950 melts at about 1780-1795 °C and is cast at about 1850-2200 °C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup.",
+      "PLACEHOLDER: The stone's length, width, depth, carat are placeholders (a typical 2.00 ct emerald cut, 8.5 mm × 6.0 mm × 4.1 mm). Give the measured length, width and depth from the stone's grading report. Do not cast this until the stone's real size is in."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-emerald",
+      "revision": 1,
+      "tree_sha256": "fbf043a19b65df32d86dc38450640054cc2cf2364ebc8ffa0d5bac10f40be870",
+      "verdict": "pass",
+      "export": "released",
+      "metal": {
+       "id": "platinum_950",
+       "name": "platinum 950 (Pt950/Ru)",
+       "density_g_cm3": 20.7,
+       "casting_note": "Platinum 950 melts at about 1780-1795 °C and is cast at about 1850-2200 °C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup."
+      },
+      "stl": {
+       "file": "g-emerald.stl",
+       "sha256": "995901c5c4d87ed4a959e7ca757440e7ffd231cc53c886840ac1f99e30f62fb5",
+       "bytes": 710284,
+       "triangles": 14204,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "emerald",
+       "measured_mm": {
+        "length": 8.5,
+        "width": 6,
+        "depth": 4.1
+       },
+       "orientation": "east_west",
+       "carat_for_reference": "2 ct",
+       "placeholder": [
+        "length",
+        "width",
+        "depth",
+        "carat"
+       ]
+      },
+      "volume_mm3": 411.43,
+      "weight_g": 8.52,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 411.427 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.998 mm",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:53",
+         "point_mm": [
+          4.289,
+          -2.13,
+          13.906
+         ],
+         "description": "thinnest wall on the head: bezel (at 3:53 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "0.998 mm (the thinnest feature anywhere)",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:53",
+         "point_mm": [
+          4.289,
+          -2.13,
+          13.906
+         ],
+         "description": "the thinnest feature on the head: bezel (at 3:53 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.994 mm",
+        "value": 1.994,
+        "where": {
+         "part": "band",
+         "feature": "175° round the band from the top",
+         "point_mm": [
+          0.824,
+          0,
+          -9.418
+         ],
+         "description": "the band's thinnest section, 175° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "bezel_wall",
+        "name": "Bezel wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.998 mm",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:53",
+         "point_mm": [
+          4.289,
+          -2.13,
+          13.906
+         ],
+         "description": "the bezel rim at 3:53 seen from above, 0.137 mm above the girdle"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section), on the bezel rim around and above the girdle",
+        "fix": null
+       },
+       {
+        "id": "bezel_lip",
+        "name": "Bezel lip height",
+        "limit": "50-75 % of the crown (0.544 mm to 0.815 mm for this stone)",
+        "result": "pass",
+        "measured": "0.65 mm above the girdle, 60 % of the 1.087 mm crown",
+        "value": 0.65,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "point_mm": [
+          -5.282,
+          -2.293,
+          14.419
+         ],
+         "description": "the top of the bezel, measured from the top of the girdle"
+        },
+        "method": "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.604 mm",
+        "value": 1.604,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          3.071,
+          -0.998,
+          8.975
+         ],
+         "description": "the narrowest gap between two facing surfaces"
+        },
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.004 mm (checked at 12058 points of a 0.0015 mm reference)",
+        "value": 0.004,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "8:04",
+         "point_mm": [
+          -5.093,
+          -2.726,
+          8.714
+         ],
+         "description": "the facets stand furthest from the curved surface on the head: bezel (at 8:04 seen from above, the finger pointing to 12)"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.8,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        "Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): \"0.8mm minimum DBR [distance between rails] for Platinum and Palladium\".",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Melting range Pt950/Ru 1780-1795 °C and density 20.7 g/cm³: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
+        "Casting at about 1850-2200 °C, \"special equipment is needed\", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 251,
+       "check": 1514,
+       "total": 1766
+      }
+     },
+     "files": [
+      "cadfile:///g-emerald.stl",
+      "cadfile:///g-emerald.3mf",
+      "cadfile:///g-emerald.check.json"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a too-thin prong: export refused",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "template": "solitaire_ring",
+      "ring_size": {
+       "system": "US",
+       "size": "7"
+      },
+      "name": "g-thin",
+      "preview": false
+     }
+    },
+    {
+     "tool": "change_piece",
+     "args": {
+      "set": {
+       "head.prong_overrides": [
+        {
+         "prong": 2,
+         "thickness": "0.7 mm"
+        }
+       ]
+      },
+      "preview": false
+     }
+    },
+    {
+     "tool": "export_for_casting",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Solitaire ring \"g-thin\", revision 1, in sterling silver 925: US size 7 (inner diameter 17.32 mm), comfort-fit band 2.2 mm wide and 1.6 mm thick, one 6.5 mm round brilliant, 4 mm deep (1 ct on its report) in a 4-prong head (prongs 1.4 mm). Shrinkage allowance: off. Seat 6.56 mm across, 0.03 mm clearance a side; head 9.20 mm across at its widest; prongs 1.17 mm at their narrowest.",
+      "PLACEHOLDER: The stone's diameter, depth, carat are placeholders (a typical 1.00 ct round, 6.5 mm × 4.0 mm). Give the measured diameter and depth from the stone's grading report. The picture says so too.",
+      "The piece's tree, revision 1 (saved as g-thin.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-thin\",\"revision\":1,\"template\":\"solitaire_ring\",\"metal\":\"sterling_silver_925\",\"shrinkage\":\"off\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"US\",\"size\":\"7\"},\"width\":\"2.2 mm\",\"thickness\":\"1.6 mm\",\"profile\":\"comfort_fit\"}},{\"id\":\"head\",\"part\":\"prong_head\",\"feature\":\"prong\",\"params\":{\"stone\":{\"shape\":\"round\",\"diameter\":\"6.5 mm\",\"depth\":\"4.0 mm\",\"carat\":\"1.00 ct\",\"placeholder\":[\"diameter\",\"depth\",\"carat\"]},\"prong_count\":4,\"prong_thickness\":\"1.4 mm\",\"prong_grip\":\"0.2 mm\",\"culet_clearance\":\"0.3 mm\",\"prong_overrides\":[]}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-thin.tree.json"
+     ]
+    },
+    {
+     "tool": "change_piece",
+     "isError": false,
+     "texts": [
+      "Changed head.prong_overrides: [] → [{\"prong\":2,\"thickness\":\"0.7 mm\"}]. Solitaire ring \"g-thin\", revision 2, in sterling silver 925: US size 7 (inner diameter 17.32 mm), comfort-fit band 2.2 mm wide and 1.6 mm thick, one 6.5 mm round brilliant, 4 mm deep (1 ct on its report) in a 4-prong head (prongs 1.4 / 0.7 mm). Shrinkage allowance: off. Seat 6.56 mm across, 0.03 mm clearance a side; head 9.20 mm across at its widest; prongs 0.47 mm at their narrowest.",
+      "PLACEHOLDER: The stone's diameter, depth, carat are placeholders (a typical 1.00 ct round, 6.5 mm × 4.0 mm). Give the measured diameter and depth from the stone's grading report. The picture says so too.",
+      "The piece's tree, revision 2 (saved as g-thin.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-thin\",\"revision\":2,\"template\":\"solitaire_ring\",\"metal\":\"sterling_silver_925\",\"shrinkage\":\"off\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"US\",\"size\":\"7\"},\"width\":\"2.2 mm\",\"thickness\":\"1.6 mm\",\"profile\":\"comfort_fit\"}},{\"id\":\"head\",\"part\":\"prong_head\",\"feature\":\"prong\",\"params\":{\"stone\":{\"shape\":\"round\",\"diameter\":\"6.5 mm\",\"depth\":\"4.0 mm\",\"carat\":\"1.00 ct\",\"placeholder\":[\"diameter\",\"depth\",\"carat\"]},\"prong_count\":4,\"prong_thickness\":\"1.4 mm\",\"prong_grip\":\"0.2 mm\",\"culet_clearance\":\"0.3 mm\",\"prong_overrides\":[{\"prong\":2,\"thickness\":\"0.7 mm\"}]}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-thin.tree.json"
+     ]
+    },
+    {
+     "tool": "export_for_casting",
+     "isError": false,
+     "texts": [
+      "NOT EXPORTED: \"g-thin\" revision 2 fails a casting check, so no casting file was released. What to thicken and where:\n- Thicken prong 2 of 4 at 4:30: its narrowest section is 0.47 mm, where the seat for the stone is cut, and it needs 1.0 mm. Make that prong at least 1.4 mm thick. Change: set {\"head.prong_overrides\": []} to give every prong the head's prong_thickness, or set that prong's own thickness in \"head.prong_overrides\". A prong is joined at one end only, so it needs more metal than a wall.",
+      "Checks for \"g-thin\" revision 2, on g-thin.stl as written (10248 triangles, sha256 b7e4419423c9...), in sterling silver 925:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 274.05 mm³\n- Wall thickness (limit 0.8 mm): PASS, 1.176 mm [thinnest wall on the piece: piece]\n- Smallest detail (limit 0.35 mm): FAIL, 0.299 mm (the thinnest feature anywhere) [the thinnest feature on the head: prong 2 of 4 (at 4:30 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.595 mm [the band's thinnest section, 45° round from the top]\n- Prong thickness (limit 1 mm): FAIL, 0.47 mm (prong 2 of 4); each: prong 1 1.17, prong 2 0.47, prong 3 1.17, prong 4 1.17 mm [prong 2 of 4, at 4:30 seen from above with the finger pointing to 12 o'clock, 13.443 mm up]\n- Prongs grip the stone (limit each prong reaches at least 0.15 mm in over the girdle): PASS, 0.191 mm (prong 1 of 4) [prong 1 of 4, at 1:30]\n- Smallest gap (limit 0.3 mm): PASS, 1.552 mm [the narrowest gap between two facing surfaces]\n- Surface smoothness (limit 0.01 mm): PASS, 0.008 mm (checked at 14161 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the head: prong 1 of 4 (at 1:30 seen from above, the finger pointing to 12)]",
+      "Shrinkage allowance: not applied (off). The report is g-thin.check.json. A preview is still available with preview_piece."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-thin",
+      "revision": 2,
+      "tree_sha256": "51a838d9f35bf4f61808cab5466f077fa5206f8cfde8b2377f35dc48eb6606ac",
+      "verdict": "fail",
+      "export": "refused",
+      "metal": {
+       "id": "sterling_silver_925",
+       "name": "sterling silver 925",
+       "density_g_cm3": 10.4,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-thin.stl",
+       "sha256": "b7e4419423c95bcd61a1e3f43b835771fd866e603294de00d7ef1d63d4fd0cb9",
+       "bytes": 512484,
+       "triangles": 10248,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "round",
+       "measured_mm": {
+        "diameter": 6.5,
+        "depth": 4
+       },
+       "orientation": null,
+       "carat_for_reference": "1 ct",
+       "placeholder": [
+        "diameter",
+        "depth",
+        "carat"
+       ]
+      },
+      "volume_mm3": 274.05,
+      "weight_g": 2.85,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 274.05 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.176 mm",
+        "value": 1.176,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          2.012,
+          -2.083,
+          9.817
+         ],
+         "description": "thinnest wall on the piece: piece"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "fail",
+        "measured": "0.299 mm (the thinnest feature anywhere)",
+        "value": 0.299,
+        "where": {
+         "part": "head",
+         "feature": "prong 2 of 4",
+         "clock": "4:30",
+         "point_mm": [
+          2.157,
+          -2.468,
+          13.411
+         ],
+         "description": "the thinnest feature on the head: prong 2 of 4 (at 4:30 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.595 mm",
+        "value": 1.595,
+        "where": {
+         "part": "band",
+         "feature": "45° round the band from the top",
+         "point_mm": [
+          6.687,
+          -0.019,
+          6.687
+         ],
+         "description": "the band's thinnest section, 45° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "prong",
+        "name": "Prong thickness",
+        "limit": "1 mm",
+        "result": "fail",
+        "measured": "0.47 mm (prong 2 of 4); each: prong 1 1.17, prong 2 0.47, prong 3 1.17, prong 4 1.17 mm",
+        "value": 0.47,
+        "where": {
+         "part": "head",
+         "feature": "prong 2 of 4",
+         "clock": "4:30",
+         "point_mm": [
+          2.47,
+          -2.495,
+          13.443
+         ],
+         "description": "prong 2 of 4, at 4:30 seen from above with the finger pointing to 12 o'clock, 13.443 mm up"
+        },
+        "failing": [
+         {
+          "label": "prong 2 of 4",
+          "value": 0.47,
+          "where": {
+           "part": "head",
+           "feature": "prong 2 of 4",
+           "clock": "4:30",
+           "point_mm": [
+            2.47,
+            -2.495,
+            13.443
+           ],
+           "description": "prong 2 of 4, at 4:30 seen from above with the finger pointing to 12 o'clock, 13.443 mm up"
+          }
+         }
+        ],
+        "method": "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
+        "fix": "Thicken prong 2 of 4 at 4:30: its narrowest section is 0.47 mm, where the seat for the stone is cut, and it needs 1.0 mm. Make that prong at least 1.4 mm thick. Change: set {\"head.prong_overrides\": []} to give every prong the head's prong_thickness, or set that prong's own thickness in \"head.prong_overrides\". A prong is joined at one end only, so it needs more metal than a wall."
+       },
+       {
+        "id": "prong_grip",
+        "name": "Prongs grip the stone",
+        "limit": "each prong reaches at least 0.15 mm in over the girdle",
+        "result": "pass",
+        "measured": "0.191 mm (prong 1 of 4)",
+        "value": 0.191,
+        "where": {
+         "part": "head",
+         "feature": "prong 1 of 4",
+         "clock": "1:30",
+         "point_mm": [
+          2.104,
+          2.215,
+          13.673
+         ],
+         "description": "prong 1 of 4, at 1:30"
+        },
+        "method": "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "pass",
+        "measured": "1.552 mm",
+        "value": 1.552,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          1.172,
+          -1.1,
+          9.473
+         ],
+         "description": "the narrowest gap between two facing surfaces"
+        },
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.008 mm (checked at 14161 points of a 0.0015 mm reference)",
+        "value": 0.008,
+        "where": {
+         "part": "head",
+         "feature": "prong 1 of 4",
+         "clock": "1:30",
+         "point_mm": [
+          2.159,
+          2.159,
+          14.629
+         ],
+         "description": "the facets stand furthest from the curved surface on the head: prong 1 of 4 (at 1:30 seen from above, the finger pointing to 12)"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 10.40 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 340,
+       "check": 1562,
+       "total": 1903
+      }
+     },
+     "files": [
+      "cadfile:///g-thin.check.json"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a too-thin bezel wall: check fails",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "template": "emerald_bezel_solitaire",
+      "ring_size": {
+       "system": "US",
+       "size": "7"
+      },
+      "name": "g-thinbezel",
+      "bezel_wall": "0.6 mm",
+      "preview": false
+     }
+    },
+    {
+     "tool": "check_piece",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Bezel solitaire \"g-thinbezel\", revision 1, in platinum 950 (Pt950/Ru): US size 7 (inner diameter 17.32 mm), round band 2 mm wide and 2 mm thick, one 8.5 × 6 × 4.1 mm emerald cut, set east-west (2 ct on its report) in a full bezel (rim 0.6 mm thick, lip auto). Shrinkage allowance: off. Seat 8.60 × 6.10 mm across, 0.05 mm clearance a side; bezel 9.80 × 7.30 mm across outside, lip 0.65 mm above the girdle.",
+      "PLACEHOLDER: The stone's length, width, depth, carat are placeholders (a typical 2.00 ct emerald cut, 8.5 mm × 6.0 mm × 4.1 mm). Give the measured length, width and depth from the stone's grading report. The picture says so too.",
+      "Platinum 950 melts at about 1780-1795 °C and is cast at about 1850-2200 °C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup.",
+      "The piece's tree, revision 1 (saved as g-thinbezel.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-thinbezel\",\"revision\":1,\"template\":\"emerald_bezel_solitaire\",\"metal\":\"platinum_950\",\"shrinkage\":\"off\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"US\",\"size\":\"7\"},\"width\":\"2.0 mm\",\"thickness\":\"2.0 mm\",\"profile\":\"round\"}},{\"id\":\"head\",\"part\":\"bezel\",\"feature\":\"wall\",\"params\":{\"stone\":{\"shape\":\"emerald\",\"length\":\"8.5 mm\",\"width\":\"6.0 mm\",\"depth\":\"4.1 mm\",\"carat\":\"2.00 ct\",\"orientation\":\"east_west\",\"placeholder\":[\"length\",\"width\",\"depth\",\"carat\"]},\"wall\":\"0.6 mm\",\"lip\":\"auto\",\"culet_clearance\":\"0.3 mm\"}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-thinbezel.tree.json"
+     ]
+    },
+    {
+     "tool": "check_piece",
+     "isError": false,
+     "texts": [
+      "It would NOT cast as it is. What to thicken and where:\n- Thicken the bezel rim: it is 0.599 mm at 8:08 seen from above, and a wall needs 0.8 mm. Change: set {\"bezel_wall\": \"1 mm\"}.",
+      "Checks for \"g-thinbezel\" revision 1, on g-thinbezel.stl as written (14376 triangles, sha256 1668f57ab0d3...), in platinum 950 (Pt950/Ru):\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 335.904 mm³\n- Wall thickness (limit 0.8 mm): FAIL, 0.599 mm [thinnest wall on the head: bezel (at 8:08 seen from above, the finger pointing to 12)]\n- Smallest detail (limit 0.35 mm): PASS, 0.599 mm (the thinnest feature anywhere) [the thinnest feature on the head: bezel (at 8:08 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.994 mm [the band's thinnest section, 270° round from the top]\n- Bezel wall thickness (limit 0.8 mm): FAIL, 0.599 mm [the bezel rim at 8:08 seen from above, 0.137 mm above the girdle]\n- Bezel lip height (limit 50-75 % of the crown (0.544 mm to 0.815 mm for this stone)): PASS, 0.65 mm above the girdle, 60 % of the 1.087 mm crown [the top of the bezel, measured from the top of the girdle]\n- Smallest gap (limit 0.8 mm): PASS, 1.604 mm [the narrowest gap between two facing surfaces]\n- Surface smoothness (limit 0.01 mm): PASS, 0.004 mm (checked at 12226 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the band: 270° round the band from the top]",
+      "Shrinkage allowance: off. The stone is not part of the casting file. Full report: g-thinbezel.check.json.",
+      "PLACEHOLDER: The stone's length, width, depth, carat are placeholders (a typical 2.00 ct emerald cut, 8.5 mm × 6.0 mm × 4.1 mm). Give the measured length, width and depth from the stone's grading report. The checks are only as true as the stone's size."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-thinbezel",
+      "revision": 1,
+      "tree_sha256": "74731c1fb505ec57afb29a5df40de45793ae4643631a7435f046fc93903a7af9",
+      "verdict": "fail",
+      "export": "not_requested",
+      "metal": {
+       "id": "platinum_950",
+       "name": "platinum 950 (Pt950/Ru)",
+       "density_g_cm3": 20.7,
+       "casting_note": "Platinum 950 melts at about 1780-1795 °C and is cast at about 1850-2200 °C, with special investment and an induction caster, so this file goes to a SPECIALIST platinum caster, not a home or local silver-and-gold setup."
+      },
+      "stl": {
+       "file": "g-thinbezel.stl",
+       "sha256": "1668f57ab0d3e225d85f185a2e7cf4693ca7d69ed22184222f85873e05c6dbe9",
+       "bytes": 718884,
+       "triangles": 14376,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "emerald",
+       "measured_mm": {
+        "length": 8.5,
+        "width": 6,
+        "depth": 4.1
+       },
+       "orientation": "east_west",
+       "carat_for_reference": "2 ct",
+       "placeholder": [
+        "length",
+        "width",
+        "depth",
+        "carat"
+       ]
+      },
+      "volume_mm3": 335.9,
+      "weight_g": 6.95,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 335.904 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "fail",
+        "measured": "0.599 mm",
+        "value": 0.599,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "8:08",
+         "point_mm": [
+          -4.299,
+          -2.106,
+          14.109
+         ],
+         "description": "thinnest wall on the head: bezel (at 8:08 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "0.599 mm (the thinnest feature anywhere)",
+        "value": 0.599,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "8:08",
+         "point_mm": [
+          -4.299,
+          -2.106,
+          14.109
+         ],
+         "description": "the thinnest feature on the head: bezel (at 8:08 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.994 mm",
+        "value": 1.994,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -9.657,
+          0,
+          0
+         ],
+         "description": "the band's thinnest section, 270° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "bezel_wall",
+        "name": "Bezel wall thickness",
+        "limit": "0.8 mm",
+        "result": "fail",
+        "measured": "0.599 mm",
+        "value": 0.599,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "8:08",
+         "point_mm": [
+          -4.299,
+          -2.106,
+          14.109
+         ],
+         "description": "the bezel rim at 8:08 seen from above, 0.137 mm above the girdle"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section), on the bezel rim around and above the girdle",
+        "fix": "Thicken the bezel rim: it is 0.599 mm at 8:08 seen from above, and a wall needs 0.8 mm. Change: set {\"bezel_wall\": \"1 mm\"}."
+       },
+       {
+        "id": "bezel_lip",
+        "name": "Bezel lip height",
+        "limit": "50-75 % of the crown (0.544 mm to 0.815 mm for this stone)",
+        "result": "pass",
+        "measured": "0.65 mm above the girdle, 60 % of the 1.087 mm crown",
+        "value": 0.65,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "point_mm": [
+          -4.71,
+          -2.56,
+          14.623
+         ],
+         "description": "the top of the bezel, measured from the top of the girdle"
+        },
+        "method": "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.604 mm",
+        "value": 1.604,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          1.061,
+          0.998,
+          9.565
+         ],
+         "description": "the narrowest gap between two facing surfaces"
+        },
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.004 mm (checked at 12226 points of a 0.0015 mm reference)",
+        "value": 0.004,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -10.66,
+          0,
+          0
+         ],
+         "description": "the facets stand furthest from the curved surface on the band: 270° round the band from the top"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.8,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/platinum: 95% platinum, 5% ruthenium; walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        "Stuller production standards (http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf): \"0.8mm minimum DBR [distance between rails] for Platinum and Palladium\".",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Melting range Pt950/Ru 1780-1795 °C and density 20.7 g/cm³: J. Maerz (PGI), https://www.ganoksin.com/article/platinum-alloys-features-benefits/",
+        "Casting at about 1850-2200 °C, \"special equipment is needed\", phosphate investment: https://products.riogrande.com/content/Instruction-Sheets/How-To-Cast-Platinum-IS.pdf; an induction caster costs about $30,000: http://technical-articles.hooverandstrong.com/wordpress/platinum-casting-in-a-small-shop/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 229,
+       "check": 1304,
+       "total": 1534
+      }
+     },
+     "files": [
+      "cadfile:///g-thinbezel.check.json"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a plain band in 14k gold with the shrinkage allowance on: exported",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "template": "plain_band",
+      "ring_size": {
+       "system": "EU",
+       "size": 60
+      },
+      "name": "g-band",
+      "metal": "gold_14k_yellow",
+      "shrinkage": "on",
+      "preview": false
+     }
+    },
+    {
+     "tool": "export_for_casting",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Plain band \"g-band\", revision 1, in 14k yellow gold: EU size 60 (inner diameter 19.10 mm), comfort-fit band 2.2 mm wide and 1.6 mm thick, no stone (a plain band). Shrinkage allowance: on.",
+      "The piece's tree, revision 1 (saved as g-band.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.tree/1\",\"name\":\"g-band\",\"revision\":1,\"template\":\"plain_band\",\"metal\":\"gold_14k_yellow\",\"shrinkage\":\"on\",\"root\":{\"id\":\"ring\",\"op\":\"union\",\"children\":[{\"id\":\"band\",\"part\":\"ring_shank\",\"feature\":\"band\",\"params\":{\"ring_size\":{\"system\":\"EU\",\"size\":60},\"width\":\"2.2 mm\",\"thickness\":\"1.6 mm\",\"profile\":\"comfort_fit\"}}]}}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-band.tree.json"
+     ]
+    },
+    {
+     "tool": "export_for_casting",
+     "isError": false,
+     "texts": [
+      "EXPORTED \"g-band\" revision 1 in 14k yellow gold: g-band.stl (binary STL, millimetres) and g-band.3mf, with the check report g-band.check.json. Every check passed on the STL as written. The stone is not in the files.",
+      "Checks for \"g-band\" revision 1, on g-band.stl as written (7548 triangles, sha256 8d0dae664db8...), in 14k yellow gold:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 220.314 mm³\n- Wall thickness (limit 0.8 mm): PASS, 1.486 mm [thinnest wall on the band: 105° round the band from the top]\n- Smallest detail (limit 0.35 mm): PASS, 1.486 mm (the thinnest feature anywhere) [the thinnest feature on the band: 105° round the band from the top]\n- Ring band thickness (limit 1 mm): PASS, 1.619 mm [the band's thinnest section, 20° round from the top]\n- Smallest gap (limit 0.3 mm): PASS, no gap narrower than 2 mm between facing surfaces\n- Surface smoothness (limit 0.01 mm): PASS, 0.007 mm (checked at 10752 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the band: 270° round the band from the top]",
+      "Shrinkage allowance: APPLIED, 1.5 %."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-band",
+      "revision": 1,
+      "tree_sha256": "253ae6d83931fd12edd2c60cbeeff1c60daf6d7a7efd01a5cd5dbdc71eec1206",
+      "verdict": "pass",
+      "export": "released",
+      "metal": {
+       "id": "gold_14k_yellow",
+       "name": "14k yellow gold",
+       "density_g_cm3": 13.07,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-band.stl",
+       "sha256": "8d0dae664db8cc1604160079b0d8af8f93eb93eb7640de631161cf4a31b4cdf3",
+       "bytes": 377484,
+       "triangles": 7548,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": true,
+       "allowance": "1.5 %"
+      },
+      "stone": null,
+      "volume_mm3": 220.31,
+      "weight_g": 2.88,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 220.314 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.486 mm",
+        "value": 1.486,
+        "where": {
+         "part": "band",
+         "feature": "105° round the band from the top",
+         "point_mm": [
+          10.721,
+          -0.997,
+          -2.9
+         ],
+         "description": "thinnest wall on the band: 105° round the band from the top"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "1.486 mm (the thinnest feature anywhere)",
+        "value": 1.486,
+        "where": {
+         "part": "band",
+         "feature": "105° round the band from the top",
+         "point_mm": [
+          10.721,
+          -0.997,
+          -2.9
+         ],
+         "description": "the thinnest feature on the band: 105° round the band from the top"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.619 mm",
+        "value": 1.619,
+        "where": {
+         "part": "band",
+         "feature": "20° round the band from the top",
+         "point_mm": [
+          3.592,
+          -0.017,
+          9.869
+         ],
+         "description": "the band's thinnest section, 20° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "pass",
+        "measured": "no gap narrower than 2 mm between facing surfaces",
+        "where": null,
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.007 mm (checked at 10752 points of a 0.0015 mm reference)",
+        "value": 0.007,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -11.055,
+          -1.068,
+          0
+         ],
+         "description": "the facets stand furthest from the curved surface on the band: 270° round the band from the top"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 13.07 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 113,
+       "check": 688,
+       "total": 801
+      }
+     },
+     "files": [
+      "cadfile:///g-band.stl",
+      "cadfile:///g-band.3mf",
+      "cadfile:///g-band.check.json"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "a 0.2 mm slot in 14k gold: the gap check fails",
+   "calls": [
+    {
+     "tool": "check_piece",
+     "args": {
+      "tree": {
+       "format": "flo2-cad.tree/1",
+       "name": "g-slot",
+       "revision": 1,
+       "template": "plain_band",
+       "metal": "gold_14k_yellow",
+       "shrinkage": "off",
+       "root": {
+        "id": "ring",
+        "op": "union",
+        "children": [
+         {
+          "id": "band",
+          "part": "ring_shank",
+          "feature": "band",
+          "params": {
+           "ring_size": {
+            "system": "US",
+            "size": "7"
+           },
+           "width": "2.2 mm",
+           "thickness": "1.6 mm",
+           "profile": "comfort_fit"
+          }
+         },
+         {
+          "id": "block",
+          "op": "translate",
+          "params": {
+           "x": "0 mm",
+           "y": "0 mm",
+           "z": "10.6 mm"
+          },
+          "children": [
+           {
+            "id": "slotted",
+            "op": "difference",
+            "children": [
+             {
+              "id": "solid",
+              "op": "box",
+              "params": {
+               "x": "4 mm",
+               "y": "2 mm",
+               "z": "2 mm"
+              }
+             },
+             {
+              "id": "cut",
+              "op": "translate",
+              "params": {
+               "z": "0.5 mm"
+              },
+              "children": [
+               {
+                "id": "saw",
+                "op": "box",
+                "params": {
+                 "x": "0.2 mm",
+                 "y": "3 mm",
+                 "z": "2 mm"
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "replies": [
+    {
+     "tool": "check_piece",
+     "isError": false,
+     "texts": [
+      "It would NOT cast as it is. What to thicken and where:\n- Two surfaces are only 0.2 mm apart at [0.1,-0.225,10.616] mm; open the gap to at least 0.3 mm in 14k yellow gold, or close it completely.",
+      "Checks for \"g-slot\" revision 1, on g-slot.stl as written (7270 triangles, sha256 f703f34ae430...), in 14k yellow gold:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 203.744 mm³\n- Wall thickness (limit 0.8 mm): PASS, 1.337 mm [thinnest wall on the band: 360° round the band from the top]\n- Smallest detail (limit 0.35 mm): PASS, 1.337 mm (the thinnest feature anywhere) [the thinnest feature on the band: 360° round the band from the top]\n- Ring band thickness (limit 1 mm): PASS, 1.595 mm [the band's thinnest section, 45° round from the top]\n- Smallest gap (limit 0.3 mm): FAIL, 0.2 mm [the narrowest gap between two facing surfaces]\n- Surface smoothness (limit 0.01 mm): PASS, 0.007 mm (checked at 10198 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the band: 270° round the band from the top]",
+      "Shrinkage allowance: off. The stone is not part of the casting file. Full report: g-slot.check.json."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-slot",
+      "revision": 1,
+      "tree_sha256": "f7ef79e0a1b4de1e6b1bca68ac55e451d678d0265c10e14f82841f9f216ba57f",
+      "verdict": "fail",
+      "export": "not_requested",
+      "metal": {
+       "id": "gold_14k_yellow",
+       "name": "14k yellow gold",
+       "density_g_cm3": 13.07,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-slot.stl",
+       "sha256": "f703f34ae4301ba7ad80aaa68625af380a6c13a0ea1a8f01ddc9a51bd6cb4d27",
+       "bytes": 363584,
+       "triangles": 7270,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": null,
+      "volume_mm3": 203.74,
+      "weight_g": 2.66,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 203.744 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "1.337 mm",
+        "value": 1.337,
+        "where": {
+         "part": "band",
+         "feature": "360° round the band from the top",
+         "point_mm": [
+          -0.033,
+          0.969,
+          10.1
+         ],
+         "description": "thinnest wall on the band: 360° round the band from the top"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "1.337 mm (the thinnest feature anywhere)",
+        "value": 1.337,
+        "where": {
+         "part": "band",
+         "feature": "360° round the band from the top",
+         "point_mm": [
+          -0.033,
+          0.969,
+          10.1
+         ],
+         "description": "the thinnest feature on the band: 360° round the band from the top"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.595 mm",
+        "value": 1.595,
+        "where": {
+         "part": "band",
+         "feature": "45° round the band from the top",
+         "point_mm": [
+          6.687,
+          -0.019,
+          6.687
+         ],
+         "description": "the band's thinnest section, 45° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "fail",
+        "measured": "0.2 mm",
+        "value": 0.2,
+        "where": {
+         "part": "piece",
+         "point_mm": [
+          0.1,
+          -0.225,
+          10.616
+         ],
+         "description": "the narrowest gap between two facing surfaces"
+        },
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": "Two surfaces are only 0.2 mm apart at [0.1,-0.225,10.616] mm; open the gap to at least 0.3 mm in 14k yellow gold, or close it completely."
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.007 mm (checked at 10198 points of a 0.0015 mm reference)",
+        "value": 0.007,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -10.002,
+          -1.053,
+          0
+         ],
+         "description": "the facets stand furthest from the curved surface on the band: 270° round the band from the top"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 13.07 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 157,
+       "check": 642,
+       "total": 799
+      }
+     },
+     "files": [
+      "cadfile:///g-slot.check.json"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "the cabochon in a bezel, a program: checked and described",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "program": "// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.\nconst band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });\n\n// The cabochon: a quarter ellipse from its edge up to its top, turned round the Z axis.\nconst r = 4, h = 2.6, n = Math.ceil(segments(r) / 4);\nconst profile = [[0, 0]];\nfor (let i = 0; i <= n; i++) {\n  const a = (i / n) * Math.PI / 2;\n  profile.push([r * Math.cos(a), h * Math.sin(a)]);\n}\nconst moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });\n\n// The bezel seats it on a flat ledge and rises over its curve.\nconst setting = bezel({ stone: moonstone, on: band, wall: 1.0 });\nreturn union(band, setting);",
+      "name": "g-cab",
+      "preview": false
+     }
+    },
+    {
+     "tool": "check_piece",
+     "args": {}
+    },
+    {
+     "tool": "describe_piece",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Piece \"g-cab\", revision 1, written as a program, in sterling silver 925: a ring shank, US size 7 (inner diameter 17.32 mm), 2.2 mm wide and 1.6 mm thick; a full bezel (wall 1.00 mm, lip 1.56 mm above the girdle) holding one 8.00 × 8.00 mm cabochon (\"moonstone\"), 2.60 mm deep. Shrinkage allowance: off.",
+      "Seat 8.10 × 8.10 mm across, 0.05 mm clearance a side; bezel 10.10 × 10.10 mm across outside, lip 1.56 mm above the girdle.",
+      "The piece's file, revision 1, holding its program (saved as g-cab.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.program/1\",\"name\":\"g-cab\",\"revision\":1,\"metal\":\"sterling_silver_925\",\"shrinkage\":\"off\",\"units\":\"mm\",\"program\":\"// An 8 mm round cabochon moonstone, 2.6 mm high, in a bezel on a US 7 band.\\nconst band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });\\n\\n// The cabochon: a quarter ellipse from its edge up to its top, turned round the Z axis.\\nconst r = 4, h = 2.6, n = Math.ceil(segments(r) / 4);\\nconst profile = [[0, 0]];\\nfor (let i = 0; i <= n; i++) {\\n  const a = (i / n) * Math.PI / 2;\\n  profile.push([r * Math.cos(a), h * Math.sin(a)]);\\n}\\nconst moonstone = stone(revolve(polygon(profile)), { name: 'moonstone', kind: 'cabochon' });\\n\\n// The bezel seats it on a flat ledge and rises over its curve.\\nconst setting = bezel({ stone: moonstone, on: band, wall: 1.0 });\\nreturn union(band, setting);\"}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-cab.tree.json"
+     ]
+    },
+    {
+     "tool": "check_piece",
+     "isError": false,
+     "texts": [
+      "Every casting check passes on the file as an export would write it; export_for_casting will release it.",
+      "Checks for \"g-cab\" revision 1, on g-cab.stl as written (9098 triangles, sha256 bf910da735b2...), in sterling silver 925:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 308.971 mm³\n- Wall thickness (limit 0.8 mm): PASS, 0.998 mm [thinnest wall on the head: bezel (at 3:00 seen from above, the finger pointing to 12)]\n- Smallest detail (limit 0.35 mm): PASS, 0.998 mm (the thinnest feature anywhere) [the thinnest feature on the head: bezel (at 3:00 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.595 mm [the band's thinnest section, 45° round from the top]\n- Bezel wall thickness (limit 0.8 mm): PASS, 0.998 mm [the bezel rim at 3:00 seen from above, 0.498 mm above the girdle]\n- Bezel lip height (limit at least a third of the cabochon's 2.6 mm dome (at least 0.867 mm for this stone; J. Cogswell, Creative Stonesetting)): PASS, 1.56 mm above the girdle, 60 % of the 2.6 mm dome [the top of the bezel, measured from the top of the girdle]\n- Smallest gap (limit 0.3 mm): PASS, no gap narrower than 2 mm between facing surfaces\n- Surface smoothness (limit 0.01 mm): PASS, 0.007 mm (checked at 11663 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the band: 270° round the band from the top]",
+      "Shrinkage allowance: off. The stone is not part of the casting file. Full report: g-cab.check.json."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-cab",
+      "revision": 1,
+      "tree_sha256": "2c5121e4e0a9247c9d51ca4ebb96e88b78ee8dfba92cdbdd19b29fa3045ba48c",
+      "program": {
+       "sha256": "242fefe8276f37d2e95f87b9ead9dc20556bd9790a028eb34d2c5c7ea418270a",
+       "lines": 15,
+       "evaluated": {
+        "ms": 807,
+        "peak_memory_mib": 119
+       }
+      },
+      "verdict": "pass",
+      "export": "not_requested",
+      "metal": {
+       "id": "sterling_silver_925",
+       "name": "sterling silver 925",
+       "density_g_cm3": 10.4,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-cab.stl",
+       "sha256": "bf910da735b2e10d03d28fb6cfcbbee7976e7964292e4ffb563c63c2fc913972",
+       "bytes": 454984,
+       "triangles": 9098,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "custom",
+       "measured_mm": {
+        "length": 7.995603568851948,
+        "width": 7.99780148267746,
+        "depth": 2.600000001490116
+       },
+       "orientation": null,
+       "carat_for_reference": null,
+       "placeholder": []
+      },
+      "volume_mm3": 308.97,
+      "weight_g": 3.21,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 308.971 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.998 mm",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:00",
+         "point_mm": [
+          5.047,
+          0,
+          11.058
+         ],
+         "description": "thinnest wall on the head: bezel (at 3:00 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "0.998 mm (the thinnest feature anywhere)",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:00",
+         "point_mm": [
+          5.047,
+          0,
+          11.058
+         ],
+         "description": "the thinnest feature on the head: bezel (at 3:00 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.595 mm",
+        "value": 1.595,
+        "where": {
+         "part": "band",
+         "feature": "45° round the band from the top",
+         "point_mm": [
+          6.687,
+          -0.019,
+          6.687
+         ],
+         "description": "the band's thinnest section, 45° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "bezel_wall",
+        "name": "Bezel wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.998 mm",
+        "value": 0.998,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:00",
+         "point_mm": [
+          5.047,
+          0,
+          11.058
+         ],
+         "description": "the bezel rim at 3:00 seen from above, 0.498 mm above the girdle"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section), on the bezel rim around and above the girdle",
+        "fix": null
+       },
+       {
+        "id": "bezel_lip",
+        "name": "Bezel lip height",
+        "limit": "at least a third of the cabochon's 2.6 mm dome (at least 0.867 mm for this stone; J. Cogswell, Creative Stonesetting)",
+        "result": "pass",
+        "measured": "1.56 mm above the girdle, 60 % of the 2.6 mm dome",
+        "value": 1.56,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "point_mm": [
+          -2.754,
+          -4.233,
+          12.12
+         ],
+         "description": "the top of the bezel, measured from the top of the girdle"
+        },
+        "method": "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
+        "fix": null
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "pass",
+        "measured": "no gap narrower than 2 mm between facing surfaces",
+        "where": null,
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.007 mm (checked at 11663 points of a 0.0015 mm reference)",
+        "value": 0.007,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -10.002,
+          -1.053,
+          0
+         ],
+         "description": "the facets stand furthest from the curved surface on the band: 270° round the band from the top"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/silver: walls 0.8 mm polished (0.6 mm natural finish); wire 0.8 mm supported, 1.0 mm unsupported; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 10.40 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 812,
+       "check": 751,
+       "total": 1598
+      }
+     },
+     "files": [
+      "cadfile:///g-cab.check.json"
+     ]
+    },
+    {
+     "tool": "describe_piece",
+     "isError": false,
+     "texts": [
+      "Piece \"g-cab\", revision 1, written as a program, in sterling silver 925: a ring shank, US size 7 (inner diameter 17.32 mm), 2.2 mm wide and 1.6 mm thick; a full bezel (wall 1.00 mm, lip 1.56 mm above the girdle) holding one 8.00 × 8.00 mm cabochon (\"moonstone\"), 2.60 mm deep. Shrinkage allowance: off.",
+      "Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n- Band (ringShank): inner diameter 17.32 mm, outer diameter 20.52 mm, 2.20 mm wide, 1.60 mm thick.\n- Seat (bezel): 8.10 × 8.10 mm across inside the bezel at the girdle, for the 8.00 × 8.00 mm stone, so 0.05 mm clearance a side.\n- Bezel (bezel): wall 1.00 mm thick and 10.10 × 10.10 mm across outside; its lip rises 1.56 mm above the girdle (auto: 60 % of the stone's 2.60 mm crown); it stands 1.86 mm above the top of the band.\n- Culet clearance: 0.30 mm from the stone's point down to the top of the band.",
+      "Overall size 20.52 × 10.09 × 22.38 mm (across the hand × along the finger × height). Metal volume about 305.35 mm³ (any stone excluded). Estimated weight: 3.18 g in sterling silver 925; 3.99 g in 14k yellow gold; 4.76 g in 18k yellow gold; 6.32 g in platinum 950 (Pt950/Ru).",
+      "Casting limits in sterling silver 925: walls 0.8 mm, band 1 mm, prongs 1 mm at their narrowest, details 0.35 mm, gaps 0.3 mm, surface within 0.01 mm."
+     ],
+     "report": null,
+     "files": []
+    }
+   ]
+  },
+  {
+   "name": "a cabochon lip too low, a program in 18k gold: export refused",
+   "calls": [
+    {
+     "tool": "start_piece",
+     "args": {
+      "program": "\n  const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });\n  const cab = cabochon({ diameter: 8, height: 3 });\n  return union(band, bezel({ stone: cab, on: band, wall: 1.0, lip: 0.6 }));",
+      "name": "g-lowlip",
+      "metal": "gold_18k_yellow",
+      "preview": false
+     }
+    },
+    {
+     "tool": "export_for_casting",
+     "args": {}
+    }
+   ],
+   "replies": [
+    {
+     "tool": "start_piece",
+     "isError": false,
+     "texts": [
+      "Started. Piece \"g-lowlip\", revision 1, written as a program, in 18k yellow gold: a ring shank, US size 7 (inner diameter 17.32 mm), 2.2 mm wide and 1.6 mm thick; a full bezel (wall 1.00 mm, lip 0.60 mm above the girdle) holding one 8.00 × 8.00 mm cabochon, 3.00 mm deep. Shrinkage allowance: off.",
+      "Seat 8.10 × 8.10 mm across, 0.05 mm clearance a side; bezel 10.10 × 10.10 mm across outside, lip 0.60 mm above the girdle.",
+      "The piece's file, revision 1, holding its program (saved as g-lowlip.tree.json; pass it back as \"tree\" to pick this piece up in a new conversation):\n{\"format\":\"flo2-cad.program/1\",\"name\":\"g-lowlip\",\"revision\":1,\"metal\":\"gold_18k_yellow\",\"shrinkage\":\"off\",\"units\":\"mm\",\"program\":\"\\n  const band = ringShank({ ring_size: { system: 'US', size: '7' }, band_width: 2.2, band_thickness: 1.6 });\\n  const cab = cabochon({ diameter: 8, height: 3 });\\n  return union(band, bezel({ stone: cab, on: band, wall: 1.0, lip: 0.6 }));\"}"
+     ],
+     "report": null,
+     "files": [
+      "cadfile:///g-lowlip.tree.json"
+     ]
+    },
+    {
+     "tool": "export_for_casting",
+     "isError": false,
+     "texts": [
+      "NOT EXPORTED: \"g-lowlip\" revision 1 fails a casting check, so no casting file was released. What to thicken and where:\n- Raise the bezel lip: it rises 0.6 mm above the girdle, and a cabochon's bezel must rise at least a third of its 3 mm dome, 1 mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting). In the program, set lip in its bezel call to 1.1 mm or more (or \"auto\").",
+      "Checks for \"g-lowlip\" revision 1, on g-lowlip.stl as written (9098 triangles, sha256 d66641005c98...), in 18k yellow gold:\n- One watertight solid (limit manifold edges, no self-intersections, faces outward, exactly one shell): PASS, closed and manifold, 1 shell, consistently wound, no self-intersection, volume 281.527 mm³\n- Wall thickness (limit 0.8 mm): PASS, 0.999 mm [thinnest wall on the head: bezel (at 3:32 seen from above, the finger pointing to 12)]\n- Smallest detail (limit 0.35 mm): PASS, 0.999 mm (the thinnest feature anywhere) [the thinnest feature on the head: bezel (at 3:32 seen from above, the finger pointing to 12)]\n- Ring band thickness (limit 1 mm): PASS, 1.595 mm [the band's thinnest section, 45° round from the top]\n- Bezel wall thickness (limit 0.8 mm): PASS, 0.999 mm [the bezel rim at 3:32 seen from above, 0.2 mm above the girdle]\n- Bezel lip height (limit at least a third of the cabochon's 3 mm dome (at least 1 mm for this stone; J. Cogswell, Creative Stonesetting)): FAIL, 0.6 mm above the girdle, 20 % of the 3 mm dome [the top of the bezel, measured from the top of the girdle]\n- Smallest gap (limit 0.3 mm): PASS, no gap narrower than 2 mm between facing surfaces\n- Surface smoothness (limit 0.01 mm): PASS, 0.007 mm (checked at 11663 points of a 0.0015 mm reference) [the facets stand furthest from the curved surface on the band: 270° round the band from the top]",
+      "Shrinkage allowance: not applied (off). The report is g-lowlip.check.json. A preview is still available with preview_piece."
+     ],
+     "report": {
+      "format": "flo2-cad.check-report/1",
+      "piece": "g-lowlip",
+      "revision": 1,
+      "tree_sha256": "b04a8d00fba8266ae418898b64db044b4d9b86973ea3d585a1ece475ba71eea0",
+      "program": {
+       "sha256": "76b9bcff4b90136dcee3e3ff55896935d72fa755a3dcc410f1b45a6cf6f3213a",
+       "lines": 4,
+       "evaluated": {
+        "ms": 776,
+        "peak_memory_mib": 118
+       }
+      },
+      "verdict": "fail",
+      "export": "refused",
+      "metal": {
+       "id": "gold_18k_yellow",
+       "name": "18k yellow gold",
+       "density_g_cm3": 15.58,
+       "casting_note": null
+      },
+      "stl": {
+       "file": "g-lowlip.stl",
+       "sha256": "d66641005c989db3cf5554b8cb9aa12353647506c2408e8830aea3239222bb96",
+       "bytes": 454984,
+       "triangles": 9098,
+       "units": "mm"
+      },
+      "shrinkage": {
+       "applied": false,
+       "allowance": "off"
+      },
+      "stone": {
+       "in_casting_file": false,
+       "shape": "custom",
+       "measured_mm": {
+        "length": 7.995603568851948,
+        "width": 7.99780148267746,
+        "depth": 3
+       },
+       "orientation": null,
+       "carat_for_reference": null,
+       "placeholder": []
+      },
+      "volume_mm3": 281.53,
+      "weight_g": 4.39,
+      "checks": [
+       {
+        "id": "watertight",
+        "name": "One watertight solid",
+        "limit": "manifold edges, no self-intersections, faces outward, exactly one shell",
+        "result": "pass",
+        "measured": "closed and manifold, 1 shell, consistently wound, no self-intersection, volume 281.527 mm³",
+        "where": null,
+        "method": "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+        "fix": null
+       },
+       {
+        "id": "wall",
+        "name": "Wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.999 mm",
+        "value": 0.999,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:32",
+         "point_mm": [
+          3.888,
+          -1.125,
+          10.76
+         ],
+         "description": "thinnest wall on the head: bezel (at 3:32 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section); prong columns are judged by the prong check's narrowest section instead",
+        "fix": null
+       },
+       {
+        "id": "detail",
+        "name": "Smallest detail",
+        "limit": "0.35 mm",
+        "result": "pass",
+        "measured": "0.999 mm (the thinnest feature anywhere)",
+        "value": 0.999,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:32",
+         "point_mm": [
+          3.888,
+          -1.125,
+          10.76
+         ],
+         "description": "the thinnest feature on the head: bezel (at 3:32 seen from above, the finger pointing to 12)"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)",
+        "fix": null
+       },
+       {
+        "id": "band",
+        "name": "Ring band thickness",
+        "limit": "1 mm",
+        "result": "pass",
+        "measured": "1.595 mm",
+        "value": 1.595,
+        "where": {
+         "part": "band",
+         "feature": "45° round the band from the top",
+         "point_mm": [
+          6.687,
+          -0.019,
+          6.687
+         ],
+         "description": "the band's thinnest section, 45° round from the top"
+        },
+        "method": "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+        "fix": null
+       },
+       {
+        "id": "bezel_wall",
+        "name": "Bezel wall thickness",
+        "limit": "0.8 mm",
+        "result": "pass",
+        "measured": "0.999 mm",
+        "value": 0.999,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "clock": "3:32",
+         "point_mm": [
+          3.888,
+          -1.125,
+          10.76
+         ],
+         "description": "the bezel rim at 3:32 seen from above, 0.2 mm above the girdle"
+        },
+        "method": "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section), on the bezel rim around and above the girdle",
+        "fix": null
+       },
+       {
+        "id": "bezel_lip",
+        "name": "Bezel lip height",
+        "limit": "at least a third of the cabochon's 3 mm dome (at least 1 mm for this stone; J. Cogswell, Creative Stonesetting)",
+        "result": "fail",
+        "measured": "0.6 mm above the girdle, 20 % of the 3 mm dome",
+        "value": 0.6,
+        "where": {
+         "part": "head",
+         "feature": "bezel",
+         "point_mm": [
+          -2.754,
+          -4.233,
+          11.16
+         ],
+         "description": "the top of the bezel, measured from the top of the girdle"
+        },
+        "method": "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
+        "fix": "Raise the bezel lip: it rises 0.6 mm above the girdle, and a cabochon's bezel must rise at least a third of its 3 mm dome, 1 mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting). In the program, set lip in its bezel call to 1.1 mm or more (or \"auto\")."
+       },
+       {
+        "id": "gap",
+        "name": "Smallest gap",
+        "limit": "0.3 mm",
+        "result": "pass",
+        "measured": "no gap narrower than 2 mm between facing surfaces",
+        "where": null,
+        "method": "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
+        "fix": null
+       },
+       {
+        "id": "surface_deviation",
+        "name": "Surface smoothness",
+        "limit": "0.01 mm",
+        "result": "pass",
+        "measured": "0.007 mm (checked at 11663 points of a 0.0015 mm reference)",
+        "value": 0.007,
+        "where": {
+         "part": "band",
+         "feature": "270° round the band from the top",
+         "point_mm": [
+          -10.002,
+          -1.053,
+          0
+         ],
+         "description": "the facets stand furthest from the curved surface on the band: 270° round the band from the top"
+        },
+        "method": "the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh",
+        "fix": null
+       }
+      ],
+      "limits": {
+       "wall": 0.8,
+       "band": 1,
+       "prong": 1,
+       "detail": 0.35,
+       "gap": 0.3,
+       "surfaceDeviation": 0.01,
+       "gripMin": 0.15,
+       "lipMinOfCrown": 0.5,
+       "lipMaxOfCrown": 0.75,
+       "lipMinOfCabochon": 0.3333333333333333,
+       "units": "mm",
+       "sources": [
+        "https://www.shapeways.com/materials/gold: walls 0.8 mm; wire 0.8 mm supported, 1.0 mm unsupported; engraved detail 0.35 mm, embossed 0.4 mm; clearance 0.3 mm.",
+        "https://www.materialise.com/en/academy/industrial/design-am/silver and .../gold: walls 0.8 mm (high gloss), ring bands at least 1 mm, details 0.35 mm across and 0.4 mm high, gaps 0.3 mm.",
+        "Surface deviation 0.01 mm: con:surface-deviation-tolerance (Formlabs Form 4 50 µm XY and 25 µm layers; Asiga PRO 4K45 32 µm XY).",
+        "Shapeways (silver, gold and platinum pages): \"the metal shrinks by approximately 1-1.5%\"; finishing takes the overall reduction to about 3%; ring inside diameters stay within ±0.05-0.10 mm.",
+        "Density 15.58 g/cm³: https://www.stuller.com/articles/view/where-to-find-gravity-of-materials/",
+        "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+        "A. Revere, \"Square Bezel Setting\", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/",
+        "Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: \"The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone.\" Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used."
+       ]
+      },
+      "engine": {
+       "name": "flo2-cad",
+       "version": "0.2.0"
+      },
+      "kernel": {
+       "name": "manifold-3d",
+       "version": "3.5.4",
+       "unmodified": true
+      },
+      "timing_ms": {
+       "build": 780,
+       "check": 737,
+       "total": 1528
+      }
+     },
+     "files": [
+      "cadfile:///g-lowlip.check.json"
+     ]
+    }
+   ]
+  }
+ ],
+ "note": "What main 362c473 replied, through the Session, for each case's calls (test/limit-profiles.test.ts replays them). describe_piece keeps every text block but the settings catalog, the guides and the piece's file, which list settings by design."
+}
