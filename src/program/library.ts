@@ -41,6 +41,7 @@ import type { AddedDecl, BandDecl, BezelDecl, FeatureDecl, P2, P3, ProngDecl, Sh
 import { CallError, at } from '../errors.js';
 import { segmentsFor, type CrossSection, type Kernel, type Manifold, type Vec2, type Vec3 } from '../kernel/manifold.js';
 import { Arena, buildBand, buildHead, clockOf, finishMetal, pieceDims, polygonsToMesh, type HeadDims, type MeshOut, type PieceDims } from '../library/build.js';
+import { FaceNames } from '../library/faces.js';
 import { buildOp } from '../library/ops.js';
 import { outsideConvex, stoneShape, type StoneShapeInfo } from '../library/stones.js';
 import { compose, IDENTITY, reflection, rotation, translation, type Affine, type BlendMeshes, type BlendRecord, type OpContext } from '../library/thicken.js';
@@ -161,14 +162,17 @@ export class ProgramLibrary {
   readonly #A: Arena;
   readonly #tol: number;
   readonly #blendMeshes: BlendMeshes | undefined;
+  /** Which named part each face comes from (library/faces.ts): kept only for an evaluation the checker will read, `nameFaces`. */
+  readonly #names: FaceNames | undefined;
   readonly #recs: Rec[] = [];
   #nextId = 0;
 
-  constructor(k: Kernel, A: Arena, tol: number, blendMeshes?: BlendMeshes) {
+  constructor(k: Kernel, A: Arena, tol: number, blendMeshes?: BlendMeshes, nameFaces = false) {
     this.#k = k;
     this.#A = A;
     this.#tol = tol;
     this.#blendMeshes = blendMeshes;
+    this.#names = nameFaces ? new FaceNames() : undefined;
   }
 
   /**
@@ -203,7 +207,7 @@ export class ProgramLibrary {
       ...(d.sheets.length ? { sheets: d.sheets.map((s) => ({ ...s, points: s.points.map((q) => [...q] as P3), normals: s.normals.map((q) => [...q] as P3) })) } : {}),
       ...(d.added.length ? { added: d.added.map((a) => ({ ...a, min: [...a.min] as P3, max: [...a.max] as P3 })) } : {}),
     };
-    const done = finishMetal(this.#A, rec.m, decl, d.blends, scale, withBlendSurface);
+    const done = finishMetal(this.#A, rec.m, decl, d.blends, scale, withBlendSurface, this.#names);
     for (const p of done.mesh.positions) {
       if (!(Math.abs(p) <= MAX_REACH_MM * Math.max(1, scale))) throw new CallError('program', `the piece reaches ${Math.round(Math.abs(p))} mm from the origin; a piece stays within ${MAX_REACH_MM} mm of it.`);
     }
@@ -345,6 +349,7 @@ export class ProgramLibrary {
     if (addedAs) {
       const bb = m.boundingBox();
       d.added.push({ id: addedAs, min: [...bb.min] as P3, max: [...bb.max] as P3 });
+      this.#names?.claim(m, { name: addedAs, kind: 'shape' });
     }
     return this.#newSolid(m, d, { node });
   }
@@ -456,7 +461,10 @@ export class ProgramLibrary {
           }
         });
         const node: TreeNode = { id: label ?? this.#id('blend'), op: 'smooth_union', params: { radius: mmText(radius) }, children: rs.map((r) => r.node!) };
-        return this.#fromNode(node, 'smoothUnion');
+        const made = this.#fromNode(node, 'smoothUnion');
+        // A blend the program names is a named part: the check names a place on it by that name.
+        if (label) this.#names?.claim(made.m, { name: label, kind: 'shape' });
+        return made;
       }
       case 'op': {
         const node = validateOpNode(a[0], 'op');
@@ -564,6 +572,8 @@ export class ProgramLibrary {
         const r = this.#solid(a[0], 'named');
         const id = nameId(a[1], 'named.name');
         const bb = r.m.boundingBox();
+        // Its faces are named by it, but for those of a part or shape named inside it, which keep their own.
+        this.#names?.claim(r.m, { name: id, kind: 'shape' }, new Set(r.d.added.map((x) => x.id)));
         return { ...r, d: { ...r.d, added: [...r.d.added, { id, min: [...bb.min] as P3, max: [...bb.max] as P3 }] } } satisfies SolidRec;
       }
       case 'bounds': {
@@ -682,7 +692,7 @@ export class ProgramLibrary {
       extras: [],
     };
     const dims = pieceDims(v);
-    const b = buildBand(this.#k, this.#A, dims, profile, this.#tol);
+    const b = buildBand(this.#k, this.#A, dims, profile, this.#tol, this.#names);
     const d = emptyDecls();
     d.band = b.decl;
     const ringSize = { system: size.system, size: String(size.size) };
@@ -882,7 +892,7 @@ export class ProgramLibrary {
       head: headView(kind, p, st.view),
     };
     const dims = pieceDims(v, st.custom ? st.shape : undefined);
-    const h = buildHead(this.#k, this.#A, v, dims, this.#tol, st.shape, band !== null);
+    const h = buildHead(this.#k, this.#A, v, dims, this.#tol, st.shape, band !== null, this.#names);
     const d = emptyDecls();
     // A declared cabochon says so to the checker, which holds its bezel lip to the cabochon's rule.
     d.stone = st.cabochon ? { ...h.decl.stone, kind: 'cabochon' } : h.decl.stone;

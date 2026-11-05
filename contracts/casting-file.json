@@ -1,0 +1,47 @@
+{
+  "format": "flo2-cad.casting-file-contract/1",
+  "interface": "ifc:casting-file",
+  "description": "What the casting files export_for_casting releases must say about themselves (dec:casting-file-format-and-units: binary STL in millimetres, with a 3MF, ISO/IEC 25422:2025, beside it). Both name the engine and kernel that made them and their versions, the piece and its revision, its metal or material, its process, its shrinkage allowance and the units. The check report, <name>.check.json, travels with them and says everything at length (contracts/check-report.schema.json). test/contracts.test.ts reads files the engine wrote and holds them to this file; a change to what the files say changes this file on purpose.",
+  "stl": {
+    "encoding": "binary STL, little-endian, every coordinate a float32 in millimetres",
+    "header": {
+      "bytes": 80,
+      "charset": "printable ASCII, padded to 80 bytes with spaces; it never begins with \"solid\"",
+      "layout": "flo2-cad <engine version> manifold-3d <kernel version> mm r<revision> shrink=<allowance> <material> <process> <piece>",
+      "pattern": "^flo2-cad (?<engine_version>\\d+\\.\\d+\\.\\d+) manifold-3d (?<kernel_version>\\d+\\.\\d+\\.\\d+) (?<units>mm) r(?<revision>\\d+) shrink=(?<shrinkage>off|\\d+(?:\\.\\d+)?%) (?<material>[A-Za-z0-9._~-]+) (?<process>[A-Za-z0-9._~-]+) (?<piece>[A-Za-z0-9_~-]+) *$",
+      "fields": {
+        "engine_version": "flo2-cad's version (package.json, src/version.ts)",
+        "kernel_version": "the geometry kernel's version: manifold-3d, vendored unmodified",
+        "units": "always mm: every coordinate in the file is in millimetres",
+        "revision": "the piece's revision",
+        "shrinkage": "the shrinkage allowance the file is enlarged by, as a percent (1.5%), or off",
+        "material": "one of the four metals by its fineness mark, Ag925 (sterling_silver_925), Au585Y (gold_14k_yellow), Au750Y (gold_18k_yellow), Pt950 (platinum_950); or any other material by its name, each run of characters other than A-Z, a-z, 0-9, \".\" and \"-\" written \"_\"",
+        "process": "the process id lost_wax, or the process named in words, written as a material is",
+        "piece": "the piece's name"
+      },
+      "metal_marks": { "sterling_silver_925": "Ag925", "gold_14k_yellow": "Au585Y", "gold_18k_yellow": "Au750Y", "platinum_950": "Pt950" },
+      "cut": "When material, process and piece do not all fit, the longest of them is cut a character at a time, its last character written \"~\", until they do; engine, kernel, units, revision and shrinkage are never cut. The full values are in the 3MF's metadata and in the check report."
+    }
+  },
+  "3mf": {
+    "standard": "ISO/IEC 25422:2025 (3MF core specification), one object in 3D/3dmodel.model",
+    "model_unit": "millimeter",
+    "namespace": { "prefix": "flo2", "uri": "https://github.com/flo2-connector/flo2-cad/contracts/casting-file.json" },
+    "metadata": {
+      "Title": "the piece's name",
+      "Application": "flo2-cad <engine version> (manifold-3d <kernel version>)",
+      "Description": "revision, material, shrinkage and the stone, in words",
+      "flo2:engine": "flo2-cad <engine version>",
+      "flo2:kernel": "manifold-3d <kernel version>",
+      "flo2:piece": "the piece's name",
+      "flo2:revision": "the piece's revision",
+      "flo2:metal": "the metal's id, or none when the piece names another material",
+      "flo2:material": "what it is cast in, in words",
+      "flo2:process": "the process id lost_wax, or the process as the piece names it",
+      "flo2:process_assumed": "true when the piece states no process and lost wax is assumed, else false",
+      "flo2:shrinkage": "the shrinkage allowance applied, \"1.5 %\", or off",
+      "flo2:units": "mm",
+      "flo2:check_report": "<name>.check.json, the check report released with the file"
+    }
+  }
+}

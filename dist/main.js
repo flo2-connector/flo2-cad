@@ -3598,9 +3598,9 @@ var memo = {
     if (!bucket)
       return empty;
     handoff = void 0;
-    const entry = { value: empty, issues: null };
-    bucket.set(payload.value, entry);
-    open.push(entry);
+    const entry2 = { value: empty, issues: null };
+    bucket.set(payload.value, entry2);
+    open.push(entry2);
     return empty;
   },
   guard(inst) {
@@ -3674,16 +3674,16 @@ var memo = {
         const depth = open.length;
         const result = base(payload, ctx);
         handoff = void 0;
-        const entry = open.length > depth ? open.pop() : void 0;
+        const entry2 = open.length > depth ? open.pop() : void 0;
         if (result instanceof Promise) {
           return result.then((r) => {
-            if (entry)
-              entry.issues = r.issues.length ? cloneIssues(r.issues) : NO_ISSUES;
+            if (entry2)
+              entry2.issues = r.issues.length ? cloneIssues(r.issues) : NO_ISSUES;
             return r;
           });
         }
-        if (entry)
-          entry.issues = result.issues.length ? cloneIssues(result.issues) : NO_ISSUES;
+        if (entry2)
+          entry2.issues = result.issues.length ? cloneIssues(result.issues) : NO_ISSUES;
         return result;
       };
       inst._zod.parse = wrapped;
@@ -4537,42 +4537,42 @@ function extractDefs(ctx, schema) {
   if (ctx.external && ctx.sharedDefsExtractedFor === ctx.external)
     return;
   const idToSchema = /* @__PURE__ */ new Map();
-  for (const entry of ctx.seen.entries()) {
-    const id = ctx.metadataRegistry.get(entry[0])?.id;
+  for (const entry2 of ctx.seen.entries()) {
+    const id = ctx.metadataRegistry.get(entry2[0])?.id;
     if (id) {
       const existing = idToSchema.get(id);
-      if (existing && existing !== entry[0]) {
+      if (existing && existing !== entry2[0]) {
         throw new Error(`Duplicate schema id "${id}" detected during JSON Schema conversion. Two different schemas cannot share the same id when converted together.`);
       }
-      idToSchema.set(id, entry[0]);
+      idToSchema.set(id, entry2[0]);
     }
   }
-  const makeURI = (entry) => {
+  const makeURI = (entry2) => {
     const defsSegment = ctx.target === "draft-2020-12" ? "$defs" : "definitions";
     if (ctx.external) {
-      const externalId = ctx.external.registry.get(entry[0])?.id;
+      const externalId = ctx.external.registry.get(entry2[0])?.id;
       const uriGenerator = ctx.external.uri ?? ((id2) => id2);
       if (externalId) {
         return { ref: uriGenerator(externalId) };
       }
-      const id = entry[1].defId ?? entry[1].schema.id ?? `schema${ctx.counter++}`;
-      entry[1].defId = id;
+      const id = entry2[1].defId ?? entry2[1].schema.id ?? `schema${ctx.counter++}`;
+      entry2[1].defId = id;
       return { defId: id, ref: `${uriGenerator("__shared")}#/${defsSegment}/${encodeJSONPointerSegment(id)}` };
     }
     const uriPrefix = `#`;
     const defUriPrefix = `${uriPrefix}/${defsSegment}/`;
-    if (entry[1] === root && !entry[1].schema.id) {
+    if (entry2[1] === root && !entry2[1].schema.id) {
       return { ref: uriPrefix };
     }
-    const defId = entry[1].schema.id ?? `__schema${ctx.counter++}`;
+    const defId = entry2[1].schema.id ?? `__schema${ctx.counter++}`;
     return { defId, ref: defUriPrefix + encodeJSONPointerSegment(defId) };
   };
-  const extractToDef = (entry) => {
-    if (entry[1].schema.$ref) {
+  const extractToDef = (entry2) => {
+    if (entry2[1].schema.$ref) {
       return;
     }
-    const seen = entry[1];
-    const { ref, defId } = makeURI(entry);
+    const seen = entry2[1];
+    const { ref, defId } = makeURI(entry2);
     seen.def = { ...seen.schema };
     if (defId)
       seen.defId = defId;
@@ -4583,8 +4583,8 @@ function extractDefs(ctx, schema) {
     schema2.$ref = ref;
   };
   if (ctx.cycles === "throw") {
-    for (const entry of ctx.seen.entries()) {
-      const seen = entry[1];
+    for (const entry2 of ctx.seen.entries()) {
+      const seen = entry2[1];
       if (seen.cycle) {
         throw new Error(`Cycle detected: #/${seen.cycle?.join("/")}/<root>
 
@@ -4592,31 +4592,31 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
       }
     }
   }
-  for (const entry of ctx.seen.entries()) {
-    const seen = entry[1];
-    if (schema === entry[0]) {
-      extractToDef(entry);
+  for (const entry2 of ctx.seen.entries()) {
+    const seen = entry2[1];
+    if (schema === entry2[0]) {
+      extractToDef(entry2);
       continue;
     }
     if (ctx.external) {
-      const ext = ctx.external.registry.get(entry[0])?.id;
-      if (schema !== entry[0] && ext) {
-        extractToDef(entry);
+      const ext = ctx.external.registry.get(entry2[0])?.id;
+      if (schema !== entry2[0] && ext) {
+        extractToDef(entry2);
         continue;
       }
     }
-    const id = ctx.metadataRegistry.get(entry[0])?.id;
+    const id = ctx.metadataRegistry.get(entry2[0])?.id;
     if (id) {
-      extractToDef(entry);
+      extractToDef(entry2);
       continue;
     }
     if (seen.cycle) {
-      extractToDef(entry);
+      extractToDef(entry2);
       continue;
     }
     if (seen.count > 1) {
       if (ctx.reused === "ref") {
-        extractToDef(entry);
+        extractToDef(entry2);
       }
     }
   }
@@ -4798,12 +4798,12 @@ function finalize(ctx, schema) {
     });
   };
   if (!ctx.external || ctx.sharedEmitDoneFor !== ctx.external) {
-    for (const entry of [...ctx.seen.entries()].reverse()) {
-      flattenRef(entry[0]);
+    for (const entry2 of [...ctx.seen.entries()].reverse()) {
+      flattenRef(entry2[0]);
     }
     if (ctx.target !== "openapi-3.0") {
-      for (const entry of ctx.seen.entries()) {
-        compactTypeUnion(entry[1].def ?? entry[1].schema);
+      for (const entry2 of ctx.seen.entries()) {
+        compactTypeUnion(entry2[1].def ?? entry2[1].schema);
       }
     }
     for (const rewrite of ctx.deferred)
@@ -4850,8 +4850,8 @@ function finalize(ctx, schema) {
     delete result.id;
   const defs = ctx.external?.defs ?? {};
   if (!ctx.external || ctx.sharedEmitDoneFor !== ctx.external) {
-    for (const entry of ctx.seen.entries()) {
-      const seen = entry[1];
+    for (const entry2 of ctx.seen.entries()) {
+      const seen = entry2[1];
       if (seen.def && seen.defId) {
         if (seen.def.id === seen.defId)
           delete seen.def.id;
@@ -5463,9 +5463,9 @@ function stringifyKeyNames(bySchema, json, visited) {
 var pendingRecords = /* @__PURE__ */ new WeakMap();
 function rewriteKeyNames(ctx) {
   const bySchema = /* @__PURE__ */ new Map();
-  for (const entry of ctx.seen.values()) {
-    if (entry.def && !bySchema.has(entry.schema))
-      bySchema.set(entry.schema, entry);
+  for (const entry2 of ctx.seen.values()) {
+    if (entry2.def && !bySchema.has(entry2.schema))
+      bySchema.set(entry2.schema, entry2);
   }
   const rewrites = /* @__PURE__ */ new Map();
   for (const record2 of pendingRecords.get(ctx) ?? []) {
@@ -5479,8 +5479,8 @@ function rewriteKeyNames(ctx) {
   }
   if (!rewrites.size)
     return;
-  for (const entry of ctx.seen.values()) {
-    for (const carrier of [entry.schema, entry.def]) {
+  for (const entry2 of ctx.seen.values()) {
+    for (const carrier of [entry2.schema, entry2.def]) {
       const rewritten = carrier && rewrites.get(carrier.propertyNames);
       if (rewritten)
         carrier.propertyNames = rewritten;
@@ -5674,8 +5674,8 @@ function toJSONSchema(input, params) {
     const registry2 = input;
     const ctx2 = initializeContext({ ...params, processors: allProcessors });
     const defs = {};
-    for (const entry of registry2._idmap.entries()) {
-      const [_, schema] = entry;
+    for (const entry2 of registry2._idmap.entries()) {
+      const [_, schema] = entry2;
       processSchema(schema, ctx2);
     }
     const schemas = {};
@@ -5685,8 +5685,8 @@ function toJSONSchema(input, params) {
       defs
     };
     ctx2.external = external;
-    for (const entry of registry2._idmap.entries()) {
-      const [key, schema] = entry;
+    for (const entry2 of registry2._idmap.entries()) {
+      const [key, schema] = entry2;
       extractDefs(ctx2, schema);
       assignProp(schemas, key, finalize(ctx2, schema));
     }
@@ -7962,13 +7962,13 @@ function isPlainObject$7(value) {
 function isImpliedCapabilityMember(capability, member, declaredValue) {
   return capability === "elicitation" && member === "form" && declaredValue["form"] === void 0 && declaredValue["url"] === void 0;
 }
-function requiredClientCapabilitiesForInputRequest(entry) {
-  switch (entry.method) {
+function requiredClientCapabilitiesForInputRequest(entry2) {
+  switch (entry2.method) {
     case "elicitation/create":
-      if (entry.params?.["mode"] === "url") return { elicitation: { url: {} } };
+      if (entry2.params?.["mode"] === "url") return { elicitation: { url: {} } };
       return { elicitation: { form: {} } };
     case "sampling/createMessage": {
-      const params = entry.params;
+      const params = entry2.params;
       if (params !== void 0 && (params["tools"] !== void 0 || params["toolChoice"] !== void 0)) return { sampling: { tools: {} } };
       return { sampling: {} };
     }
@@ -12297,12 +12297,12 @@ function partitionInputResponses(inputResponses) {
     accepted,
     droppedKeys
   };
-  for (const [key, entry] of Object.entries(inputResponses)) {
-    if (!isPlainObject2(entry) || "method" in entry || "result" in entry) {
+  for (const [key, entry2] of Object.entries(inputResponses)) {
+    if (!isPlainObject2(entry2) || "method" in entry2 || "result" in entry2) {
       droppedKeys.push(key);
       continue;
     }
-    accepted[key] = entry;
+    accepted[key] = entry2;
   }
   return {
     accepted,
@@ -19685,9 +19685,9 @@ function resolveLegacyShimOptions(options) {
     legacyShim: options?.legacyShim ?? true
   };
 }
-function coerceEmbeddedInputRequest(method, key, entry) {
-  if (entry === null || typeof entry !== "object" || typeof entry.method !== "string") throw new ProtocolError(ProtocolErrorCode.InternalError, `Handler for ${method} returned an invalid input request '${key}': each inputRequests entry must be an embedded elicitation/create, sampling/createMessage, or roots/list request`);
-  const embedded = entry;
+function coerceEmbeddedInputRequest(method, key, entry2) {
+  if (entry2 === null || typeof entry2 !== "object" || typeof entry2.method !== "string") throw new ProtocolError(ProtocolErrorCode.InternalError, `Handler for ${method} returned an invalid input request '${key}': each inputRequests entry must be an embedded elicitation/create, sampling/createMessage, or roots/list request`);
+  const embedded = entry2;
   const required2 = requiredClientCapabilitiesForInputRequest(embedded);
   if (required2 === void 0) throw new ProtocolError(ProtocolErrorCode.InternalError, `Handler for ${method} returned an input request '${key}' of kind '${embedded.method}', which is not an embedded request the 2026-07-28 revision defines`);
   return {
@@ -19735,8 +19735,8 @@ var LegacyInputRequiredShim = class {
       if (hasInputRequests) {
         const declared = this._host.resolvedClientCapabilities(ctx);
         const coerced = [];
-        for (const [key, entry] of Object.entries(inputRequests)) {
-          const { embedded, required: required2 } = coerceEmbeddedInputRequest(method, key, entry);
+        for (const [key, entry2] of Object.entries(inputRequests)) {
+          const { embedded, required: required2 } = coerceEmbeddedInputRequest(method, key, entry2);
           if (embedded.method !== "roots/list" && embedded.params === void 0) throw new ProtocolError(ProtocolErrorCode.InternalError, `Handler for ${method} returned an input request '${key}' of kind '${embedded.method}' without params`);
           if (missingClientCapabilities(required2, declared) !== void 0) return legacyShimFailure(method, `Cannot request input '${key}' (${embedded.method}): the client on this 2025-era connection did not declare the required capability${declared === void 0 ? " (no client capabilities are available on this connection \u2014 per-request legacy serving cannot receive server-to-client requests)" : ""}`);
           coerced.push([key, embedded]);
@@ -20050,8 +20050,8 @@ var Server = class extends Protocol {
     if (!hasInputRequests && !hasRequestState) throw new ProtocolError(ProtocolErrorCode.InternalError, `Handler for ${method} returned an input-required result with neither inputRequests nor requestState (every InputRequiredResult must include at least one of the two)`);
     if (hasInputRequests) {
       const declared = this._inputRequestCapabilityView(ctx);
-      for (const [key, entry] of Object.entries(inputRequests)) {
-        const { embedded, required: required2 } = coerceEmbeddedInputRequest(method, key, entry);
+      for (const [key, entry2] of Object.entries(inputRequests)) {
+        const { embedded, required: required2 } = coerceEmbeddedInputRequest(method, key, entry2);
         const missing = missingClientCapabilities(required2, declared);
         if (missing !== void 0) throw new MissingRequiredClientCapabilityError({ requiredCapabilities: missing }, `Cannot request input '${key}' (${embedded.method}): the request's client capabilities do not declare the required capability`);
       }
@@ -21699,13 +21699,13 @@ var Bvh = class {
       const far = (v) => (pos[v] - gx) ** 2 + (pos[v + 1] - gy) ** 2 + (pos[v + 2] - gz) ** 2;
       this.reach[t] = Math.sqrt(Math.max(far(a), far(b), far(c)));
     }
-    const cap = Math.max(1, 2 * n);
-    this.#bmin = new Float64Array(cap * 3);
-    this.#bmax = new Float64Array(cap * 3);
-    this.#left = new Int32Array(cap);
-    this.#right = new Int32Array(cap);
-    this.#first = new Int32Array(cap);
-    this.#count = new Int32Array(cap);
+    const cap2 = Math.max(1, 2 * n);
+    this.#bmin = new Float64Array(cap2 * 3);
+    this.#bmax = new Float64Array(cap2 * 3);
+    this.#left = new Int32Array(cap2);
+    this.#right = new Int32Array(cap2);
+    this.#first = new Int32Array(cap2);
+    this.#count = new Int32Array(cap2);
     this.#order = new Uint32Array(n);
     for (let i = 0; i < n; i++) this.#order[i] = i;
     if (n > 0) this.#build(0, n);
@@ -21848,6 +21848,34 @@ var Bvh = class {
       }
     }
     return best;
+  }
+  /** The triangle nearest p, searching no further than maxDist; -1 when none is that near. */
+  nearestTriangle(p, maxDist) {
+    let best = maxDist * maxDist;
+    let at2 = -1;
+    if (this.n === 0) return at2;
+    const stack = [0];
+    while (stack.length) {
+      const node2 = stack.pop();
+      if (this.#boxDistSq(node2, p) >= best) continue;
+      if (this.#left[node2] < 0) {
+        const s = this.#first[node2], e = s + this.#count[node2];
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i];
+          const d = this.distSq(p[0], p[1], p[2], t);
+          if (d < best) {
+            best = d;
+            at2 = t;
+          }
+        }
+      } else {
+        const l = this.#left[node2], r = this.#right[node2];
+        const dl = this.#boxDistSq(l, p), dr = this.#boxDistSq(r, p);
+        if (dl < dr) stack.push(r, l);
+        else stack.push(l, r);
+      }
+    }
+    return at2;
   }
   vertex(t, k) {
     const v = this.tri[t * 3 + k] * 3;
@@ -22049,6 +22077,9 @@ var Bvh = class {
   }
 };
 
+// src/checker/features.ts
+var NO_PART = 65535;
+
 // src/checker/stl.ts
 var StlError = class extends Error {
 };
@@ -22131,6 +22162,12 @@ function surfaceDirections(bvh, surfaceDeviationMm) {
 }
 
 // src/checker/check.ts
+function entry(e) {
+  return { ...e, failing: e.failing ?? [], part: e.where?.part_name ?? null, problem: e.result === "pass" ? null : e.problem ?? null };
+}
+function couldNotRunEntry(id, name, limit, measured, method) {
+  return entry({ id, name, limit, result: "could_not_run", measured, where: null, method, problem: `The ${name === id ? id.replace(/_/g, " ") : name.toLowerCase()} check could not run (${measured}); a check that cannot run counts as a fail, so nothing is exported until it can.` });
+}
 var r3 = (x) => Math.round(x * 1e3) / 1e3;
 var mm = (x) => `${r3(x)} mm`;
 var pt = (p) => [r3(p[0]), r3(p[1]), r3(p[2])];
@@ -22151,7 +22188,7 @@ function runChecks(stl, decl, L3, reference, layers = []) {
     const msg = e instanceof Error ? e.message : String(e);
     const ids = ["watertight", "wall", "band", "detail", "gap", "surface_deviation"];
     return {
-      entries: ids.map((id) => ({ id, name: id, limit: "-", result: "could_not_run", measured: `the STL could not be read back: ${msg}`, where: null, method: "read-back" })),
+      entries: ids.map((id) => couldNotRunEntry(id, id, "-", `the STL could not be read back: ${msg}`, "read-back")),
       mesh: { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 },
       ms: performance.now() - t0
     };
@@ -22164,12 +22201,12 @@ function runChecks(stl, decl, L3, reference, layers = []) {
       const r = fn();
       entries.push(...Array.isArray(r) ? r : [r]);
     } catch (e) {
-      entries.push({ id, name, limit, result: "could_not_run", measured: `the check could not run: ${e instanceof Error ? e.message : String(e)}`, where: null, method: "error" });
+      entries.push(couldNotRunEntry(id, name, limit, `the check could not run: ${e instanceof Error ? e.message : String(e)}`, "error"));
     }
   };
   let shells = 0, volume = 0;
   guard("watertight", "One watertight solid", "manifold edges, no self-intersections, faces outward, exactly one shell", () => {
-    const w = watertight(mesh, bvh);
+    const w = watertight(mesh, bvh, decl, on);
     shells = w.shells;
     volume = w.volume;
     return w.entry;
@@ -22178,17 +22215,17 @@ function runChecks(stl, decl, L3, reference, layers = []) {
   const samples = sampleThickness(bvh, surface);
   guard("wall", "Wall thickness", mm(L3.wall), () => wallEntry(bvh, samples, L3, decl, on));
   guard("detail", "Smallest detail", mm(L3.detail), () => detailEntry(bvh, samples, L3, decl, on));
-  if (decl.band) guard("band", "Ring band thickness", mm(L3.band), () => bandEntry(bvh, decl.band, L3));
-  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L: L3 })) guard(c.id, c.name, c.limit, c.run);
+  if (decl.band) guard("band", "Ring band thickness", mm(L3.band), () => bandEntry(bvh, decl.band, L3, decl));
+  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L: L3, faceOf: (t) => faceOf(decl, t) })) guard(c.id, c.name, c.limit, c.run);
   if (decl.sheets?.length) guard("sheet", "Sheet thickness", `${mm(L3.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets, L3));
-  guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3));
+  guard("gap", "Smallest gap", mm(L3.gap), () => gapEntry(bvh, surface, L3, decl, on));
   guard("surface_deviation", "Surface smoothness", mm(L3.surfaceDeviation), () => {
     if (!reference) throw new Error("no finer reference tessellation was supplied");
     return surfaceEntry(bvh, L3, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl, on);
   });
   return { entries, mesh: { triangles: mesh.count, vertices: mesh.positions.length / 3, shells, volumeMm3: volume }, ms: performance.now() - t0 };
 }
-function watertight(mesh, bvh) {
+function watertight(mesh, bvh, decl, layers) {
   const tri = mesh.triangles;
   const n = mesh.count;
   const edges = /* @__PURE__ */ new Map();
@@ -22242,6 +22279,7 @@ function watertight(mesh, bvh) {
   }
   let crossings = 0;
   let firstCross = null;
+  let crossTris = [-1, -1];
   bvh.forEachOverlap((a, b) => {
     const ta = [tri[a * 3], tri[a * 3 + 1], tri[a * 3 + 2]], tb = [tri[b * 3], tri[b * 3 + 1], tri[b * 3 + 2]];
     if (ta.some((x) => tb.includes(x))) return;
@@ -22250,6 +22288,7 @@ function watertight(mesh, bvh) {
     for (let k = 0; k < 3; k++) {
       if (segmentCrossesTri(A[k], A[(k + 1) % 3], B[0], B[1], B[2]) || segmentCrossesTri(B[k], B[(k + 1) % 3], A[0], A[1], A[2])) {
         crossings++;
+        if (!firstCross) crossTris = [a, b];
         firstCross ??= A[k];
         return;
       }
@@ -22264,16 +22303,21 @@ function watertight(mesh, bvh) {
   if (vol <= 0) problems.push(`faces point inward (signed volume ${r3(vol)} mm\xB3)`);
   if (crossings) problems.push(`${crossings} self-intersecting triangle pair(s)`);
   const cross3 = firstCross;
+  const own2 = cross3 ? faceOf(decl, crossTris[0]) : void 0;
+  const across = cross3 ? faceOf(decl, crossTris[1]) : void 0;
+  const where = cross3 ? own2 === void 0 ? placeAt({ part: "piece", name: null }, cross3, "the first self-intersection found") : placeOf(cross3, decl, layers, "the first self-intersection found", own2, across ? [across] : []) : null;
+  const at2 = where ? placeWords(where, layers, decl) : null;
   return {
-    entry: {
+    entry: entry({
       id: "watertight",
       name: "One watertight solid",
       limit: "manifold edges, no self-intersections, faces outward, exactly one shell",
       result: problems.length ? "fail" : "pass",
       measured: problems.length ? problems.join("; ") : `closed and manifold, ${shells} shell, consistently wound, no self-intersection, volume ${r3(vol)} mm\xB3`,
-      where: cross3 ? { part: "piece", point_mm: pt(cross3), description: "the first self-intersection found" } : null,
-      method: "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests"
-    },
+      where,
+      method: "read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests",
+      problem: `The piece is not one closed solid: ${problems.join("; ")}${at2 ? `; the first self-intersection is ${at2.of ? `in ${at2.of}, ` : "in no named part, "}${at2.at}` : ""}.`
+    }),
     shells,
     volume: vol
   };
@@ -22501,35 +22545,36 @@ function minSample(samples, keep = () => true) {
   for (const s of samples) if (keep(s) && (!best || s.thickness < best.thickness)) best = s;
   return best;
 }
-function partAt(p, decl, layers, centre) {
+function partByRegion(p, decl, layers, centre) {
   for (const l of layers) {
     const own2 = l.partAt?.(p, decl);
     if (own2) return own2;
   }
-  const bandAt = () => ({ part: "band", feature: `${Math.round((Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360)}\xB0 round the band from the top` });
-  const sheetPart = (q) => {
-    const [sheet2, ...others] = sheetsAt(q, decl);
-    return sheet2 ? { part: "sheet", feature: sheet2.label, ...others.length ? { meets: others.map((o) => o.label) } : {} } : null;
-  };
+  const sheet = sheetPart(centre ?? p, decl);
   if (centre) {
     const b = decl.band;
     if (b) {
       const rho = Math.hypot(centre[0], centre[2]);
-      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
+      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt(p);
     }
-    const sheet2 = sheetPart(centre);
-    if (sheet2) return sheet2;
+    if (sheet) return sheet;
     const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
-    if (holding.length) return { part: "added shape", feature: holding.map((a) => a.id).join(", ") };
-    return { part: "piece" };
+    if (holding.length) return { part: "added shape", feature: holding.map((a) => a.id).join(", "), name: holding.length === 1 ? holding[0].id : null };
+    return { part: "piece", name: null };
   }
-  const sheet = sheetPart(p);
   if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
-    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
+    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt(p);
   }
-  return { part: "piece" };
+  return { part: "piece", name: null };
+}
+function bandAt(p) {
+  return { part: "band", feature: `${Math.round((Math.atan2(p[0], p[2]) * 180 / Math.PI + 360) % 360)}\xB0 round the band from the top`, name: "band" };
+}
+function sheetPart(q, decl) {
+  const [sheet, ...others] = sheetsAt(q, decl);
+  return sheet ? { part: "sheet", feature: sheet.label, ...others.length ? { meets: others.map((o) => o.label) } : {}, name: sheet.label } : null;
 }
 function inBox(a, c) {
   return [0, 1, 2].every((k) => c[k] >= a.min[k] - 1e-3 && c[k] <= a.max[k] + 1e-3);
@@ -22537,46 +22582,138 @@ function inBox(a, c) {
 function quoteIds(ids) {
   return ids.split(", ").map((id) => `"${id}"`).join(" or ");
 }
-function whereOf(p, decl, layers, what, centre) {
-  const a = partAt(p, decl, layers, centre);
-  const where = { part: a.part, ...a.feature ? { feature: a.feature } : {}, ...a.clock ? { clock: a.clock } : {}, ...a.meets ? { meets: a.meets } : {}, point_mm: pt(p) };
-  if (a.part === "added shape") return { ...where, description: `${what} in the added shape ${quoteIds(a.feature)}` };
-  if (a.part === "sheet") return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}` };
+function faceOf(decl, t) {
+  const f = decl.faces;
+  if (!f) return void 0;
+  const i = f.of[t];
+  return i === void 0 || i === NO_PART ? null : f.parts[i] ?? null;
+}
+function partsMet(bvh, decl, s) {
+  const f = decl.faces;
+  if (!f) return [];
+  const seen = /* @__PURE__ */ new Set();
+  bvh.forEachWithin(s.centre[0], s.centre[1], s.centre[2], s.thickness / 2 * 1.01 + 2e-3, (t) => {
+    const i = f.of[t];
+    if (i !== NO_PART) seen.add(i);
+  });
+  return [...seen].map((i) => f.parts[i]);
+}
+function nameReading(own2, met) {
+  let name = own2;
+  if (own2?.cut) {
+    const into = met.filter((m) => !m.cut).sort((a, b) => Number(b.kind === "setting") - Number(a.kind === "setting"));
+    if (into.length) name = into[0];
+  }
+  const others = [...new Set(met.map((m) => m.name))].filter((n) => n !== name?.name);
+  return { name, others };
+}
+function partWords(name, kind) {
+  if (kind === "shape") return `"${name}"`;
+  if (kind === "sheet") return `the sheet "${name}"`;
+  if (kind === "blend") return `the smooth blend "${name}"`;
+  return /\d/.test(name) ? name : `the ${name}`;
+}
+function partWordsIn(decl, name) {
+  return partWords(name, decl?.faces?.parts.find((p) => p.name === name)?.kind ?? (name === "band" ? "band" : "shape"));
+}
+function othersWords(decl, others) {
+  const w = others.map((n) => partWordsIn(decl, n));
+  return w.length <= 1 ? w[0] ?? "" : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
+}
+function placeAt(part, p, description, others = []) {
+  return {
+    part: part.part,
+    ...part.feature ? { feature: part.feature } : {},
+    ...part.clock ? { clock: part.clock } : {},
+    meets: part.meets ?? [],
+    point_mm: pt(p),
+    description,
+    part_name: part.name,
+    other_parts: [...others]
+  };
+}
+function describe2(a, what, decl, others) {
+  const meets = others.length ? `, where it meets ${othersWords(decl, others)}` : "";
+  if (a.part === "added shape") return `${what} in the added shape ${quoteIds(a.feature)}${meets}`;
+  if (a.part === "sheet") return `${what} on the sheet "${a.feature}"${a.meets?.length ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(" and ")}` : ""}${meets}`;
+  if (a.part === "piece" && a.name === null && decl.faces) return `${what} in no named part${meets}`;
   const at2 = a.feature ? `${a.feature}${a.clock && a.part === "head" ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ""}` : a.part;
-  return { ...where, description: `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}` };
+  return `${what} on the ${a.part === "head" ? "head" : a.part}: ${at2}${meets}`;
 }
-function onBlend(p, label, what) {
+function placeOf(p, decl, layers, what, own2, met = [], centre) {
+  if (own2 === void 0) {
+    const a2 = partByRegion(p, decl, layers, centre);
+    return placeAt(a2, p, describe2(a2, what, decl, []));
+  }
+  const sheet = sheetPart(centre ?? p, decl);
+  const { name, others } = nameReading(own2, met);
+  let a;
+  if (sheet) a = sheet;
+  else if (!name) a = { part: "piece", name: null };
+  else if (name.kind === "band") a = { ...bandAt(p), name: name.name };
+  else if (name.kind === "setting") a = layers.map((l) => l.partAt?.(p, decl, name)).find((x) => !!x) ?? { part: "head", feature: name.name, clock: clockAt(p[0], p[1]), name: name.name };
+  else a = { part: "added shape", feature: name.name, name: name.name };
+  const besides = others.filter((o) => o !== a.name && !(a.meets ?? []).includes(o) && !(sheet && o === own2?.name));
+  return placeAt(a, p, describe2(a, what, decl, besides), besides);
+}
+function readingPlace(bvh, decl, layers, s, what) {
+  return placeOf(s.p, decl, layers, what, faceOf(decl, s.t), partsMet(bvh, decl, s), s.centre);
+}
+function onBlend(p, label, what, face) {
   const clock = clockAt(p[0], p[1]);
-  return { part: "blend", feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
+  return placeAt({ part: "blend", feature: label, clock, name: face === void 0 ? label : face?.name ?? null }, p, `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)`);
 }
-var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105\xB0 away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
+function placeWords(w, layers, decl) {
+  const meets = w.other_parts.length ? `where it meets ${othersWords(decl, w.other_parts)}, ` : "";
+  const point = `at ${JSON.stringify(w.point_mm)} mm`;
+  for (const l of layers) {
+    const own2 = l.placeWords?.(w);
+    if (own2) return { of: own2.of, at: `${meets}${own2.at}` };
+  }
+  if (w.part === "band") return { of: "the band", at: `${meets}${w.feature}` };
+  if (w.part === "sheet") return { of: partWords(w.feature, "sheet"), at: `${w.meets.length ? `where it meets ${w.meets.map((m) => `"${m}"`).join(" and ")}, ` : ""}${meets}${point}` };
+  if (w.part === "blend") return { of: w.part_name ? partWords(w.part_name, "shape") : null, at: `${meets}on the smooth blend "${w.feature}", ${point}` };
+  if (w.part_name) return { of: partWords(w.part_name, "shape"), at: `${meets}${point}` };
+  return { of: null, at: `${meets}${point}` };
+}
+function thinWords(e, layers, decl, what, limit) {
+  const v = r3(e.value ?? 0);
+  const { of, at: at2 } = e.where ? placeWords(e.where, layers, decl) : { of: null, at: "somewhere on the piece" };
+  if (what === "wall") return of ? `The wall of ${of} is ${v} mm at its thinnest, ${at2}; it must be at least ${r3(limit)} mm.` : `The wall is ${v} mm at its thinnest, in no named part, ${at2}; it must be at least ${r3(limit)} mm.`;
+  return of ? `The finest detail, in ${of}, is ${v} mm across, ${at2}; it must be at least ${r3(limit)} mm.` : `The finest detail is ${v} mm across, in no named part, ${at2}; it must be at least ${r3(limit)} mm.`;
+}
+var MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105\xB0 away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105\xB0 away; the place is named by the part its face came from (a cut, the stone's seat, by the metal it is cut into), with the other named parts the sphere meets";
 function wallEntry(bvh, samples, L3, decl, layers) {
   const m = minSample(samples, (s) => !layers.some((l) => l.judgesWallAt?.(s.p, decl)));
   if (!m) throw new Error("no thickness could be measured");
-  return {
+  const where = readingPlace(bvh, decl, layers, m, "thinnest wall");
+  return entry({
     id: "wall",
     name: "Wall thickness",
     limit: mm(L3.wall),
     result: m.thickness >= L3.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, layers, "thinnest wall", m.centre),
-    method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`
-  };
+    where,
+    method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`,
+    problem: thinWords({ value: m.thickness, where }, layers, decl, "wall", L3.wall)
+  });
 }
-function detailEntry(_bvh, samples, L3, decl, layers) {
+function detailEntry(bvh, samples, L3, decl, layers) {
   const m = minSample(samples);
   if (!m) throw new Error("no thickness could be measured");
-  return {
+  const where = readingPlace(bvh, decl, layers, m, "the thinnest feature");
+  return entry({
     id: "detail",
     name: "Smallest detail",
     limit: mm(L3.detail),
     result: m.thickness >= L3.detail ? "pass" : "fail",
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, layers, "the thinnest feature", m.centre),
-    method: MAXSPHERE
-  };
+    where,
+    method: MAXSPHERE,
+    problem: thinWords({ value: m.thickness, where }, layers, decl, "detail", L3.detail)
+  });
 }
 function nearestSheetPoint(sh, p) {
   let best = Infinity;
@@ -22617,12 +22754,12 @@ function sheetEntry(bvh, S, sheets, L3) {
       value: r3(w.d),
       nominal: r3(sh.nominalThickness),
       measured,
-      where: { part: "sheet", feature: sh.label, point_mm: pt(w.p), description: `the sheet "${sh.label}", its thinnest place measured square to its surface` }
+      where: placeAt({ part: "sheet", feature: sh.label, name: sh.label }, w.p, `the sheet "${sh.label}", its thinnest place measured square to its surface`)
     });
   }
   const failing = results.filter((r) => r.value < L3.wall);
   const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
-  return {
+  return entry({
     id: "sheet",
     name: "Sheet thickness",
     limit: `${mm(L3.wall)}, square to the surface`,
@@ -22630,9 +22767,10 @@ function sheetEntry(bvh, S, sheets, L3) {
     measured: `${mm(thinnest.value)} ("${thinnest.label}"); each, measured (declared): ${results.map((r) => `${r.label} ${r.value} (${r.nominal})`).join(", ")} mm`,
     value: thinnest.value,
     where: thinnest.where,
-    ...failing.length ? { failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where })) } : {},
-    method: `each sheet made by the thicken operation, measured square to its surface at the points on its middle surface it declares (${results.map((r) => `${r.measured} on ${r.label}`).join(", ")}): a ray each way along the surface's normal to the first face of the written STL, the two distances summed, where both faces face along the rays within 45\xB0 (the sheet's own faces); points cut away, or beside a rim or a slanting cut, are skipped and left to the wall check`
-  };
+    failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where, part: where.part_name })),
+    method: `each sheet made by the thicken operation, measured square to its surface at the points on its middle surface it declares (${results.map((r) => `${r.measured} on ${r.label}`).join(", ")}): a ray each way along the surface's normal to the first face of the written STL, the two distances summed, where both faces face along the rays within 45\xB0 (the sheet's own faces); points cut away, or beside a rim or a slanting cut, are skipped and left to the wall check`,
+    problem: failing.map((f) => `The sheet "${f.label}" is ${f.value} mm thick at its thinnest, measured square to its surface, at ${JSON.stringify(f.where.point_mm)} mm; it must be at least ${r3(L3.wall)} mm.`).join(" ")
+  });
 }
 function slice(bvh, normal, offset, to2d, candidates, want) {
   const segs = [];
@@ -22716,7 +22854,7 @@ function trianglesWhere(bvh, keep) {
   }
   return Uint32Array.from(out);
 }
-function bandEntry(bvh, band, L3) {
+function bandEntry(bvh, band, L3, decl) {
   const { innerRadius: rIn, outerRadius: rOut, halfWidth: hw } = band;
   const cand = trianglesWhere(bvh, (lo, hi, rhoMax) => lo[1] <= hw && hi[1] >= -hw && rhoMax >= rIn);
   const region = { box: [rIn, rOut, -hw, hw], depth: (x, y) => Math.min(x - rIn, rOut - x, y + hw, hw - y) };
@@ -22730,18 +22868,20 @@ function bandEntry(bvh, band, L3) {
     if (!ins) throw new Error(`the band's own section ${deg}\xB0 round from the top holds no metal, so the file and the band's declaration disagree and the band cannot be measured there`);
     if (!worst || ins.d < worst.d) worst = { d: ins.d, deg, p: [dir[0] * ins.at[0], ins.at[1], dir[2] * ins.at[0]] };
   }
-  return {
+  const name = decl.faces?.parts.find((p) => p.kind === "band")?.name ?? "band";
+  return entry({
     id: "band",
     name: "Ring band thickness",
     limit: mm(L3.band),
     result: worst.d >= L3.band ? "pass" : "fail",
     measured: mm(worst.d),
     value: r3(worst.d),
-    where: { part: "band", feature: `${worst.deg}\xB0 round the band from the top`, point_mm: pt(worst.p), description: `the band's thinnest section, ${worst.deg}\xB0 round from the top` },
-    method: "the band's cross-section every 5\xB0 all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band"
-  };
+    where: placeAt({ part: "band", feature: `${worst.deg}\xB0 round the band from the top`, name }, worst.p, `the band's thinnest section, ${worst.deg}\xB0 round from the top`),
+    method: "the band's cross-section every 5\xB0 all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
+    problem: `The band is ${r3(worst.d)} mm thick at its thinnest section, ${worst.deg}\xB0 round the band from the top; it must be at least ${r3(L3.band)} mm.`
+  });
 }
-function gapEntry(bvh, S, L3) {
+function gapEntry(bvh, S, L3, decl, layers) {
   const C = bvh.centroid;
   let best = null;
   const reach = Math.max(2, L3.gap * 3);
@@ -22750,10 +22890,10 @@ function gapEntry(bvh, S, L3) {
     const p = [C[t * 3] + n[0] * 1e-5, C[t * 3 + 1] + n[1] * 1e-5, C[t * 3 + 2] + n[2] * 1e-5];
     const facing = (u) => S[u * 3] * n[0] + S[u * 3 + 1] * n[1] + S[u * 3 + 2] * n[2] < -0.9;
     const hit = bvh.ray(p, n, reach, facing);
-    if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p };
+    if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p, t, across: hit.t };
   }
   if (!best) {
-    return {
+    return entry({
       id: "gap",
       name: "Smallest gap",
       limit: mm(L3.gap),
@@ -22761,23 +22901,31 @@ function gapEntry(bvh, S, L3) {
       measured: `no gap narrower than ${mm(reach)} between facing surfaces`,
       where: null,
       method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
-    };
+    });
   }
-  return {
+  const own2 = faceOf(decl, best.t);
+  const across = faceOf(decl, best.across);
+  const what = "the narrowest gap between two facing surfaces";
+  const where = own2 === void 0 ? placeAt({ part: "piece", name: null }, best.p, what) : placeOf(best.p, decl, layers, what, own2, across ? [across] : []);
+  const v = r3(best.d);
+  const { of, at: at2 } = placeWords({ ...where, other_parts: [] }, layers, decl);
+  const problem = own2 === void 0 ? `A gap is only ${v} mm across, ${at2}; it must be at least ${r3(L3.gap)} mm, or closed.` : !of ? `A gap is only ${v} mm across, in no named part${where.other_parts.length ? `, facing ${othersWords(decl, where.other_parts)}` : ""}, ${at2}; it must be at least ${r3(L3.gap)} mm, or closed.` : where.other_parts.length ? `The gap between ${of} and ${othersWords(decl, where.other_parts)} is only ${v} mm across, ${at2}; it must be at least ${r3(L3.gap)} mm, or closed.` : `A gap in ${of} is only ${v} mm across, ${at2}; it must be at least ${r3(L3.gap)} mm, or closed.`;
+  return entry({
     id: "gap",
     name: "Smallest gap",
     limit: mm(L3.gap),
     result: best.d >= L3.gap ? "pass" : "fail",
     measured: mm(best.d),
-    value: r3(best.d),
-    where: { part: "piece", point_mm: pt(best.p), description: "the narrowest gap between two facing surfaces" },
-    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite)"
-  };
+    value: v,
+    where,
+    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25\xB0 of opposite); the gap is named by the part of the face it opens from, and the part it faces across to",
+    problem
+  });
 }
 function surfaceEntry(bvh, L3, ref, decl, layers) {
   let worst = { dev: 0, p: [0, 0, 0] };
-  const cap = Math.max(0.2, L3.surfaceDeviation * 20);
-  const first = Math.min(cap, L3.surfaceDeviation * 2);
+  const cap2 = Math.max(0.2, L3.surfaceDeviation * 20);
+  const first = Math.min(cap2, L3.surfaceDeviation * 2);
   const q = [0, 0, 0];
   const measure = (P, blend) => {
     for (let i = 0; i < P.length; i += 3) {
@@ -22785,7 +22933,7 @@ function surfaceEntry(bvh, L3, ref, decl, layers) {
       q[1] = P[i + 1];
       q[2] = P[i + 2];
       let d2 = bvh.nearestDistSq(q, first);
-      if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap);
+      if (d2 >= first * first) d2 = bvh.nearestDistSq(q, cap2);
       const d = Math.sqrt(d2);
       if (d > worst.dev) worst = { dev: d, p: [q[0], q[1], q[2]], ...blend !== void 0 ? { blend } : {} };
     }
@@ -22797,16 +22945,21 @@ function surfaceEntry(bvh, L3, ref, decl, layers) {
     measure(b.points, b.label);
     onBlends += b.points.length / 3;
   }
-  return {
+  const face = decl.faces ? faceOf(decl, bvh.nearestTriangle(worst.p, cap2)) : void 0;
+  const what = "the facets stand furthest from the curved surface";
+  const where = worst.blend !== void 0 ? onBlend(worst.p, worst.blend, what, face) : placeOf(worst.p, decl, layers, what, face);
+  const { of, at: at2 } = placeWords(where, layers, decl);
+  return entry({
     id: "surface_deviation",
     name: "Surface smoothness",
     limit: mm(L3.surfaceDeviation),
     result: worst.dev <= L3.surfaceDeviation ? "pass" : "fail",
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""})`,
     value: r3(worst.dev),
-    where: worst.blend !== void 0 ? onBlend(worst.p, worst.blend, "the facets stand furthest from the curved surface") : whereOf(worst.p, decl, layers, "the facets stand furthest from the curved surface"),
-    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`
-  };
+    where,
+    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`,
+    problem: `The casting file's facets stand ${r3(worst.dev)} mm off the curved surface${of ? ` of ${of}` : ", in no named part"}, ${at2}; they may stand at most ${r3(L3.surfaceDeviation)} mm off it.`
+  });
 }
 
 // src/files/stl.ts
@@ -22941,10 +23094,12 @@ function plainDecimal(s) {
   }
   return out.includes(".") ? out.replace(/0+$/, "").replace(/\.$/, "") : out;
 }
-function write3mf(mesh, metadata) {
+function write3mf(mesh, metadata, namespaces = {}) {
   const parts = [];
   parts.push('<?xml version="1.0" encoding="UTF-8"?>\n');
-  parts.push('<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n');
+  const ns = Object.entries(namespaces).map(([prefix, uri]) => ` xmlns:${prefix}="${xmlEscape(uri)}"`).join("");
+  parts.push(`<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"${ns}>
+`);
   for (const [k, v] of Object.entries(metadata)) parts.push(`  <metadata name="${xmlEscape(k)}">${xmlEscape(v)}</metadata>
 `);
   parts.push('  <resources>\n    <object id="1" type="model">\n      <mesh>\n        <vertices>\n');
@@ -23011,15 +23166,16 @@ function jewelryChecks(R) {
   return {
     applies: declaresSetting,
     partAt: settingPartAt,
+    placeWords: settingPlaceWords,
     judgesWallAt: onProngColumn,
-    checks: ({ bvh, samples, decl, L: L3 }) => {
+    checks: ({ bvh, samples, decl, L: L3, faceOf: faceOf2 }) => {
       const out = [];
       if (decl.prongs.length) {
         out.push({ id: "prong", name: "Prong thickness", limit: mm(L3.prong), run: () => prongEntry(bvh, decl.prongs, L3) });
         if (decl.stone) out.push({ id: "prong_grip", name: "Prongs grip the stone", limit: `each reaches ${mm(R.gripMin)} over the girdle`, run: () => gripEntry(bvh, decl, R) });
       }
       if (decl.bezel && decl.stone) {
-        out.push({ id: "bezel_wall", name: "Bezel wall thickness", limit: mm(L3.wall), run: () => bezelWallEntry(bvh, samples, decl, L3) });
+        out.push({ id: "bezel_wall", name: "Bezel wall thickness", limit: mm(L3.wall), run: () => bezelWallEntry(bvh, samples, decl, L3, faceOf2) });
         out.push({
           id: "bezel_lip",
           name: "Bezel lip height",
@@ -23031,15 +23187,48 @@ function jewelryChecks(R) {
     }
   };
 }
-function settingPartAt(p, decl) {
+function settingPartAt(p, decl, face) {
+  if (face) {
+    if (face.kind !== "setting") return null;
+    const pr = decl.prongs.find((x) => x.label === face.name);
+    if (pr) return { part: "head", feature: pr.label, clock: pr.clock, name: face.name };
+    return { part: "head", feature: face.name === "head" ? "rail" : face.name, clock: clockAt(p[0], p[1]), name: face.name };
+  }
   for (const pr of decl.prongs) {
     if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
-      return { part: "head", feature: pr.label, clock: pr.clock };
+      return { part: "head", feature: pr.label, clock: pr.clock, name: pr.label };
     }
   }
-  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]) };
+  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: "head", feature: "bezel", clock: clockAt(p[0], p[1]), name: "bezel" };
   return null;
 }
+function sideOf(x, y) {
+  let deg = Math.atan2(x, y) * 180 / Math.PI;
+  if (deg < 0) deg += 360;
+  const sector = Math.round(deg / 45) % 8;
+  const SIDES = [
+    { side: "on the fingertip side of", toward: "" },
+    { side: "on the right of", toward: ", toward the fingertip" },
+    { side: "on the right of", toward: "" },
+    { side: "on the right of", toward: ", toward the hand" },
+    { side: "on the hand side of", toward: "" },
+    { side: "on the left of", toward: ", toward the hand" },
+    { side: "on the left of", toward: "" },
+    { side: "on the left of", toward: ", toward the fingertip" }
+  ];
+  return SIDES[sector];
+}
+function sideWords(w, part) {
+  const { side, toward } = sideOf(w.point_mm[0], w.point_mm[1]);
+  return `${side} ${part}${toward} (at ${w.clock ?? clockAt(w.point_mm[0], w.point_mm[1])} seen from above, the finger pointing to 12)`;
+}
+function settingPlaceWords(w) {
+  if (w.part !== "head" || !w.feature) return null;
+  if (/^prong \d+ of \d+$/.test(w.feature)) return { of: w.feature, at: `at ${w.clock} seen from above, the finger pointing to 12, ${r3(w.point_mm[2])} mm up` };
+  if (w.feature === "rail") return { of: "the head's rail", at: sideWords(w, "the head") };
+  return { of: `the ${w.feature}`, at: sideWords(w, `the ${w.feature}`) };
+}
+var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 function onProngColumn(p, decl) {
   return decl.prongs.some((pr) => p[2] >= pr.sectionFromZ - 0.05 && Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.05);
 }
@@ -23067,18 +23256,13 @@ function prongEntry(bvh, prongs, L3) {
     results.push({
       label: pr.label,
       value: r3(w.d),
-      where: {
-        part: "head",
-        feature: pr.label,
-        clock: pr.clock,
-        point_mm: pt([w.at[0], w.at[1], w.z]),
-        description: `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`
-      }
+      where: placeAt({ part: "head", feature: pr.label, clock: pr.clock, name: pr.label }, [w.at[0], w.at[1], w.z], `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`),
+      part: pr.label
     });
   }
   const failing = results.filter((r) => r.value < L3.prong);
   const thinnest = results.reduce((a, b) => b.value < a.value ? b : a);
-  return {
+  return entry({
     id: "prong",
     name: "Prong thickness",
     limit: mm(L3.prong),
@@ -23086,9 +23270,10 @@ function prongEntry(bvh, prongs, L3) {
     measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(" of ")[0]} ${r.value}`).join(", ")} mm`,
     value: thinnest.value,
     where: thinnest.where,
-    ...failing.length ? { failing } : {},
-    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)"
-  };
+    failing,
+    method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
+    problem: failing.map((f) => `${cap(f.label)} (at ${f.where.clock}) is ${f.value} mm across at its narrowest; a prong must be at least ${r3(L3.prong)} mm.`).join(" ")
+  });
 }
 function gripEntry(bvh, decl, R) {
   const s = decl.stone;
@@ -23106,11 +23291,11 @@ function gripEntry(bvh, decl, R) {
         at2 = [x, y, z];
       }
     }
-    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: "head", feature: pr.label, clock: pr.clock, point_mm: pt(at2), description: `${pr.label}, at ${pr.clock}` } });
+    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: placeAt({ part: "head", feature: pr.label, clock: pr.clock, name: pr.label }, at2, `${pr.label}, at ${pr.clock}`), part: pr.label });
   }
   const failing = results.filter((r) => r.value < R.gripMin);
   const least = results.reduce((a, b) => b.value < a.value ? b : a);
-  return {
+  return entry({
     id: "prong_grip",
     name: "Prongs grip the stone",
     limit: `each prong reaches at least ${mm(R.gripMin)} in over the girdle`,
@@ -23118,9 +23303,10 @@ function gripEntry(bvh, decl, R) {
     measured: `${mm(least.value)} (${least.label})`,
     value: least.value,
     where: least.where,
-    ...failing.length ? { failing } : {},
-    method: "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL"
-  };
+    failing,
+    method: "how far each prong's metal above the girdle reaches inside the girdle outline, from the written STL",
+    problem: failing.map((f) => `${cap(f.label)} (at ${f.where.clock}) reaches only ${f.value} mm in over the girdle; each prong must reach at least ${r3(R.gripMin)} mm to hold the stone.`).join(" ")
+  });
 }
 function signedInset(poly, x, y) {
   let best = Infinity;
@@ -23144,21 +23330,27 @@ function inPolygon(poly, x, y, grow = 0) {
   if (grow > 0) return signedInset(poly, x, y) > -grow;
   return signedInset(poly, x, y) >= 0;
 }
-function bezelWallEntry(_bvh, samples, decl, L3) {
+function bezelWallEntry(_bvh, samples, decl, L3, faceOf2) {
   const bz = decl.bezel, st = decl.stone;
-  const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
+  const ownFace = (t) => {
+    const f = faceOf2(t);
+    return f === void 0 || f !== null && (f.name === "bezel" || f.name === "stone seat");
+  };
+  const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3 && ownFace(s.t);
   const m = minSample(samples, inBezel);
   if (!m) throw new Error("no point on the bezel could be measured");
-  return {
+  const where = placeAt({ part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), name: "bezel" }, m.p, `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  return entry({
     id: "bezel_wall",
     name: "Bezel wall thickness",
     limit: mm(L3.wall),
     result: m.thickness >= L3.wall ? "pass" : "fail",
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: { part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
-    method: MAXSPHERE + ", on the bezel rim around and above the girdle"
-  };
+    where,
+    method: MAXSPHERE + ", on the bezel rim around and above the girdle (its own faces and its seat's)",
+    problem: `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, "the bezel")}; it must be at least ${r3(L3.wall)} mm.`
+  });
 }
 function bezelLipEntry(bvh, decl, R) {
   const bz = decl.bezel, st = decl.stone;
@@ -23177,28 +23369,31 @@ function bezelLipEntry(bvh, decl, R) {
   const share = lip / st.crownHeight;
   if (st.kind === "cabochon") {
     const need = R.lipMinOfCabochon * st.crownHeight;
-    return {
+    return entry({
       id: "bezel_lip",
       name: "Bezel lip height",
       limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
       result: share >= R.lipMinOfCabochon - 1e-6 ? "pass" : "fail",
       measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
       value: r3(lip),
-      where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
-      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule"
-    };
+      where: placeAt({ part: "head", feature: "bezel", name: "bezel" }, at2, "the top of the bezel, measured from the top of the girdle"),
+      method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
+      problem: `The bezel's lip rises only ${r3(lip)} mm above the girdle, ${Math.round(share * 100)} % of the cabochon's ${r3(st.crownHeight)} mm dome; it must rise at least a third of the dome, ${r3(need)} mm, to be pushed over the stone and hold it.`
+    });
   }
   const ok = share >= R.lipMinOfCrown - 1e-6 && share <= R.lipMaxOfCrown + 1e-6;
-  return {
+  const lo = R.lipMinOfCrown * st.crownHeight, hi = R.lipMaxOfCrown * st.crownHeight;
+  return entry({
     id: "bezel_lip",
     name: "Bezel lip height",
     limit: `${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown (${mm(R.lipMinOfCrown * st.crownHeight)} to ${mm(R.lipMaxOfCrown * st.crownHeight)} for this stone)`,
     result: ok ? "pass" : "fail",
     measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
     value: r3(lip),
-    where: { part: "head", feature: "bezel", point_mm: pt(at2), description: "the top of the bezel, measured from the top of the girdle" },
-    method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth"
-  };
+    where: placeAt({ part: "head", feature: "bezel", name: "bezel" }, at2, "the top of the bezel, measured from the top of the girdle"),
+    method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth",
+    problem: `The bezel's lip rises ${r3(lip)} mm above the girdle, ${Math.round(share * 100)} % of the stone's ${r3(st.crownHeight)} mm crown, ${lip < lo ? "too little to be pushed over the stone" : "so it would cover too much of the stone"}; it must rise ${r3(lo)} to ${r3(hi)} mm (${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown).`
+  });
 }
 
 // src/jewelry/rules.ts
@@ -23643,7 +23838,7 @@ function readSupplied(v, path) {
   for (const k of Object.keys(o)) {
     if (!SUPPLIED_KEYS.includes(k)) throw new CallError(at(path, k), `is not a limit the checker reads; a supplied set gives ${SUPPLIED_KEYS.join(", ")}.`);
   }
-  const entry = (k) => {
+  const entry2 = (k) => {
     const p = at(path, k);
     const e = o[k];
     if (e === void 0) {
@@ -23663,13 +23858,13 @@ function readSupplied(v, path) {
   const limits = {};
   const each = {};
   for (const f of SUPPLIED_FIELDS) {
-    const e = entry(f.key);
+    const e = entry2(f.key);
     const mm3 = lengthMm(e.value, at(at(path, f.key), "value"));
     if (!(mm3 > 0)) throw new CallError(at(at(path, f.key), "value"), "must be more than 0 mm.");
     limits[f.limit] = mm3;
     each[f.key] = { value: e.value, source: e.source };
   }
-  const s = entry("shrinkage");
+  const s = entry2("shrinkage");
   const pct = percent(s.value, at(at(path, "shrinkage"), "value"));
   if (!(pct >= 0 && pct <= 5)) throw new CallError(at(at(path, "shrinkage"), "value"), `a shrinkage allowance is between 0 and 5 %, for example "1.5 %"; got "${String(s.value)}".`);
   each["shrinkage"] = { value: s.value, source: s.source };
@@ -24933,6 +25128,53 @@ function headView(kind, hp, stone) {
   };
 }
 
+// src/library/faces.ts
+var MAX_PARTS = NO_PART - 1;
+var FaceNames = class {
+  #parts = [];
+  /** The kernel's original id, to the part its faces are named by, or -1 when two shapes claimed it. */
+  #byId = /* @__PURE__ */ new Map();
+  #index(part) {
+    const i = this.#parts.findIndex((p) => p.name === part.name && p.kind === part.kind && !!p.cut === !!part.cut);
+    if (i >= 0) return i;
+    if (this.#parts.length >= MAX_PARTS) return -1;
+    this.#parts.push({ name: part.name, kind: part.kind, ...part.cut ? { cut: true } : {} });
+    return this.#parts.length - 1;
+  }
+  /** A part of the library's, just built from originals of its own: every face of `m` is named `part`. */
+  own(m, part) {
+    const i = this.#index(part);
+    for (const id of new Set(m.getMesh().runOriginalID)) this.#byId.set(id, i);
+  }
+  /**
+   * Names every face of `m` that no part has named yet `part`: a shape the tree adds, or a
+   * program's .named("...") shape. `inner` are the names of the shapes named inside `m`, which
+   * keep their own; a face already claimed by any other shape is one handle in two named shapes,
+   * and is left in no named part.
+   */
+  claim(m, part, inner = /* @__PURE__ */ new Set()) {
+    const i = this.#index(part);
+    for (const id of new Set(m.getMesh().runOriginalID)) {
+      const had = this.#byId.get(id);
+      if (had === void 0) this.#byId.set(id, i);
+      else if (had >= 0 && had !== i) {
+        const p = this.#parts[had];
+        if (p.kind === "shape" && !inner.has(p.name)) this.#byId.set(id, -1);
+      }
+    }
+  }
+  /** The part of each triangle of a finished solid's mesh, in its order: the casting file's. */
+  faces(mesh) {
+    const of = new Uint16Array(mesh.triVerts.length / 3).fill(NO_PART);
+    for (let r = 0; r < mesh.runOriginalID.length; r++) {
+      const i = this.#byId.get(mesh.runOriginalID[r]);
+      if (i === void 0 || i < 0) continue;
+      of.fill(i, mesh.runIndex[r] / 3, mesh.runIndex[r + 1] / 3);
+    }
+    return { parts: this.#parts.map((p) => ({ ...p })), of };
+  }
+};
+
 // src/library/field.ts
 var L = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
@@ -26019,7 +26261,7 @@ function meshOut(mesh) {
   }
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
-function buildBand(k, A, dims, profileName, tol) {
+function buildBand(k, A, dims, profileName, tol, names) {
   const { Manifold, CrossSection } = k;
   const rIn = dims.band.innerDiameterMm / 2;
   const t = dims.band.thicknessMm;
@@ -26028,9 +26270,10 @@ function buildBand(k, A, dims, profileName, tol) {
   const profile = bandProfile(profileName, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
+  names?.own(band, { name: "band", kind: "band" });
   return { band, decl: { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 } };
 }
-function buildHead(k, A, v, dims, tol, shape, onBand) {
+function buildHead(k, A, v, dims, tol, shape, onBand, names) {
   const { Manifold, CrossSection } = k;
   if (!v.head || !dims.head) throw new Error("engine bug: a head was asked for a piece with none");
   const rIn = dims.band.innerDiameterMm / 2;
@@ -26042,8 +26285,12 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
   const zGt = hd.girdleTopZ;
   const zTable = hd.tableZ;
   const decl = { stone: { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm }, prongs: [] };
+  const own2 = (m, name, cut = false) => {
+    names?.own(m, { name, kind: "setting", ...cut ? { cut } : {} });
+    return m;
+  };
   const stone = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-  const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
+  const seatCut = own2(A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb])), "stone seat", true);
   let head;
   if (v.head.kind === "prong_head" && hd.prongs && hd.rail) {
     const railW = hd.rail.widthMm;
@@ -26057,7 +26304,7 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
     const railMid = A.t(girdleCs.offset(railOff, "Round", 2, ringSeg)).toPolygons()[0];
     const xCross = Math.max(...crossingsX(railMid, w / 2));
     const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
-    const parts = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
+    const parts = [own2(A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2])), "head")];
     hd.prongs.forEach((pd) => {
       const tk = pd.thicknessMm;
       const [cx, cy] = pd.axis;
@@ -26066,7 +26313,7 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
       const arc = (u) => [r * Math.cos(u), colH + r * Math.sin(u)];
       const prof = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
       const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
-      parts.push(A.t(col.translate([cx, cy, zRail])));
+      parts.push(own2(A.t(col.translate([cx, cy, zRail])), pd.label));
       const prong = {
         label: pd.label,
         clock: pd.clock,
@@ -26090,9 +26337,9 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
     const outerPts = outerCs.toPolygons()[0];
     const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
     const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
-    const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
-    const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
-    const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
+    const tube = own2(A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom])), "bezel");
+    const lipHole = own2(A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb])), "bezel");
+    const backHole = own2(A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1])), "bezel");
     head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
     decl.bezel = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
   } else {
@@ -26100,7 +26347,7 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
   }
   if (onBand) {
     const nBand = segmentsFor(rOut, tol, 48);
-    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
+    const finger = own2(A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0]))), v.head.kind === "bezel" ? "bezel" : "head");
     head = A.t(head.subtract(finger));
   }
   return { head, stone, decl };
@@ -26110,7 +26357,8 @@ function buildWith(k, A, tree, opts) {
   const tol = opts.tol;
   const v = readPiece(tree);
   const dims = pieceDims(v);
-  const b = buildBand(k, A, dims, v.profile, tol);
+  const names = opts.nameFaces ? new FaceNames() : void 0;
+  const b = buildBand(k, A, dims, v.profile, tol, names);
   const band = b.band;
   const decl = { prongs: [], scale: 1 };
   decl.band = b.decl;
@@ -26118,7 +26366,7 @@ function buildWith(k, A, tree, opts) {
   let stoneSolid;
   if (v.head && dims.head) {
     const sv = v.head.stone;
-    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true);
+    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true, names);
     decl.stone = h.decl.stone;
     decl.prongs.push(...h.decl.prongs);
     if (h.decl.bezel) decl.bezel = h.decl.bezel;
@@ -26131,11 +26379,12 @@ function buildWith(k, A, tree, opts) {
     const shape = A.t(buildOp(k, A, extra, tol, { m: IDENTITY, sheets, blends, ...opts.blendMeshes ? { blendMeshes: opts.blendMeshes } : {} }));
     const bb = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb.min], max: [...bb.max] });
+    names?.claim(shape, { name: extra.id, kind: "shape" });
     metal = A.t(metal.add(shape));
   }
   if (sheets.length) decl.sheets = sheets;
   const scale2 = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
-  const done = finishMetal(A, metal, decl, blends, scale2, !!opts.blendSurface);
+  const done = finishMetal(A, metal, decl, blends, scale2, !!opts.blendSurface, names);
   return {
     view: v,
     metal: done.mesh,
@@ -26146,7 +26395,7 @@ function buildWith(k, A, tree, opts) {
     dims
   };
 }
-function finishMetal(A, solid, decl, blends, scale2, withBlendSurface) {
+function finishMetal(A, solid, decl, blends, scale2, withBlendSurface, names) {
   let metal = solid;
   if (scale2 !== 1) {
     metal = A.t(metal.scale(scale2));
@@ -26159,6 +26408,7 @@ function finishMetal(A, solid, decl, blends, scale2, withBlendSurface) {
   const bb = metal.boundingBox();
   const mesh = metal.getMesh();
   if (withBlendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale2);
+  if (names) decl.faces = names.faces(mesh);
   return { mesh: meshOut(mesh), volumeMm3: metal.volume(), bbox: { min: [...bb.min], max: [...bb.max] } };
 }
 function atFilePrecision(A, m) {
@@ -26469,8 +26719,30 @@ function readDecl(v, blobs, scale2) {
       return { id, min: p3(x["min"], "a named shape"), max: p3(x["max"], "a named shape") };
     });
   }
+  if (v["faces"] !== void 0) {
+    const f = v["faces"];
+    if (!isObj(f)) throw new Error("the faces' parts are malformed");
+    const parts = arr(f["parts"], "the faces' parts", NO_PART - 1).map((x) => {
+      if (!isObj(x)) throw new Error("a named part is malformed");
+      const name = str(x["name"], "a named part", 40);
+      const kind = x["kind"];
+      const ok = kind === "band" ? name === "band" : kind === "setting" ? SETTING_PARTS.has(name) || LABEL.test(name) : kind === "shape" ? ID.test(name) : false;
+      if (!ok) throw new Error(`the named part "${name}" is not one the library names`);
+      if (x["cut"] !== void 0 && (x["cut"] !== true || name !== "stone seat")) throw new Error("only the stone seat is a cut");
+      return { name, kind, ...x["cut"] === true ? { cut: true } : {} };
+    });
+    const of32 = blobOf(blobs, f["of"], "the faces' parts", "u32");
+    const of = new Uint16Array(of32.length);
+    for (let i = 0; i < of32.length; i++) {
+      const p = of32[i];
+      if (p !== NO_PART && p >= parts.length) throw new Error("a face names no part");
+      of[i] = p;
+    }
+    d.faces = { parts, of };
+  }
   return d;
 }
+var SETTING_PARTS = /* @__PURE__ */ new Set(["head", "bezel", "stone seat"]);
 function readParts(v) {
   const clean = (x, depth) => {
     if (depth > 6) throw new Error("a part report is nested too deep");
@@ -26492,6 +26764,7 @@ function readRun(v, blobs, spec) {
   const metal = readMesh(v["metal"], blobs, "the piece", spec.scale, !!spec.positionsOnly);
   if (spec.positionsOnly) return { metal };
   const out = { metal, decl: readDecl(v["decl"], blobs, spec.scale), parts: readParts(v["parts"]) };
+  if (out.decl.faces && out.decl.faces.of.length !== metal.triangles.length / 3) throw new Error("the faces' parts do not match the piece's triangles");
   if (spec.wantStone && v["stone"] !== void 0) out.stone = readMesh(v["stone"], blobs, "the stone", spec.scale, false);
   return out;
 }
@@ -26600,10 +26873,10 @@ var ProgramFailed = class extends Error {
 function childEntry() {
   const here = fileURLToPath2(import.meta.url);
   const built = basename(here) === "run.js" && existsSync2(join2(dirname2(here), "child.js"));
-  const entry = built ? join2(dirname2(here), "child.js") : join2(dirname2(here), "program-child.js");
+  const entry2 = built ? join2(dirname2(here), "child.js") : join2(dirname2(here), "program-child.js");
   const codeRoot = built ? dirname2(dirname2(here)) : dirname2(here);
   const read = [codeRoot, kernelDir()];
-  let dir = dirname2(entry);
+  let dir = dirname2(entry2);
   for (let i = 0; i < 6; i++) {
     const pj = join2(dir, "package.json");
     if (existsSync2(pj)) {
@@ -26612,7 +26885,7 @@ function childEntry() {
     }
     dir = dirname2(dir);
   }
-  return { entry, read };
+  return { entry: entry2, read };
 }
 function rssOf(pid) {
   try {
@@ -26624,11 +26897,11 @@ function rssOf(pid) {
 }
 async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
   const t0 = performance.now();
-  const { entry, read } = childEntry();
+  const { entry: entry2, read } = childEntry();
   const heapMiB = Math.max(64, Math.floor(limits.memoryMiB / 2));
   const wasmCap = Math.max(96, limits.memoryMiB - 128) * 2 ** 20;
   const limitBytes = limits.memoryMiB * 2 ** 20;
-  const args = [`--max-old-space-size=${heapMiB}`, "--disallow-code-generation-from-strings", "--permission", ...read.map((p) => `--allow-fs-read=${p}`), entry];
+  const args = [`--max-old-space-size=${heapMiB}`, "--disallow-code-generation-from-strings", "--permission", ...read.map((p) => `--allow-fs-read=${p}`), entry2];
   const child = spawn(process.execPath, args, { stdio: ["pipe", "pipe", "pipe"], env: {}, windowsHide: true });
   const pid = child.pid;
   hooks.started?.(child);
@@ -27006,7 +27279,7 @@ function renderPreview(items, views, opts) {
 
 // src/version.ts
 var ENGINE_NAME = "flo2-cad";
-var ENGINE_VERSION = "0.3.0";
+var ENGINE_VERSION = "0.4.0";
 var KERNEL_NAME = "manifold-3d";
 var KERNEL_VERSION = "3.5.4";
 
@@ -27026,6 +27299,41 @@ function canonicalJson(v) {
   return JSON.stringify(v);
 }
 var sha256 = (b) => createHash("sha256").update(b).digest("hex");
+var REPORT_WATCHERS = [];
+var METAL_MARK = { sterling_silver_925: "Ag925", gold_14k_yellow: "Au585Y", gold_18k_yellow: "Au750Y", platinum_950: "Pt950" };
+var headerWord = (s) => s.replace(/[^A-Za-z0-9.-]+/g, "_");
+function castingHeader(piece, shrinkagePct) {
+  const fixed = `${ENGINE_NAME} ${ENGINE_VERSION} ${KERNEL_NAME} ${KERNEL_VERSION} mm r${piece.revision} shrink=${shrinkagePct > 0 ? `${shrinkagePct}%` : "off"}`;
+  const words = [piece.metal ? METAL_MARK[piece.metal] : headerWord(materialName(piece)), headerWord(processOf(piece).id), piece.name];
+  const room = 80 - fixed.length - words.length;
+  for (let total = words.reduce((n, w) => n + w.length, 0); total > room; total--) {
+    const i = words.reduce((best, w, k) => w.length > words[best].length ? k : best, 0);
+    if (words[i].length <= 1) break;
+    words[i] = `${words[i].slice(0, -2)}~`;
+  }
+  return `${fixed} ${words.join(" ")}`;
+}
+var THREEMF_NAMESPACE = { prefix: "flo2", uri: "https://github.com/flo2-connector/flo2-cad/contracts/casting-file.json" };
+function castingMetadata(piece, shrinkagePct, description) {
+  const p = processOf(piece);
+  const f = (k) => `${THREEMF_NAMESPACE.prefix}:${k}`;
+  return {
+    Title: piece.name,
+    Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
+    Description: description,
+    [f("engine")]: `${ENGINE_NAME} ${ENGINE_VERSION}`,
+    [f("kernel")]: `${KERNEL_NAME} ${KERNEL_VERSION}`,
+    [f("piece")]: piece.name,
+    [f("revision")]: String(piece.revision),
+    [f("metal")]: piece.metal ?? "none",
+    [f("material")]: materialName(piece),
+    [f("process")]: p.id,
+    [f("process_assumed")]: String(!p.stated),
+    [f("shrinkage")]: shrinkagePct > 0 ? `${shrinkagePct} %` : "off",
+    [f("units")]: "mm",
+    [f("check_report")]: `${piece.name}.check.json`
+  };
+}
 var r22 = (x) => Math.round(x * 100) / 100;
 function withSettingRules(L3) {
   return { ...L3, gripMin: SETTING.gripMin, lipMinOfCrown: SETTING.lipMinOfCrown, lipMaxOfCrown: SETTING.lipMaxOfCrown, lipMinOfCabochon: SETTING.lipMinOfCabochon };
@@ -27130,7 +27438,13 @@ function roundingFor(n, across) {
   }
   return Math.ceil((across / 2 + 0.05) / narrowing * 20) / 20;
 }
-function fixFor(e, v, L3, material) {
+function gapParts(e, decl) {
+  const names = [e.where?.part_name, ...e.where?.other_parts ?? []].filter((n) => !!n);
+  if (!names.length) return "";
+  const w = names.map((n) => partWordsIn(decl, n));
+  return ` of ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`}`;
+}
+function fixFor(e, v, L3, material, decl) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   if (isSettingCheck(e)) return treeSettingFix(e, v.head, L3);
@@ -27174,7 +27488,7 @@ function fixFor(e, v, L3, material) {
       }
       return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${L3.detail} mm, or remove it.`;
     case "gap":
-      return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
+      return `Two surfaces${gapParts(e, decl)} are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
     case "watertight":
       return `The piece is not one closed solid (${e.measured}). Join any added shape to the ring, or remove it.`;
     case "surface_deviation":
@@ -27183,15 +27497,7 @@ function fixFor(e, v, L3, material) {
   return null;
 }
 function couldNotRun(msg) {
-  return ["watertight", "wall", "band", "detail", "gap", "surface_deviation"].map((id) => ({
-    id,
-    name: id,
-    limit: "-",
-    result: "could_not_run",
-    measured: msg,
-    where: null,
-    method: "the piece could not be built, so the check could not run"
-  }));
+  return ["watertight", "wall", "band", "detail", "gap", "surface_deviation"].map((id) => couldNotRunEntry(id, id, "-", msg, "the piece could not be built, so the check could not run"));
 }
 function sizeOf(lo, hi, scale2) {
   const boxMm = [0, 1, 2].map((k) => (hi[k] - lo[k]) / scale2);
@@ -27201,7 +27507,10 @@ function materialReport(cast) {
   const m = metalOf(cast);
   return m ? { id: m.id, name: m.name, density_g_cm3: m.density, casting_note: m.castingNote } : { id: null, name: materialName(cast), density_g_cm3: null, casting_note: null };
 }
-var sizeReport = (size) => size ? { largest_mm: r22(size.largestMm), bounding_box_mm: size.boxMm.map(r22), measured: "the largest side of the piece's bounding box, as finished (the casting file before any shrinkage allowance)" } : { largest_mm: null, measured: "not measured: the piece could not be built" };
+var sizeReport = (size) => size ? { largest_mm: r22(size.largestMm), bounding_box_mm: size.boxMm.map(r22), measured: "the largest side of the piece's bounding box, as finished (the casting file before any shrinkage allowance)" } : { largest_mm: null, bounding_box_mm: [], measured: "not measured: the piece could not be built" };
+function unmatchedReport(cast, size, matches = PROFILES.map((p) => matchProfile(p, cast, size?.largestMm ?? null))) {
+  return matches.filter((m) => unmatched(m).length).map((m) => ({ profile: m.profile.id, name: m.profile.name, did_not_match: unmatched(m) }));
+}
 function limitsReport(choice, cast, size) {
   const p = processOf(cast);
   const process3 = { id: p.id, stated: p.stated, words: p.words };
@@ -27217,14 +27526,15 @@ function limitsReport(choice, cast, size) {
         material,
         process: process3,
         size: { ...sizeReport(size), range_mm: [choice.profile.size.minMm.value, choice.profile.size.maxMm.value], range_sources: [choice.profile.size.minMm.source, choice.profile.size.maxMm.source] },
-        each: { ...Object.fromEntries(LIMIT_KEYS.map((k) => [k, { mm: pm.limits[k].value, source: pm.limits[k].source }])), shrinkage: { percent: pm.shrinkagePct.value, source: pm.shrinkagePct.source } }
+        each: { ...Object.fromEntries(LIMIT_KEYS.map((k) => [k, { mm: pm.limits[k].value, source: pm.limits[k].source }])), shrinkage: { percent: pm.shrinkagePct.value, source: pm.shrinkagePct.source } },
+        unmatched: unmatchedReport(cast, size)
       }
     };
   }
   if (choice.kind === "supplied") {
     return {
       limits: { ...withSettingRules(choice.limits), units: "mm", sources: [...suppliedSources(choice.supplied), ...SETTING.sources] },
-      limits_from: { kind: "supplied", by: "the person", name: "limits supplied with the piece", material, process: process3, size: sizeReport(size), each: choice.supplied.each }
+      limits_from: { kind: "supplied", by: "the person", name: "limits supplied with the piece", material, process: process3, size: sizeReport(size), each: choice.supplied.each, unmatched: unmatchedReport(cast, size) }
     };
   }
   const words = noVerdictWords(cast, size, choice.matches);
@@ -27235,7 +27545,7 @@ function limitsReport(choice, cast, size) {
       material,
       process: process3,
       size: sizeReport(size),
-      unmatched: choice.matches.map((m) => ({ profile: m.profile.id, name: m.profile.name, did_not_match: unmatched(m) })),
+      unmatched: unmatchedReport(cast, size, choice.matches),
       why: words.why,
       how_to_go_on: words.howToGoOn
     }
@@ -27270,13 +27580,12 @@ async function checkPiece(piece, mode, limits = programLimits()) {
   let choice = chooseLimits(tree, null);
   try {
     const meshes = /* @__PURE__ */ new Map();
-    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false } });
+    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false }, nameFaces: true });
     tBuild = performance.now() - t0;
     size = sizeOf(built.bbox.min, built.bbox.max, 1 + v.shrinkagePct / 100);
     choice = chooseLimits(tree, size.largestMm);
     if (choice.kind !== "none") {
-      const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : "off";
-      stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${tree.metal ?? tree.material} mm shrinkage ${shrink}`);
+      stl = writeBinaryStl(built.metal, castingHeader(tree, v.shrinkagePct));
       const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
       const refStl = writeBinaryStl(ref.metal, "flo2-cad reference");
       tBuild = performance.now() - t0;
@@ -27290,15 +27599,20 @@ async function checkPiece(piece, mode, limits = programLimits()) {
   }
   const L3 = choice.kind === "none" ? null : choice.limits;
   const name = materialName(tree);
-  const withFix = L3 ? entries.map((e) => ({ ...e, fix: fixFor(e, v, L3, name) })) : [];
+  const withFix = L3 ? entries.map((e) => ({ ...e, fix: fixFor(e, v, L3, name, built?.decl) })) : [];
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
+  const same = /* @__PURE__ */ new Set();
   for (const e of withFix) {
     if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
       const f = e.where?.feature;
-      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
+      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) {
+        e.fix = null;
+        same.add(e);
+      }
     }
   }
+  const problems = withFix.filter((e) => e.result !== "pass" && e.problem && !same.has(e)).map((e) => e.problem);
   const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
   const shrinkApplied = v.shrinkagePct > 0;
@@ -27332,15 +27646,16 @@ async function checkPiece(piece, mode, limits = programLimits()) {
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
   };
+  for (const w of REPORT_WATCHERS) w(report);
   let threeMf = null;
   if (built && stl && verdict === "pass" && mode === "export") {
-    threeMf = write3mf(built.metal, {
-      Title: tree.name,
-      Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${tree.revision}; ${name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : "not applied"}; stone not included${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`
-    });
+    threeMf = write3mf(
+      built.metal,
+      castingMetadata(tree, v.shrinkagePct, `revision ${tree.revision}; ${name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : "not applied"}; stone not included${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`),
+      { [THREEMF_NAMESPACE.prefix]: THREEMF_NAMESPACE.uri }
+    );
   }
-  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, problems, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
 async function describeNumbers(tree) {
   const built = await buildPiece(tree, { tol: PREVIEW_TOL, applyShrinkage: false });
@@ -27429,7 +27744,7 @@ async function describeProgram(p, view) {
   const volumeMm3 = meshVolume(view.run.metal);
   return { volumeMm3: r22(volumeMm3), size: meshSize(view.run.metal), weights: Object.values(METALS).map((m) => ({ metal: m.name, grams: r22(volumeMm3 / 1e3 * m.density) })) };
 }
-function programFixFor(e, L3, material, parts) {
+function programFixFor(e, L3, material, parts, decl) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   const head = parts.find((x) => x.call !== "ringShank");
@@ -27444,11 +27759,11 @@ function programFixFor(e, L3, material, parts) {
     case "wall":
     case "detail": {
       const limit = e.id === "wall" ? L3.wall : L3.detail;
-      const where = e.where?.part === "added shape" ? ` in the shape named ${quoteIds(e.where.feature)}` : e.where?.part === "sheet" ? ` on the sheet "${e.where.feature}"` : e.where?.part === "band" ? " in the band" : e.where?.part === "head" ? ` in the setting (${e.where.feature})` : "";
+      const where = e.where?.part === "added shape" ? ` in the shape named ${quoteIds(e.where.feature)}` : e.where?.part === "sheet" ? ` on the sheet "${e.where.feature}"` : e.where?.part === "band" ? " in the band" : e.where?.part === "head" ? ` in the setting (${e.where.feature})` : e.where && e.where.part_name === null ? " in no named part" : "";
       return `The metal${where} is only ${e.value} mm${at2(e.where?.point_mm)}, and ${e.id === "wall" ? "a wall" : "the finest detail"} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
     }
     case "gap":
-      return `Two surfaces are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
+      return `Two surfaces${gapParts(e, decl)} are only ${e.value} mm apart${at2(e.where?.point_mm)}; open the gap to at least ${L3.gap} mm in ${material}, or close it completely.`;
     case "watertight":
       return `The piece is not one closed solid (${e.measured}). Join every shape to the rest (union them so they overlap), or remove the loose one.`;
     case "surface_deviation":
@@ -27472,7 +27787,7 @@ async function checkProgram(p, mode, limits) {
   let size = null;
   let choice = chooseLimits(p, null);
   try {
-    const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale: scale2, blendSurface: true }, { tol: REFERENCE_TOL, scale: scale2, reuseBlends: true, positionsOnly: true }], limits);
+    const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale: scale2, blendSurface: true, nameFaces: true }, { tol: REFERENCE_TOL, scale: scale2, reuseBlends: true, positionsOnly: true }], limits);
     tBuild = performance.now() - t0;
     evaluated = { ms: Math.round(r.ms), peak_memory_mib: r.peakRssMiB };
     const exp = r.runs[0];
@@ -27482,10 +27797,10 @@ async function checkProgram(p, mode, limits) {
     size = meshBounds(mesh, scale2);
     choice = chooseLimits(p, size.largestMm);
     if (choice.kind !== "none") {
-      stl = writeBinaryStl(mesh, `${ENGINE_NAME} ${ENGINE_VERSION} ${p.name} r${p.revision} ${p.metal ?? p.material} mm shrinkage ${pct > 0 ? `${pct}%` : "off"} program`);
-      const problems = declarationProblems(mesh, decl);
-      if (problems.length) {
-        entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(" ")}`);
+      stl = writeBinaryStl(mesh, castingHeader(p, pct));
+      const problems2 = declarationProblems(mesh, decl);
+      if (problems2.length) {
+        entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems2.join(" ")}`);
       } else {
         const run = runChecks(stl, decl, choice.limits, { positions: r.runs[1].metal.positions }, [JEWELRY_CHECKS]);
         entries = run.entries;
@@ -27498,15 +27813,20 @@ async function checkProgram(p, mode, limits) {
   }
   const L3 = choice.kind === "none" ? null : choice.limits;
   const name = materialName(p);
-  const withFix = L3 ? entries.map((e) => ({ ...e, fix: programFixFor(e, L3, name, parts) })) : [];
+  const withFix = L3 ? entries.map((e) => ({ ...e, fix: programFixFor(e, L3, name, parts, decl) })) : [];
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
+  const same = /* @__PURE__ */ new Set();
   for (const e of withFix) {
     if ((e.id === "wall" || e.id === "detail") && e.result === "fail") {
       const f = e.where?.feature;
-      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) e.fix = null;
+      if (f && settingFails.has(f) || e.where?.part === "sheet" && f && failingSheets.has(f)) {
+        e.fix = null;
+        same.add(e);
+      }
     }
   }
+  const problems = withFix.filter((e) => e.result !== "pass" && e.problem && !same.has(e)).map((e) => e.problem);
   const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
   const headPart = parts.find((x) => x.call !== "ringShank");
@@ -27541,15 +27861,16 @@ async function checkProgram(p, mode, limits) {
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) }
   };
+  for (const w of REPORT_WATCHERS) w(report);
   let threeMf = null;
   if (mesh && stl && verdict === "pass" && mode === "export") {
-    threeMf = write3mf(mesh, {
-      Title: p.name,
-      Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${p.revision}; ${name}; shrinkage ${pct > 0 ? `${pct} % applied` : "not applied"}; stone not included; written as a program${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`
-    });
+    threeMf = write3mf(
+      mesh,
+      castingMetadata(p, pct, `revision ${p.revision}; ${name}; shrinkage ${pct > 0 ? `${pct} % applied` : "not applied"}; stone not included; written as a program${choice.kind === "supplied" ? "; checked against limits supplied with the piece (see the check report)" : ""}`),
+      { [THREEMF_NAMESPACE.prefix]: THREEMF_NAMESPACE.uri }
+    );
   }
-  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, problems, fixes, stl: verdict === "no_verdict" ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
 
 // src/program/guide.ts
@@ -28172,7 +28493,9 @@ var Session = class {
       const lead = `NO VERDICT: flo2-cad has no cited casting limits for this piece's material, process and size together, so it does not judge whether "${tree.name}" revision ${tree.revision} will cast, and export_for_casting will not release it.`;
       return reply(noVerdictTexts(tree, r, lead, `Full report: ${tree.name}.check.json.`), [reportFile]);
     }
-    const head = r.verdict === "pass" ? "Every casting check passes on the file as an export would write it; export_for_casting will release it." : `It would NOT cast as it is. What to thicken and where:
+    const head = r.verdict === "pass" ? "Every casting check passes on the file as an export would write it; export_for_casting will release it." : `It would NOT cast as it is:
+${r.problems.map((f) => `- ${f}`).join("\n")}
+What to thicken and where:
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
     const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${r.report["shrinkage"].allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`, limitsLine(r, tree)];
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
@@ -28193,7 +28516,9 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
     }
     if (r.verdict !== "pass" || !r.stl || !r.threeMf) {
       const texts2 = [
-        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:
+        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released:
+${r.problems.map((f) => `- ${f}`).join("\n")}
+What to thicken and where:
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
         this.#verdictText(tree, r),
         `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,

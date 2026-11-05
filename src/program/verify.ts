@@ -27,7 +27,7 @@
 // whole, so a piece with a hole, a shell or a wall under 0.35 mm is refused whatever is
 // declared.
 
-import type { AddedDecl, BandDecl, BezelDecl, BlendDecl, FeatureDecl, P2, P3, ProngDecl, SheetDecl, StoneDecl } from '../checker/features.js';
+import { NO_PART, type AddedDecl, type BandDecl, type BezelDecl, type BlendDecl, type FeatureDecl, type P2, type P3, type PartDecl, type ProngDecl, type SheetDecl, type StoneDecl } from '../checker/features.js';
 import type { MeshOut } from '../library/build.js';
 import type { ChildRun } from './child.js';
 import { MAX_REACH_MM, type PartReport } from './library.js';
@@ -171,8 +171,33 @@ function readDecl(v: unknown, blobs: Buffer[], scale: number): FeatureDecl {
       return { id, min: p3(x['min'], 'a named shape'), max: p3(x['max'], 'a named shape') };
     });
   }
+  if (v['faces'] !== undefined) {
+    const f = v['faces'];
+    if (!isObj(f)) throw new Error("the faces' parts are malformed");
+    const parts = arr(f['parts'], "the faces' parts", NO_PART - 1).map((x): PartDecl => {
+      if (!isObj(x)) throw new Error('a named part is malformed');
+      const name = str(x['name'], 'a named part', 40);
+      const kind = x['kind'];
+      // The library names its own parts; any other is a shape's own name, as a tree node's id is written.
+      const ok = kind === 'band' ? name === 'band' : kind === 'setting' ? SETTING_PARTS.has(name) || LABEL.test(name) : kind === 'shape' ? ID.test(name) : false;
+      if (!ok) throw new Error(`the named part "${name}" is not one the library names`);
+      if (x['cut'] !== undefined && (x['cut'] !== true || name !== 'stone seat')) throw new Error('only the stone seat is a cut');
+      return { name, kind: kind as PartDecl['kind'], ...(x['cut'] === true ? { cut: true } : {}) };
+    });
+    const of32 = blobOf(blobs, f['of'], "the faces' parts", 'u32') as Uint32Array;
+    const of = new Uint16Array(of32.length);
+    for (let i = 0; i < of32.length; i++) {
+      const p = of32[i]!;
+      if (p !== NO_PART && p >= parts.length) throw new Error('a face names no part');
+      of[i] = p;
+    }
+    d.faces = { parts, of };
+  }
   return d;
 }
+
+/** The parts of a stone's setting the library names, besides each prong ("prong 2 of 4"). */
+const SETTING_PARTS: ReadonlySet<string> = new Set(['head', 'bezel', 'stone seat']);
 
 /** The parts' dimensions, kept only as plain numbers and short words: what describe_piece prints. */
 function readParts(v: unknown): PartReport[] {
@@ -198,6 +223,7 @@ export function readRun(v: unknown, blobs: Buffer[], spec: ChildRun): RunOut {
   const metal = readMesh(v['metal'], blobs, 'the piece', spec.scale, !!spec.positionsOnly);
   if (spec.positionsOnly) return { metal };
   const out: RunOut = { metal, decl: readDecl(v['decl'], blobs, spec.scale), parts: readParts(v['parts']) };
+  if (out.decl!.faces && out.decl!.faces.of.length !== metal.triangles.length / 3) throw new Error("the faces' parts do not match the piece's triangles");
   if (spec.wantStone && v['stone'] !== undefined) out.stone = readMesh(v['stone'], blobs, 'the stone', spec.scale, false);
   return out;
 }

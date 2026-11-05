@@ -95,6 +95,39 @@ export interface AddedDecl {
   max: P3;
 }
 
+/**
+ * A named part of the piece, as the faces of the written file name it (ifc:solid-mesh: "each
+ * face tagged by the part feature it came from").
+ */
+export interface PartDecl {
+  /**
+   * The part's own name: a tree node's id (a shape added beside the band and head) or a
+   * program's .named("...") name, or the library's part: "band", "head" (a prong head's rail),
+   * "bezel", "prong 2 of 4", "stone seat".
+   */
+  name: string;
+  /** What kind of part: the ring band, a part of a stone's setting (the jewelry layer words it), or a shape of the piece's own. */
+  kind: 'band' | 'setting' | 'shape';
+  /** A cut, not metal of its own (the stone's seat): a reading at its faces is named by the metal it is cut into, when the reading meets that metal. */
+  cut?: boolean;
+}
+
+/**
+ * Which part each face of the written file came from, in file order. The library tags the
+ * faces as it builds: each part is made an original of the kernel's, whose faces the kernel
+ * traces through every union and cut. The checker reads the tag of the faces a reading is taken
+ * from and names that part, never a region round it. A face from no named part (a program's
+ * unnamed shape) is NO_PART, and the place is said to be in no named part.
+ */
+export interface FacesDecl {
+  parts: PartDecl[];
+  /** One per triangle of the written file: its index in `parts`, or NO_PART. */
+  of: Uint16Array;
+}
+
+/** A face that came from no named part. */
+export const NO_PART = 0xffff;
+
 export interface FeatureDecl {
   band?: BandDecl;
   prongs: ProngDecl[];
@@ -106,6 +139,8 @@ export interface FeatureDecl {
   blends?: BlendDecl[];
   /** The shapes the tree adds beside the band and head, each by its id. */
   added?: AddedDecl[];
+  /** Which named part each face of the written file came from. */
+  faces?: FacesDecl;
   /** The uniform scale applied for shrinkage (1 when off). */
   scale: number;
 }

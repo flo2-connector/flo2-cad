@@ -47,7 +47,7 @@ The seam with flo2 is fixed, so this list is final for the increment. Any change
 | `start_piece` | write | `template` (`solitaire_ring` \| `plain_band` \| `emerald_bezel_solitaire`), `ring_size` `{system: US\|UK\|EU, size}`; optional settings (below), `name`, `preview`. Or, instead of a template: `program` (with `name`, `metal`, `shrinkage`) | summary (with the seat and the head's outside size), the tree as text, `<name>.preview.png`, `<name>.tree.json` |
 | `change_piece` | write | `tree?`, `set?` (any setting, or `"<part>.<setting>"`), `program?` (the whole piece as a program; a template piece goes on as one), `preview?` | what changed, the summary, the tree as text, `<name>.preview.png`, `<name>.tree.json`; revision + 1 |
 | `preview_piece` | read | `tree?`, `views?` (1 to 4 of `three_quarter`, `front`, `side`, `top`, `setting_closeup`) | `<name>.preview.png` |
-| `check_piece` | read | `tree?` | pass or fail for each limit, what to thicken and where, and where the limits came from; or no verdict, what did not match and how to go on; `<name>.check.json` |
+| `check_piece` | read | `tree?` | pass or fail for each limit, what is wrong and the part it is in, what to thicken and where, and where the limits came from; or no verdict, what did not match and how to go on; `<name>.check.json` |
 | `export_for_casting` | write | `tree?` | if every check passes: `<name>.stl`, `<name>.3mf` and `<name>.check.json`. If not, or with no verdict: `<name>.check.json` and what to change (`isError: false`) |
 | `describe_piece` | read | `tree?` | the piece in jeweler's terms, the dimensions it is built to (below), its weight in each metal, every setting, the tree |
 
@@ -316,7 +316,7 @@ jewelry layer's setting rules (`src/jewelry/rules.ts`); the sources are there, i
 | Check | Limit | Measured how, on the STL as written |
 |---|---|---|
 | One watertight solid | manifold edges, no self-intersections, faces outward, exactly one shell | own STL parser, edge pairing, shells, signed volume, triangle crossing tests |
-| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle's centroid, along the surface's direction there: a triangle's own normal, except that a sliver too narrow to have a direction takes it from the surface it was cut from. Only metal's far side stops the sphere: a surface facing more than 105° away, met square-on and from more than 105° away, so a crease the sphere reaches from the side, or through a face it has passed, does not. A thin place is named by the part holding the sphere's centre: the band only inside its own section, otherwise the added shape by its id |
+| Walls | ≥ 0.8 mm | largest inscribed sphere at every triangle's centroid, along the surface's direction there: a triangle's own normal, except that a sliver too narrow to have a direction takes it from the surface it was cut from. Only metal's far side stops the sphere: a surface facing more than 105° away, met square-on and from more than 105° away, so a crease the sphere reaches from the side, or through a face it has passed, does not. A thin place is named by the part its faces came from (below), with any other named part the sphere meets |
 | Ring band | ≥ 1.0 mm | largest circle in the band's own section, every 5° all the way round: the whole piece is cut, then clipped to the band's inner and outer radius and width, so a head or an added shape is never counted as band |
 | Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section (the whole piece cut, clipped to a disc round the prong's axis), every 0.1 mm (0.02 mm near the narrowest) |
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
@@ -342,6 +342,41 @@ How each metal of the first profile is handled:
   double precision and keeps vertices 1e-10 mm apart, which a float32 file would merge into one point (a round
   stone in a bezel did this until 2026-10-05). Rounding moves nothing the file would not move anyway, less than
   1e-6 mm on a ring.
+
+## What the replies and files say: the three contracts
+
+flo2-cad publishes three contracts (`dec:how-interfaces-are-encoded`): its tools, the casting file, and the check
+report that travels with it. Each is written down in `contracts/`, and a test fails on any change the file does not
+declare.
+
+| Contract | File | What its test compares |
+|---|---|---|
+| The tools | `contracts/tools.json` | each tool's name, annotations and argument shape (the prose for the agent left out), against what `dist/main.js` lists in both protocol eras. After a deliberate change, `npm run contracts` rewrites it; that is a change to flo2's door too |
+| The check report | `contracts/check-report.schema.json` | a JSON Schema. Every report the test suite makes is held to it as it is made, the no-verdict and supplied-limits reports included |
+| The casting file | `contracts/casting-file.json` | what the STL's 80-byte header and the 3MF's metadata say, read back from files the engine wrote |
+
+**What a check report carries.** Every report keeps each field it had in 0.3.0, with its meaning, and adds three things.
+
+- **The part each place is in, by its own name.** Each check carries `part`, and each place (`where`) carries
+  `part_name`: a tree node's id, a program shape's `.named("...")` name, or the library's part (`band`, `head`, `bezel`,
+  `prong 2 of 4`, `stone seat`). The library tags each face of the casting file with the part it came from, and the
+  checker names a place by the faces it measured there, never by the region round it. A reading at the stone seat is
+  named by the metal the seat is cut into. Where the faces come from no named part, `part` is `null` and the words say
+  "in no named part". `other_parts` lists any other named part that meets there.
+- **The problem in a maker's words.** Each failing check carries `problem`, for example "The bezel wall is 0.62 mm at
+  its thinnest, on the left of the bezel (at 9:00 seen from above, the finger pointing to 12); it must be at least 0.8
+  mm." A refusal lists the problems first, then what to change.
+- **Every list, empty when there is nothing in it.** `checks`, each check's `failing`, each place's `meets` and
+  `other_parts`, the limits' `sources`, `limits_from.unmatched` and a size's `bounding_box_mm` are always there. A list
+  left out never means none.
+
+**What a casting file says about itself.** The STL's header reads, for example,
+`flo2-cad 0.4.0 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
+versions, the units, the revision, the shrinkage allowance, the metal by its fineness mark (Ag925, Au585Y, Au750Y,
+Pt950) or the material by name, the process and the piece. In 80 bytes the material, the process and the name may be
+cut, marked `~`. The 3MF says each in full as metadata of its own (`flo2:engine`, `flo2:kernel`, `flo2:piece`,
+`flo2:revision`, `flo2:metal`, `flo2:material`, `flo2:process`, `flo2:process_assumed`, `flo2:shrinkage`,
+`flo2:units`, `flo2:check_report`), beside its Title, Application and Description.
 
 ## Measurements
 
@@ -393,7 +428,7 @@ The program-built solitaire is the template's mesh: the same triangle count, vol
 
 ```sh
 node dist/main.js                 # MCP on stdio; needs only Node 24
-node dist/main.js --version       # flo2-cad 0.3.0 (manifold-3d 3.5.4)
+node dist/main.js --version       # flo2-cad 0.4.0 (manifold-3d 3.5.4)
 node dist/main.js --list-tools    # the published tool list as JSON
 
 docker build -t flo2-cad .

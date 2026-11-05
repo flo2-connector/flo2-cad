@@ -300,18 +300,36 @@ describe('the tools describe a general cast-piece engine, with jewelry its first
 
 // ------------------------------------------------ rings check exactly as before
 
-/** What main 362c473 replied, for each case, against what this engine replies now. */
-describe('rings check exactly as main 362c473 did: the same readings, verdicts, fixes, report and replies, adding only where the limits came from', () => {
+/**
+ * What main 362c473 replied, for each case, against what this engine replies now. Since 0.4.0
+ * (test/part-names.test.ts, test/contracts.test.ts), deliberately: each place is named by the part
+ * its faces came from, so where.part, feature, clock and description, and the naming clause of
+ * the wall, detail, gap and bezel-wall methods, may say more than main did (main's slot case named
+ * the block's walls "the band, 360°" by region; its gaps and one wall "the piece"); a gap's advice
+ * names the parts it opens between ("Two surfaces of "block" ..."); a refusal lists each problem
+ * in words before what to change; and each check says its part and problem and carries every
+ * list, empty or not. Everything else, every reading and verdict among it, is main's.
+ */
+describe('rings check exactly as main 362c473 did: the same readings, verdicts, fixes, report and replies, adding only where the limits came from and, since 0.4.0, the parts and problems by name', () => {
   const golden = JSON.parse(readFileSync(FIXTURE, 'utf8')) as {
     cases: { name: string; calls: { tool: string; args: Record<string, unknown> }[]; replies: { tool: string; isError: boolean; texts: string[]; report: Report | null; files: string[] }[] }[];
   };
   // The engine's version is in every STL's header (so in its checksum) and in the report.
   const sha = (t: string) => t.replace(/sha256 [0-9a-f]{12}\.\.\./g, 'sha256 <the file>...');
+  // The naming 0.4.0 changed on purpose, taken out of both sides; the problems listed before the fixes, out of this one.
+  const gapWords = (t: string) => t.replace(/Two surfaces of .*? are only/g, 'Two surfaces are only');
+  const unnamed = (t: string) => gapWords(t.replace(/ \[[^\n]*\]$/gm, '').replace(/:\n(?:- [^\n]*\n)*What to thicken and where:/, '. What to thicken and where:'));
   const DESCRIBE_DROP = ["Settings change_piece can set:", "A tree's parts:", 'A shape the parts and operations above cannot make', 'This piece is written as a program.', "The piece's tree, revision", "The piece's file, revision"];
   const nowTexts = (tool: string, texts: string[]) =>
     texts
       .filter((t) => !t.startsWith('Limits: ') && !(tool === 'describe_piece' && DESCRIBE_DROP.some((d) => t.startsWith(d))))
-      .map((t) => sha(t.replace(/, from the limit profile "precious metals cast by lost wax, at jewelry scale"/g, '')));
+      .map((t) => unnamed(sha(t.replace(/, from the limit profile "precious metals cast by lost wax, at jewelry scale"/g, ''))));
+  const place = (w: Report | null) => {
+    if (!w) return w;
+    for (const k of ['part', 'feature', 'clock', 'description', 'part_name', 'other_parts']) delete w[k];
+    if (Array.isArray(w['meets']) && !w['meets'].length) delete w['meets'];
+    return w;
+  };
   const norm = (rep: Report | null) => {
     if (!rep) return rep;
     const c = structuredClone(rep);
@@ -319,6 +337,21 @@ describe('rings check exactly as main 362c473 did: the same readings, verdicts, 
     c['engine'].version = '<version>';
     if (c['stl']) c['stl'].sha256 = '<the file>';
     if (c['program']) c['program'].evaluated = '<evaluated>';
+    for (const e of c['checks'] as Report[]) {
+      delete e['part'];
+      delete e['problem'];
+      e['method'] = String(e['method'])
+        .replace(/; the place is named by [^;]*/, '')
+        .replace(/; the gap is named by .*$/, '')
+        .replace(/ \(its own faces and its seat's\)$/, '');
+      if (typeof e['fix'] === 'string') e['fix'] = gapWords(e['fix']);
+      place(e['where']);
+      if (Array.isArray(e['failing']) && !e['failing'].length) delete e['failing'];
+      for (const f of (e['failing'] ?? []) as Report[]) {
+        delete f['part'];
+        place(f['where']);
+      }
+    }
     return c;
   };
   for (const g of golden.cases) {
@@ -329,13 +362,18 @@ describe('rings check exactly as main 362c473 did: the same readings, verdicts, 
         const r = await call(s, c.tool, structuredClone(c.args));
         assert.equal(r.isError ?? false, want.isError, `${c.tool}: ${text(r)}`);
         assert.deepEqual(fileNames(r), want.files, c.tool);
-        assert.deepEqual(nowTexts(c.tool, textsOf(r)), want.texts.map(sha), `${c.tool}'s reply`);
+        assert.deepEqual(nowTexts(c.tool, textsOf(r)), want.texts.map((t) => unnamed(sha(t))), `${c.tool}'s reply`);
         if (want.report) {
           const rep = reportOf(r);
           assert.equal(rep['limits_from']?.kind, 'profile', `${c.tool}: the report names where its limits came from`);
           assert.equal(rep['limits_from'].name, PROFILE_NAME);
           const { limits_from: _, ...rest } = rep;
           assert.deepEqual(norm(rest), norm(want.report), `${c.tool}'s report`);
+          // What 0.4.0 adds: each check's part is its place's, by name, and its problem is said exactly when it fails.
+          for (const e of rep['checks'] as Report[]) {
+            assert.equal(e['part'], e['where']?.['part_name'] ?? null, `${e['id']}: part`);
+            assert.equal(e['problem'] === null, e['result'] === 'pass', `${e['id']}: problem`);
+          }
         }
       }
     });

@@ -38,6 +38,8 @@ export interface ChildRun {
   /** Only the solid's vertices are wanted (the surface check's finer reference). */
   positionsOnly?: boolean;
   wantStone?: boolean;
+  /** Tag each face with the named part it came from (FeatureDecl.faces), for the checker to name the places it reports. */
+  nameFaces?: boolean;
 }
 
 export interface ChildRequest {
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail('time', 'the program ran past its time limit', null, logs);
     const blendMeshes: BlendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
-    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes);
+    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx) as (bridge: (n: unknown, a: unknown) => string) => unknown;
     const runner = setup((name: unknown, args: unknown) => lib.call(name as string, args as string));
@@ -183,12 +185,14 @@ async function main(): Promise<void> {
     }
     try {
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
-      const decl: FeatureDecl & { blends?: unknown } = res.decl;
+      const decl: FeatureDecl & { blends?: unknown; faces?: unknown } = res.decl;
       const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
+      // Each face's part travels as whole 32-bit numbers, as the triangles do.
+      const faces = res.decl.faces ? { parts: res.decl.faces.parts, of: blob(Uint32Array.from(res.decl.faces.of)) } : undefined;
       runs.push({
         metal: meshOut(res.metal, blob, run.positionsOnly),
         ...(run.wantStone && res.stone ? { stone: meshOut(res.stone, blob) } : {}),
-        ...(run.positionsOnly ? {} : { decl: { ...decl, blends }, parts: res.parts satisfies PartReport[] }),
+        ...(run.positionsOnly ? {} : { decl: { ...decl, blends, ...(faces ? { faces } : {}) }, parts: res.parts satisfies PartReport[] }),
       });
     } catch (e) {
       if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs);

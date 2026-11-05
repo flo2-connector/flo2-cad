@@ -9,6 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { holdToContract } from './report-contract.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MAIN = `${ROOT}dist/main.js`;
@@ -81,6 +82,7 @@ describe('reply shapes over MCP (contract §1, §3, §4)', () => {
     assert.equal(files(r)['cadfile:///emily-ring.stl']!.mimeType, 'model/stl');
     assert.equal(files(r)['cadfile:///emily-ring.3mf']!.mimeType, 'model/3mf');
     const report = JSON.parse(bytes(r, 'cadfile:///emily-ring.check.json').toString('utf8'));
+    holdToContract(report, 'the check report the shipped server released');
     assert.equal(report.verdict, 'pass');
     assert.equal(report.kernel.version, '3.5.4');
     assert.equal(report.shrinkage.applied, false);
@@ -92,6 +94,7 @@ describe('reply shapes over MCP (contract §1, §3, §4)', () => {
     const r = await call('export_for_casting', {});
     assert.equal(r.isError, false);
     assert.deepEqual(Object.keys(files(r)), ['cadfile:///emily-ring.check.json']);
+    holdToContract(JSON.parse(bytes(r, 'cadfile:///emily-ring.check.json').toString('utf8')), 'the check report the shipped server sent with its refusal');
     assert.match(texts(r), /NOT EXPORTED/);
     assert.match(texts(r), /Thicken the bezel rim: it is 0\.\d+ mm at \d+:\d\d seen from above/);
   });
@@ -178,6 +181,7 @@ describe('a piece written as a program, over MCP (cap:the-agent-writes-a-piece-a
     assert.equal(exported.isError, false);
     assert.deepEqual(Object.keys(files(exported)), ['cadfile:///moon.stl', 'cadfile:///moon.3mf', 'cadfile:///moon.check.json']);
     const report = JSON.parse(bytes(exported, 'cadfile:///moon.check.json').toString('utf8'));
+    holdToContract(report, "the program piece's check report");
     assert.equal(report.verdict, 'pass');
     assert.equal(report.stone.in_casting_file, false);
   });

@@ -60,6 +60,9 @@ function sphereSegments(radius, tol) {
   return Math.ceil(segmentsFor(radius, tol * 0.6, 16) / 4) * 4;
 }
 
+// src/checker/features.ts
+var NO_PART = 65535;
+
 // src/jewelry/rules.ts
 var SETTING = {
   /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
@@ -417,7 +420,7 @@ function readSupplied(v, path) {
   for (const k of Object.keys(o)) {
     if (!SUPPLIED_KEYS.includes(k)) throw new CallError(at(path, k), `is not a limit the checker reads; a supplied set gives ${SUPPLIED_KEYS.join(", ")}.`);
   }
-  const entry = (k) => {
+  const entry2 = (k) => {
     const p = at(path, k);
     const e = o[k];
     if (e === void 0) {
@@ -437,13 +440,13 @@ function readSupplied(v, path) {
   const limits = {};
   const each = {};
   for (const f of SUPPLIED_FIELDS) {
-    const e = entry(f.key);
+    const e = entry2(f.key);
     const mm2 = lengthMm(e.value, at(at(path, f.key), "value"));
     if (!(mm2 > 0)) throw new CallError(at(at(path, f.key), "value"), "must be more than 0 mm.");
     limits[f.limit] = mm2;
     each[f.key] = { value: e.value, source: e.source };
   }
-  const s = entry("shrinkage");
+  const s = entry2("shrinkage");
   const pct = percent(s.value, at(at(path, "shrinkage"), "value"));
   if (!(pct >= 0 && pct <= 5)) throw new CallError(at(at(path, "shrinkage"), "value"), `a shrinkage allowance is between 0 and 5 %, for example "1.5 %"; got "${String(s.value)}".`);
   each["shrinkage"] = { value: s.value, source: s.source };
@@ -541,7 +544,7 @@ function sheetSpec(n) {
   const p = n.params ?? {};
   const surface = p["surface"] ?? "flat";
   return {
-    outline: p["outline"].map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]),
+    outline: p["outline"].map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y")]),
     thickness: lengthMm(p["thickness"], "thickness"),
     surface,
     radius: surface === "flat" ? Infinity : lengthMm(p["radius"], "radius"),
@@ -1197,9 +1200,9 @@ function validateOp(op, p, path) {
     } else {
       const dim = kind === "points2" ? 2 : 3;
       if (!Array.isArray(v) || v.length < 2) throw new CallError(kp, `a list of at least 2 points, each [${dim === 2 ? '"x mm", "y mm"' : '"x mm", "y mm", "z mm"'}].`);
-      v.forEach((pt2, i) => {
-        if (!Array.isArray(pt2) || pt2.length !== dim) throw new CallError(at(kp, i), `a point is ${dim} lengths, e.g. [${dim === 2 ? '"1 mm", "2 mm"' : '"1 mm", "2 mm", "0 mm"'}].`);
-        pt2.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
+      v.forEach((pt, i) => {
+        if (!Array.isArray(pt) || pt.length !== dim) throw new CallError(at(kp, i), `a point is ${dim} lengths, e.g. [${dim === 2 ? '"1 mm", "2 mm"' : '"1 mm", "2 mm", "0 mm"'}].`);
+        pt.forEach((c, j) => lengthMm(c, at(at(kp, i), j)));
       });
       if (kind === "points2" && v.length < 3) throw new CallError(kp, "a profile needs at least 3 points.");
     }
@@ -1239,7 +1242,7 @@ function validateThicken(p, path) {
     const rc = lengthMm(p["round_corners"], at(path, "round_corners"));
     if (rc < 0 || rc > ROUND_CORNERS_MAX_MM) throw new CallError(at(path, "round_corners"), `${rc} mm is outside what the library builds (0 to ${ROUND_CORNERS_MAX_MM} mm).`);
   }
-  const outline = p["outline"].map((pt2, i) => [lengthMm(pt2[0], at(at(at(path, "outline"), i), 0)), lengthMm(pt2[1], at(at(at(path, "outline"), i), 1))]);
+  const outline = p["outline"].map((pt, i) => [lengthMm(pt[0], at(at(at(path, "outline"), i), 0)), lengthMm(pt[1], at(at(at(path, "outline"), i), 1))]);
   if (Math.abs(signedArea2(outline)) / 2 < 0.01) throw new CallError(at(path, "outline"), "the outline encloses no area; give the sheet's edge as a closed loop of points, in order round it.");
   if (surface !== "flat") {
     const r = lengthMm(p["radius"], at(path, "radius"));
@@ -1308,10 +1311,57 @@ function headView(kind, hp, stone) {
   };
 }
 
+// src/library/faces.ts
+var MAX_PARTS = NO_PART - 1;
+var FaceNames = class {
+  #parts = [];
+  /** The kernel's original id, to the part its faces are named by, or -1 when two shapes claimed it. */
+  #byId = /* @__PURE__ */ new Map();
+  #index(part) {
+    const i = this.#parts.findIndex((p) => p.name === part.name && p.kind === part.kind && !!p.cut === !!part.cut);
+    if (i >= 0) return i;
+    if (this.#parts.length >= MAX_PARTS) return -1;
+    this.#parts.push({ name: part.name, kind: part.kind, ...part.cut ? { cut: true } : {} });
+    return this.#parts.length - 1;
+  }
+  /** A part of the library's, just built from originals of its own: every face of `m` is named `part`. */
+  own(m, part) {
+    const i = this.#index(part);
+    for (const id of new Set(m.getMesh().runOriginalID)) this.#byId.set(id, i);
+  }
+  /**
+   * Names every face of `m` that no part has named yet `part`: a shape the tree adds, or a
+   * program's .named("...") shape. `inner` are the names of the shapes named inside `m`, which
+   * keep their own; a face already claimed by any other shape is one handle in two named shapes,
+   * and is left in no named part.
+   */
+  claim(m, part, inner = /* @__PURE__ */ new Set()) {
+    const i = this.#index(part);
+    for (const id of new Set(m.getMesh().runOriginalID)) {
+      const had = this.#byId.get(id);
+      if (had === void 0) this.#byId.set(id, i);
+      else if (had >= 0 && had !== i) {
+        const p = this.#parts[had];
+        if (p.kind === "shape" && !inner.has(p.name)) this.#byId.set(id, -1);
+      }
+    }
+  }
+  /** The part of each triangle of a finished solid's mesh, in its order: the casting file's. */
+  faces(mesh) {
+    const of = new Uint16Array(mesh.triVerts.length / 3).fill(NO_PART);
+    for (let r = 0; r < mesh.runOriginalID.length; r++) {
+      const i = this.#byId.get(mesh.runOriginalID[r]);
+      if (i === void 0 || i < 0) continue;
+      of.fill(i, mesh.runIndex[r] / 3, mesh.runIndex[r + 1] / 3);
+    }
+    return { parts: this.#parts.map((p) => ({ ...p })), of };
+  }
+};
+
 // src/library/field.ts
 var L = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
-var pts3 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
+var pts3 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y"), lengthMm(pt[2], "z")]);
 function smin(a, b, k) {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - h * h * k / 4;
@@ -1922,8 +1972,8 @@ var PREVIEW_TOL = 0.03;
 // src/library/ops.ts
 var L2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
-var pts2 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y")]);
-var pts32 = (v) => v.map((pt2) => [lengthMm(pt2[0], "x"), lengthMm(pt2[1], "y"), lengthMm(pt2[2], "z")]);
+var pts2 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y")]);
+var pts32 = (v) => v.map((pt) => [lengthMm(pt[0], "x"), lengthMm(pt[1], "y"), lengthMm(pt[2], "z")]);
 function ccw(pts) {
   let a = 0;
   for (let i = 0; i < pts.length; i++) {
@@ -2384,7 +2434,7 @@ function meshOut(mesh) {
   }
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
-function buildBand(k, A, dims, profileName, tol) {
+function buildBand(k, A, dims, profileName, tol, names) {
   const { Manifold, CrossSection } = k;
   const rIn = dims.band.innerDiameterMm / 2;
   const t = dims.band.thicknessMm;
@@ -2393,9 +2443,10 @@ function buildBand(k, A, dims, profileName, tol) {
   const profile = bandProfile(profileName, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
+  names?.own(band, { name: "band", kind: "band" });
   return { band, decl: { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 } };
 }
-function buildHead(k, A, v, dims, tol, shape, onBand) {
+function buildHead(k, A, v, dims, tol, shape, onBand, names) {
   const { Manifold, CrossSection } = k;
   if (!v.head || !dims.head) throw new Error("engine bug: a head was asked for a piece with none");
   const rIn = dims.band.innerDiameterMm / 2;
@@ -2407,8 +2458,12 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
   const zGt = hd.girdleTopZ;
   const zTable = hd.tableZ;
   const decl = { stone: { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm }, prongs: [] };
+  const own = (m, name, cut = false) => {
+    names?.own(m, { name, kind: "setting", ...cut ? { cut } : {} });
+    return m;
+  };
   const stone = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-  const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
+  const seatCut = own(A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb])), "stone seat", true);
   let head;
   if (v.head.kind === "prong_head" && hd.prongs && hd.rail) {
     const railW = hd.rail.widthMm;
@@ -2422,7 +2477,7 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
     const railMid = A.t(girdleCs.offset(railOff, "Round", 2, ringSeg)).toPolygons()[0];
     const xCross = Math.max(...crossingsX(railMid, w / 2));
     const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
-    const parts = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
+    const parts = [own(A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2])), "head")];
     hd.prongs.forEach((pd) => {
       const tk = pd.thicknessMm;
       const [cx, cy] = pd.axis;
@@ -2431,7 +2486,7 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
       const arc = (u) => [r * Math.cos(u), colH + r * Math.sin(u)];
       const prof = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
       const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
-      parts.push(A.t(col.translate([cx, cy, zRail])));
+      parts.push(own(A.t(col.translate([cx, cy, zRail])), pd.label));
       const prong = {
         label: pd.label,
         clock: pd.clock,
@@ -2455,9 +2510,9 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
     const outerPts = outerCs.toPolygons()[0];
     const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
     const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
-    const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
-    const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
-    const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
+    const tube = own(A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom])), "bezel");
+    const lipHole = own(A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb])), "bezel");
+    const backHole = own(A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1])), "bezel");
     head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
     decl.bezel = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
   } else {
@@ -2465,12 +2520,12 @@ function buildHead(k, A, v, dims, tol, shape, onBand) {
   }
   if (onBand) {
     const nBand = segmentsFor(rOut, tol, 48);
-    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
+    const finger = own(A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0]))), v.head.kind === "bezel" ? "bezel" : "head");
     head = A.t(head.subtract(finger));
   }
   return { head, stone, decl };
 }
-function finishMetal(A, solid, decl, blends, scale, withBlendSurface) {
+function finishMetal(A, solid, decl, blends, scale, withBlendSurface, names) {
   let metal = solid;
   if (scale !== 1) {
     metal = A.t(metal.scale(scale));
@@ -2483,6 +2538,7 @@ function finishMetal(A, solid, decl, blends, scale, withBlendSurface) {
   const bb = metal.boundingBox();
   const mesh = metal.getMesh();
   if (withBlendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale);
+  if (names) decl.faces = names.faces(mesh);
   return { mesh: meshOut(mesh), volumeMm3: metal.volume(), bbox: { min: [...bb.min], max: [...bb.max] } };
 }
 function atFilePrecision(A, m) {
@@ -2692,13 +2748,16 @@ var ProgramLibrary = class {
   #A;
   #tol;
   #blendMeshes;
+  /** Which named part each face comes from (library/faces.ts): kept only for an evaluation the checker will read, `nameFaces`. */
+  #names;
   #recs = [];
   #nextId = 0;
-  constructor(k, A, tol, blendMeshes) {
+  constructor(k, A, tol, blendMeshes, nameFaces = false) {
     this.#k = k;
     this.#A = A;
     this.#tol = tol;
     this.#blendMeshes = blendMeshes;
+    this.#names = nameFaces ? new FaceNames() : void 0;
   }
   /**
    * THE BRIDGE: a call by name, its arguments as JSON text; the answer as JSON text,
@@ -2731,7 +2790,7 @@ var ProgramLibrary = class {
       ...d.sheets.length ? { sheets: d.sheets.map((s) => ({ ...s, points: s.points.map((q) => [...q]), normals: s.normals.map((q) => [...q]) })) } : {},
       ...d.added.length ? { added: d.added.map((a) => ({ ...a, min: [...a.min], max: [...a.max] })) } : {}
     };
-    const done = finishMetal(this.#A, rec.m, decl, d.blends, scale, withBlendSurface);
+    const done = finishMetal(this.#A, rec.m, decl, d.blends, scale, withBlendSurface, this.#names);
     for (const p of done.mesh.positions) {
       if (!(Math.abs(p) <= MAX_REACH_MM * Math.max(1, scale))) throw new CallError("program", `the piece reaches ${Math.round(Math.abs(p))} mm from the origin; a piece stays within ${MAX_REACH_MM} mm of it.`);
     }
@@ -2855,6 +2914,7 @@ var ProgramLibrary = class {
     if (addedAs) {
       const bb = m.boundingBox();
       d.added.push({ id: addedAs, min: [...bb.min], max: [...bb.max] });
+      this.#names?.claim(m, { name: addedAs, kind: "shape" });
     }
     return this.#newSolid(m, d, { node });
   }
@@ -2966,7 +3026,9 @@ var ProgramLibrary = class {
           }
         });
         const node = { id: label ?? this.#id("blend"), op: "smooth_union", params: { radius: mmText(radius) }, children: rs.map((r) => r.node) };
-        return this.#fromNode(node, "smoothUnion");
+        const made = this.#fromNode(node, "smoothUnion");
+        if (label) this.#names?.claim(made.m, { name: label, kind: "shape" });
+        return made;
       }
       case "op": {
         const node = validateOpNode(a[0], "op");
@@ -3072,6 +3134,7 @@ var ProgramLibrary = class {
         const r = this.#solid(a[0], "named");
         const id = nameId(a[1], "named.name");
         const bb = r.m.boundingBox();
+        this.#names?.claim(r.m, { name: id, kind: "shape" }, new Set(r.d.added.map((x) => x.id)));
         return { ...r, d: { ...r.d, added: [...r.d.added, { id, min: [...bb.min], max: [...bb.max] }] } };
       }
       case "bounds": {
@@ -3185,7 +3248,7 @@ var ProgramLibrary = class {
       extras: []
     };
     const dims = pieceDims(v);
-    const b = buildBand(this.#k, this.#A, dims, profile, this.#tol);
+    const b = buildBand(this.#k, this.#A, dims, profile, this.#tol, this.#names);
     const d = emptyDecls();
     d.band = b.decl;
     const ringSize = { system: size.system, size: String(size.size) };
@@ -3371,7 +3434,7 @@ var ProgramLibrary = class {
       head: headView(kind, p, st.view)
     };
     const dims = pieceDims(v, st.custom ? st.shape : void 0);
-    const h = buildHead(this.#k, this.#A, v, dims, this.#tol, st.shape, band !== null);
+    const h = buildHead(this.#k, this.#A, v, dims, this.#tol, st.shape, band !== null, this.#names);
     const d = emptyDecls();
     d.stone = st.cabochon ? { ...h.decl.stone, kind: "cabochon" } : h.decl.stone;
     d.prongs = h.decl.prongs;
@@ -3684,7 +3747,7 @@ async function main() {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail("time", "the program ran past its time limit", null, logs);
     const blendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
-    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes);
+    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx);
     const runner = setup((name, args) => lib.call(name, args));
@@ -3712,10 +3775,11 @@ async function main() {
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
       const decl = res.decl;
       const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
+      const faces = res.decl.faces ? { parts: res.decl.faces.parts, of: blob(Uint32Array.from(res.decl.faces.of)) } : void 0;
       runs.push({
         metal: meshOut2(res.metal, blob, run.positionsOnly),
         ...run.wantStone && res.stone ? { stone: meshOut2(res.stone, blob) } : {},
-        ...run.positionsOnly ? {} : { decl: { ...decl, blends }, parts: res.parts }
+        ...run.positionsOnly ? {} : { decl: { ...decl, blends, ...faces ? { faces } : {} }, parts: res.parts }
       });
     } catch (e) {
       if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs);

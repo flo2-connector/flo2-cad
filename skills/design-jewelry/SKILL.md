@@ -141,9 +141,16 @@ checks the piece against them instead.
 A refusal is a normal answer, not an error. The engine refuses to release a file that would not cast. Each limit has
 a cited source, and every check runs on the exact file it would have sent.
 
-- The reply says **what to thicken and where**. For example: "Thicken prong 2 of 4 at 4:30: its narrowest section
+- The reply first says **what is wrong, in the part it is in**. For example: "The bezel wall is 0.62 mm at its
+  thinnest, on the left of the bezel (at 9:00 seen from above, the finger pointing to 12); it must be at least 0.8 mm."
+  The part is named by its own name: the band, the head, the bezel, prong 2 of 4, the stone seat, or a shape you
+  added, by its id or its `.named("...")` name. A place on a shape with no name is "in no named part": name the shape
+  and check again, so you can tell the person which one.
+- Then it says **what to thicken and where**. For example: "Thicken prong 2 of 4 at 4:30: its narrowest section
   is 0.47 mm, where the seat for the stone is cut, and it needs 1.0 mm."
 - Positions are clock positions seen from above, with the finger pointing to 12 o'clock.
+- The check report, `<name>.check.json`, says the same for every check: its `part`, its `problem` in words, and
+  every list it can carry (`failing`, `meets`, `other_parts`, `unmatched`), empty when there is nothing in it.
 - Tell the person plainly and offer the change the reply suggests. Make it with `change_piece`, show the new
   picture, and check again.
 
@@ -258,7 +265,8 @@ engine runs it confined, keeps it as the piece's file, and previews, checks and 
 - **When it fails**, the reply names the line and what to fix ("program: line 3: rotate([20, 0, 0]): would tip the
   stone setting off upright"), and nothing changes. A program that runs too long or uses too much memory is stopped
   and refused, with the limit it hit. `console.log` lines come back with the reply.
-- **Name the shapes you add** (`.named("crest")`), so a refusal can say "the shape named "crest"".
+- **Name the shapes you add** (`.named("crest")`), so a refusal can say "the shape named "crest"". A shape with no
+  name is reported "in no named part".
 - **A cabochon**: `cabochon({ diameter, height })`, or `{ length, width, height }` for an oval, with the base size and
   the dome's height (flat base to top) from the person's own measurement of their stone, never a chart. A domed stone
   you draw yourself is declared with `stone(shape, { kind: 'cabochon' })`; either way its bezel is checked by the

@@ -31,6 +31,14 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 4. **Tool names** are lower_snake_case. `src/tools.ts` holds the published list, and flo2's door allowlists exactly
    those six names. Adding a setting to `set`, or a template option, is fine. Adding a tool or changing a name is not
    fine without both repos.
+6. **The three published contracts are written down in `contracts/`, each held by a test that fails on a change the
+   file does not declare** (`test/contracts.test.ts`):
+   - `contracts/tools.json`: each tool's name, annotations and argument shape. After a deliberate change, run
+     `npm run contracts` and commit it; that is a change to flo2's door too.
+   - `contracts/check-report.schema.json`: the check report. Add a field only with the schema, and never remove or
+     rename one. Every list is always present, empty when there is nothing in it. `npm test` preloads
+     `build/test/hold-reports.js`, which holds every report a test makes to the schema.
+   - `contracts/casting-file.json`: what the STL's 80-byte header and the 3MF's metadata say.
 5. **Protocol eras.** The engine serves both MCP eras from one stdio entry point, using `@modelcontextprotocol/server`
    2.3.0 and `serveStdio`:
    - the 2025 `initialize` handshake, which flo2's plug speaks;
@@ -96,6 +104,10 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
   - Previews are never blocked.
 - **The checker is independent of the kernel.** `src/checker/` imports only its own files and Node, and
   `test/package.test.ts` holds that.
+- **A place is named by the part its faces came from, never by a region.** The library tags each face of the
+  casting file with its named part (`src/library/faces.ts`, `FeatureDecl.faces`): a tree node's id, a program's
+  `.named("...")` name, or the library's part (band, head, bezel, prong N of M, stone seat). A face from no named part
+  is reported "in no named part". Each failing check carries `part` and a `problem` in a maker's words.
 - **No native dependency for export.** The 3MF zip is written with node:zlib, and the PNG with a software
   rasterizer.
 - **Targets.**
@@ -127,6 +139,7 @@ network, a read-only root, and the design's folder mounted read-only. A reply ca
 |---|---|
 | `src/main.ts`, `src/server.ts`, `src/session.ts` | the agent tool surface (MCP, both eras) |
 | `src/tools.ts` | **the published tool list and argument schemas** |
+| `contracts/` | the three published contracts, as files the tests hold the engine to (`tools.json`, written by `scripts/contracts.mjs`; `check-report.schema.json`; `casting-file.json`) |
 | `src/units.ts`, `src/metals.ts` | unit enforcement, ring sizes, and the four metals (name, density, casting note) |
 | `src/limits/` | the named limit profiles with their sources (`profiles.ts`), how a piece's material, process and size choose one or none (`choose.ts`), and limits a person supplies (`supplied.ts`) |
 | `src/jewelry/` | the jewelry layer, behind `index.ts`: the stone, setting and seat rules (`rules.ts`), the checks of a stone's setting (`checks.ts`) and what to change when one fails (`fixes.ts`) |

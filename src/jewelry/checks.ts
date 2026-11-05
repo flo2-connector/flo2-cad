@@ -7,6 +7,11 @@
 // before the sheets'. They read the casting limits the piece's profile (or its supplied limits)
 // gives, prong and wall, and the setting rules of this layer (rules.ts).
 //
+// A place on a setting is named by the part its faces came from (the library tags each face:
+// FeatureDecl.faces), and worded here, in a jeweler's terms: "prong 2 of 4", "the bezel", "the
+// stone seat", "the head's rail", and where on it, "on the left of the bezel". Every entry says
+// its problem in those words and carries its part.
+//
 // Like the general checker (con:checker-independent-of-the-kernel), this file imports only the
 // checker and Node, never the kernel, the library or the exporter; test/jewelry-boundary.test.ts
 // holds that.
@@ -14,23 +19,25 @@
 import type { Bvh } from '../checker/bvh.js';
 import {
   clockAt,
+  entry,
   largestCircleIn,
   MAXSPHERE,
   minSample,
   mm,
-  pt,
+  placeAt,
   r3,
   slice,
   trianglesWhere,
   type CheckEntry,
   type CheckLayer,
   type CheckLimits,
+  type LayerContext,
   type Part,
   type Region,
   type Sample,
   type Where,
 } from '../checker/check.js';
-import type { FeatureDecl, P2, ProngDecl } from '../checker/features.js';
+import type { FeatureDecl, P2, PartDecl, ProngDecl } from '../checker/features.js';
 import type { V3 } from '../checker/geom.js';
 
 /** The setting rules these checks hold a stone's setting to (rules.ts SETTING). */
@@ -55,15 +62,16 @@ export function jewelryChecks(R: SettingRules): CheckLayer {
   return {
     applies: declaresSetting,
     partAt: settingPartAt,
+    placeWords: settingPlaceWords,
     judgesWallAt: onProngColumn,
-    checks: ({ bvh, samples, decl, L }) => {
+    checks: ({ bvh, samples, decl, L, faceOf }) => {
       const out: { id: CheckEntry['id']; name: string; limit: string; run: () => CheckEntry }[] = [];
       if (decl.prongs.length) {
         out.push({ id: 'prong', name: 'Prong thickness', limit: mm(L.prong), run: () => prongEntry(bvh, decl.prongs, L) });
         if (decl.stone) out.push({ id: 'prong_grip', name: 'Prongs grip the stone', limit: `each reaches ${mm(R.gripMin)} over the girdle`, run: () => gripEntry(bvh, decl, R) });
       }
       if (decl.bezel && decl.stone) {
-        out.push({ id: 'bezel_wall', name: 'Bezel wall thickness', limit: mm(L.wall), run: () => bezelWallEntry(bvh, samples, decl, L) });
+        out.push({ id: 'bezel_wall', name: 'Bezel wall thickness', limit: mm(L.wall), run: () => bezelWallEntry(bvh, samples, decl, L, faceOf) });
         out.push({
           id: 'bezel_lip',
           name: 'Bezel lip height',
@@ -76,16 +84,66 @@ export function jewelryChecks(R: SettingRules): CheckLayer {
   };
 }
 
-/** A place on a prong or the bezel: named before any general part (the checker asks the layer first). */
-function settingPartAt(p: V3, decl: FeatureDecl): Part | null {
+/**
+ * A place on a part of the setting. With `face`, the part the place's face came from, worded:
+ * a prong by its label and its clock, the bezel, the stone seat, the head's rail ("head").
+ * Without face tags (a declaration made without them), by region, as before: near a prong's
+ * column, or inside the bezel's outline above its foot.
+ */
+function settingPartAt(p: V3, decl: FeatureDecl, face?: PartDecl): Part | null {
+  if (face) {
+    if (face.kind !== 'setting') return null;
+    const pr = decl.prongs.find((x) => x.label === face.name);
+    if (pr) return { part: 'head', feature: pr.label, clock: pr.clock, name: face.name };
+    return { part: 'head', feature: face.name === 'head' ? 'rail' : face.name, clock: clockAt(p[0], p[1]), name: face.name };
+  }
   for (const pr of decl.prongs) {
     if (Math.hypot(p[0] - pr.axis[0], p[1] - pr.axis[1]) <= pr.nominalDiameter / 2 + 0.3 && p[2] >= pr.sectionFromZ - 0.6) {
-      return { part: 'head', feature: pr.label, clock: pr.clock };
+      return { part: 'head', feature: pr.label, clock: pr.clock, name: pr.label };
     }
   }
-  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: 'head', feature: 'bezel', clock: clockAt(p[0], p[1]) };
+  if (decl.bezel && inPolygon(decl.bezel.outer, p[0], p[1], 0.2) && p[2] >= decl.bezel.zBottom - 0.1) return { part: 'head', feature: 'bezel', clock: clockAt(p[0], p[1]), name: 'bezel' };
   return null;
 }
+
+/**
+ * Which side of a part a place is on, seen from above with the finger pointing to 12 o'clock:
+ * "on the left of" (9:00), "on the right of" (3:00), "on the fingertip side of" (12:00), "on the
+ * hand side of" (6:00), with ", toward the fingertip" or ", toward the hand" between them.
+ */
+export function sideOf(x: number, y: number): { side: string; toward: string } {
+  let deg = (Math.atan2(x, y) * 180) / Math.PI;
+  if (deg < 0) deg += 360;
+  const sector = Math.round(deg / 45) % 8;
+  const SIDES: { side: string; toward: string }[] = [
+    { side: 'on the fingertip side of', toward: '' },
+    { side: 'on the right of', toward: ', toward the fingertip' },
+    { side: 'on the right of', toward: '' },
+    { side: 'on the right of', toward: ', toward the hand' },
+    { side: 'on the hand side of', toward: '' },
+    { side: 'on the left of', toward: ', toward the hand' },
+    { side: 'on the left of', toward: '' },
+    { side: 'on the left of', toward: ', toward the fingertip' },
+  ];
+  return SIDES[sector]!;
+}
+
+/** "on the left of the bezel (at 9:00 seen from above, the finger pointing to 12)". */
+function sideWords(w: Pick<Where, 'point_mm' | 'clock'>, part: string): string {
+  const { side, toward } = sideOf(w.point_mm[0], w.point_mm[1]);
+  return `${side} ${part}${toward} (at ${w.clock ?? clockAt(w.point_mm[0], w.point_mm[1])} seen from above, the finger pointing to 12)`;
+}
+
+/** A place on the setting in a jeweler's words: what it is, and where on it. */
+function settingPlaceWords(w: Where): { of: string; at: string } | null {
+  if (w.part !== 'head' || !w.feature) return null;
+  if (/^prong \d+ of \d+$/.test(w.feature)) return { of: w.feature, at: `at ${w.clock} seen from above, the finger pointing to 12, ${r3(w.point_mm[2])} mm up` };
+  if (w.feature === 'rail') return { of: "the head's rail", at: sideWords(w, 'the head') };
+  return { of: `the ${w.feature}`, at: sideWords(w, `the ${w.feature}`) };
+}
+
+/** "Prong 2 of 4". */
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Whether a point is on a prong's column (above its foot), which the prong check judges by its narrowest section. */
 function onProngColumn(p: V3, decl: FeatureDecl): boolean {
@@ -93,7 +151,7 @@ function onProngColumn(p: V3, decl: FeatureDecl): boolean {
 }
 
 function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
-  const results: { label: string; value: number; where: Where }[] = [];
+  const results: { label: string; value: number; where: Where; part: string }[] = [];
   for (const pr of prongs) {
     let worst: { d: number; z: number; at: P2 } | null = null;
     const R = pr.nominalDiameter / 2 + 0.35;
@@ -115,18 +173,13 @@ function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
     results.push({
       label: pr.label,
       value: r3(w.d),
-      where: {
-        part: 'head',
-        feature: pr.label,
-        clock: pr.clock,
-        point_mm: pt([w.at[0], w.at[1], w.z]),
-        description: `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`,
-      },
+      where: placeAt({ part: 'head', feature: pr.label, clock: pr.clock, name: pr.label }, [w.at[0], w.at[1], w.z], `${pr.label}, at ${pr.clock} seen from above with the finger pointing to 12 o'clock, ${r3(w.z)} mm up`),
+      part: pr.label,
     });
   }
   const failing = results.filter((r) => r.value < L.prong);
   const thinnest = results.reduce((a, b) => (b.value < a.value ? b : a));
-  return {
+  return entry({
     id: 'prong',
     name: 'Prong thickness',
     limit: mm(L.prong),
@@ -134,14 +187,15 @@ function prongEntry(bvh: Bvh, prongs: ProngDecl[], L: CheckLimits): CheckEntry {
     measured: `${mm(thinnest.value)} (${thinnest.label}); each: ${results.map((r) => `${r.label.split(' of ')[0]} ${r.value}`).join(', ')} mm`,
     value: thinnest.value,
     where: thinnest.where,
-    ...(failing.length ? { failing } : {}),
+    failing,
     method: "each prong's cross-section every 0.1 mm up its column (0.02 mm around the narrowest), cut from the whole piece and clipped to a disc round the prong's axis, measured as the largest circle that fits inside it (the narrowest section, con:minimum-prong-thickness)",
-  };
+    problem: failing.map((f) => `${cap(f.label)} (at ${f.where.clock}) is ${f.value} mm across at its narrowest; a prong must be at least ${r3(L.prong)} mm.`).join(' '),
+  });
 }
 
 function gripEntry(bvh: Bvh, decl: FeatureDecl, R: SettingRules): CheckEntry {
   const s = decl.stone!;
-  const results: { label: string; value: number; where: Where }[] = [];
+  const results: { label: string; value: number; where: Where; part: string }[] = [];
   const P = bvh.pos;
   for (const pr of decl.prongs) {
     let reach = -Infinity;
@@ -155,11 +209,11 @@ function gripEntry(bvh: Bvh, decl: FeatureDecl, R: SettingRules): CheckEntry {
         at = [x, y, z];
       }
     }
-    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: { part: 'head', feature: pr.label, clock: pr.clock, point_mm: pt(at), description: `${pr.label}, at ${pr.clock}` } });
+    results.push({ label: pr.label, value: r3(Math.max(0, reach)), where: placeAt({ part: 'head', feature: pr.label, clock: pr.clock, name: pr.label }, at, `${pr.label}, at ${pr.clock}`), part: pr.label });
   }
   const failing = results.filter((r) => r.value < R.gripMin);
   const least = results.reduce((a, b) => (b.value < a.value ? b : a));
-  return {
+  return entry({
     id: 'prong_grip',
     name: 'Prongs grip the stone',
     limit: `each prong reaches at least ${mm(R.gripMin)} in over the girdle`,
@@ -167,9 +221,10 @@ function gripEntry(bvh: Bvh, decl: FeatureDecl, R: SettingRules): CheckEntry {
     measured: `${mm(least.value)} (${least.label})`,
     value: least.value,
     where: least.where,
-    ...(failing.length ? { failing } : {}),
+    failing,
     method: 'how far each prong\'s metal above the girdle reaches inside the girdle outline, from the written STL',
-  };
+    problem: failing.map((f) => `${cap(f.label)} (at ${f.where.clock}) reaches only ${f.value} mm in over the girdle; each prong must reach at least ${r3(R.gripMin)} mm to hold the stone.`).join(' '),
+  });
 }
 
 /** How far (x, y) lies INSIDE a convex outline (positive inside). */
@@ -198,21 +253,29 @@ function inPolygon(poly: P2[], x: number, y: number, grow = 0): boolean {
   return signedInset(poly, x, y) >= 0;
 }
 
-function bezelWallEntry(_bvh: Bvh, samples: readonly Sample[], decl: FeatureDecl, L: CheckLimits): CheckEntry {
+function bezelWallEntry(_bvh: Bvh, samples: readonly Sample[], decl: FeatureDecl, L: CheckLimits, faceOf: LayerContext['faceOf']): CheckEntry {
   const bz = decl.bezel!, st = decl.stone!;
-  const inBezel = (s: Sample) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3;
+  // The rim around and above the girdle; and, where the faces are tagged, only the bezel's own
+  // faces and its seat's: a shape passing through the bezel's outline is not the bezel.
+  const ownFace = (t: number) => {
+    const f = faceOf(t);
+    return f === undefined || (f !== null && (f.name === 'bezel' || f.name === 'stone seat'));
+  };
+  const inBezel = (s: Sample) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3 && ownFace(s.t);
   const m = minSample(samples, inBezel);
   if (!m) throw new Error('no point on the bezel could be measured');
-  return {
+  const where = placeAt({ part: 'head', feature: 'bezel', clock: clockAt(m.p[0], m.p[1]), name: 'bezel' }, m.p, `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  return entry({
     id: 'bezel_wall',
     name: 'Bezel wall thickness',
     limit: mm(L.wall),
     result: m.thickness >= L.wall ? 'pass' : 'fail',
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: { part: 'head', feature: 'bezel', clock: clockAt(m.p[0], m.p[1]), point_mm: pt(m.p), description: `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle` },
-    method: MAXSPHERE + ', on the bezel rim around and above the girdle',
-  };
+    where,
+    method: MAXSPHERE + ', on the bezel rim around and above the girdle (its own faces and its seat\'s)',
+    problem: `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, 'the bezel')}; it must be at least ${r3(L.wall)} mm.`,
+  });
 }
 
 function bezelLipEntry(bvh: Bvh, decl: FeatureDecl, R: SettingRules): CheckEntry {
@@ -234,26 +297,29 @@ function bezelLipEntry(bvh: Bvh, decl: FeatureDecl, R: SettingRules): CheckEntry
     // A cabochon declared so is held to its own rule, the least share of its dome the bezel
     // must rise to be pushed over it (rules.ts SETTING, from Cogswell), with no upper limit.
     const need = R.lipMinOfCabochon * st.crownHeight;
-    return {
+    return entry({
       id: 'bezel_lip',
       name: 'Bezel lip height',
       limit: `at least a third of the cabochon's ${mm(st.crownHeight)} dome (at least ${mm(need)} for this stone; J. Cogswell, Creative Stonesetting)`,
       result: share >= R.lipMinOfCabochon - 1e-6 ? 'pass' : 'fail',
       measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} dome`,
       value: r3(lip),
-      where: { part: 'head', feature: 'bezel', point_mm: pt(at), description: 'the top of the bezel, measured from the top of the girdle' },
+      where: placeAt({ part: 'head', feature: 'bezel', name: 'bezel' }, at, 'the top of the bezel, measured from the top of the girdle'),
       method: "the highest point of the bezel in the written STL, less the girdle's top; the stone was declared a cabochon, so the lip is held to a share of its dome (its height above the girdle), the cabochon's rule, not the faceted stone's crown rule",
-    };
+      problem: `The bezel's lip rises only ${r3(lip)} mm above the girdle, ${Math.round(share * 100)} % of the cabochon's ${r3(st.crownHeight)} mm dome; it must rise at least a third of the dome, ${r3(need)} mm, to be pushed over the stone and hold it.`,
+    });
   }
   const ok = share >= R.lipMinOfCrown - 1e-6 && share <= R.lipMaxOfCrown + 1e-6;
-  return {
+  const lo = R.lipMinOfCrown * st.crownHeight, hi = R.lipMaxOfCrown * st.crownHeight;
+  return entry({
     id: 'bezel_lip',
     name: 'Bezel lip height',
     limit: `${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown (${mm(R.lipMinOfCrown * st.crownHeight)} to ${mm(R.lipMaxOfCrown * st.crownHeight)} for this stone)`,
     result: ok ? 'pass' : 'fail',
     measured: `${mm(lip)} above the girdle, ${Math.round(share * 100)} % of the ${mm(st.crownHeight)} crown`,
     value: r3(lip),
-    where: { part: 'head', feature: 'bezel', point_mm: pt(at), description: 'the top of the bezel, measured from the top of the girdle' },
+    where: placeAt({ part: 'head', feature: 'bezel', name: 'bezel' }, at, 'the top of the bezel, measured from the top of the girdle'),
     method: "the highest point of the bezel in the written STL, less the girdle's top; the crown height comes from the stone's measured depth",
-  };
+    problem: `The bezel's lip rises ${r3(lip)} mm above the girdle, ${Math.round(share * 100)} % of the stone's ${r3(st.crownHeight)} mm crown, ${lip < lo ? 'too little to be pushed over the stone' : 'so it would cover too much of the stone'}; it must rise ${r3(lo)} to ${r3(hi)} mm (${Math.round(R.lipMinOfCrown * 100)}-${Math.round(R.lipMaxOfCrown * 100)} % of the crown).`,
+  });
 }
