@@ -16,6 +16,7 @@ import type { BandDecl, BezelDecl, BlendDecl, FeatureDecl, P2, ProngDecl, SheetD
 import { BEZEL_CLEARANCE, SEAT_CLEARANCE } from '../jewelry/index.js';
 import type { PieceTree, PieceView, StoneView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
+import { FaceNames } from './faces.js';
 import { projectOntoSurface } from './field.js';
 import { buildOp } from './ops.js';
 import { IDENTITY, type BlendMeshes, type BlendRecord } from './thicken.js';
@@ -404,6 +405,8 @@ export interface BuildOptions {
    * a blend's grid does not get finer for the reference (ops.ts, smoothUnion).
    */
   blendMeshes?: BlendMeshes;
+  /** Tag each face of the finished solid with the named part it came from (FeatureDecl.faces), for the checker to name the places it reports. */
+  nameFaces?: boolean;
 }
 
 export async function buildPiece(tree: PieceTree, opts: BuildOptions): Promise<Built> {
@@ -432,8 +435,8 @@ function meshOut(mesh: Mesh): MeshOut {
   return { positions, triangles: new Uint32Array(mesh.triVerts) };
 }
 
-/** The band, its cross-section revolved around the finger (the Y axis), and what it declares to the checker. */
-export function buildBand(k: Kernel, A: Arena, dims: PieceDims, profileName: string, tol: number): { band: Manifold; decl: BandDecl } {
+/** The band, its cross-section revolved around the finger (the Y axis), and what it declares to the checker. With `names`, its faces are the band's. */
+export function buildBand(k: Kernel, A: Arena, dims: PieceDims, profileName: string, tol: number, names?: FaceNames): { band: Manifold; decl: BandDecl } {
   const { Manifold, CrossSection } = k;
   const rIn = dims.band.innerDiameterMm / 2;
   const t = dims.band.thicknessMm;
@@ -442,6 +445,7 @@ export function buildBand(k: Kernel, A: Arena, dims: PieceDims, profileName: str
   const profile = bandProfile(profileName, rIn, t, w, tol);
   const nBand = segmentsFor(rOut, tol, 48);
   const band = A.t(A.t(Manifold.revolve(A.t(new CrossSection([profile])), nBand)).rotate([90, 0, 0]));
+  names?.own(band, { name: 'band', kind: 'band' });
   return { band, decl: { innerRadius: rIn, outerRadius: rOut, halfWidth: w / 2 } };
 }
 
@@ -457,9 +461,12 @@ export interface HeadDecl {
  * (pieceDims) place it: on top of the band when there is one, or on the XY plane when
  * the band is only notional (a program's head on its own: inner diameter and thickness 0).
  * `shape` is the stone's shape (stones.ts, or one a program made). With `onBand`, the
- * head is trimmed clear of the finger hole, as a ring's head always is.
+ * head is trimmed clear of the finger hole, as a ring's head always is. With `names`, each of its
+ * parts names its own faces: a prong head's rail ("head") and each prong ("prong 2 of 4"), a
+ * bezel ("bezel"), and the seat cut for the stone ("stone seat"); where the head is trimmed
+ * clear of the finger, its faces are the head's (or the bezel's).
  */
-export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, tol: number, shape: StoneShapeInfo, onBand: boolean): { head: Manifold; stone: Manifold; decl: HeadDecl } {
+export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, tol: number, shape: StoneShapeInfo, onBand: boolean, names?: FaceNames): { head: Manifold; stone: Manifold; decl: HeadDecl } {
   const { Manifold, CrossSection } = k;
   if (!v.head || !dims.head) throw new Error('engine bug: a head was asked for a piece with none');
   const rIn = dims.band.innerDiameterMm / 2;
@@ -471,8 +478,12 @@ export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, to
   const zGt = hd.girdleTopZ;
   const zTable = hd.tableZ;
   const decl: HeadDecl = { stone: { outline: shape.outline, girdleBottomZ: zGb, girdleTopZ: zGt, crownHeight: hd.stone.crownMm }, prongs: [] };
+  const own = (m: Manifold, name: string, cut = false): Manifold => {
+    names?.own(m, { name, kind: 'setting', ...(cut ? { cut } : {}) });
+    return m;
+  };
   const stone = A.t(A.t(Manifold.hull(shape.points(0))).translate([0, 0, zGb]));
-  const seatCut = A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb]));
+  const seatCut = own(A.t(A.t(Manifold.hull(shape.points(SEAT_CLEARANCE))).translate([0, 0, zGb])), 'stone seat', true);
 
   let head: Manifold;
   if (v.head.kind === 'prong_head' && hd.prongs && hd.rail) {
@@ -489,7 +500,7 @@ export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, to
     const railMid = A.t(girdleCs.offset(railOff, 'Round', 2, ringSeg)).toPolygons()[0] as P2[];
     const xCross = Math.max(...crossingsX(railMid, w / 2));
     const zRail = Math.sqrt(Math.max(0, rOut * rOut - xCross * xCross));
-    const parts: Manifold[] = [A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2]))];
+    const parts: Manifold[] = [own(A.t(A.t(Manifold.extrude(railCs, railH)).translate([0, 0, zRail - railH / 2])), 'head')];
     hd.prongs.forEach((pd) => {
       const tk = pd.thicknessMm;
       const [cx, cy] = pd.axis;
@@ -500,7 +511,7 @@ export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, to
       const arc = (u: number): Vec2 => [r * Math.cos(u), colH + r * Math.sin(u)];
       const prof: Vec2[] = [[0, 0], [r, 0], ...adaptive(arc, 0, Math.PI / 2, tol), [0, colH + r]];
       const col = A.t(Manifold.revolve(A.t(new CrossSection([dedupe(prof)])), segmentsFor(r, tol, 16)));
-      parts.push(A.t(col.translate([cx, cy, zRail])));
+      parts.push(own(A.t(col.translate([cx, cy, zRail])), pd.label));
       const prong: ProngDecl = {
         label: pd.label,
         clock: pd.clock,
@@ -524,9 +535,9 @@ export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, to
     const outerPts = outerCs.toPolygons()[0] as P2[];
     const xExt = Math.max(...crossingsX(outerPts, w / 2), 0);
     const zBottom = Math.sqrt(Math.max(0, rOut * rOut - xExt * xExt)) - 0.3;
-    const tube = A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom]));
-    const lipHole = A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb]));
-    const backHole = A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1]));
+    const tube = own(A.t(A.t(Manifold.extrude(outerCs, zTop - zBottom)).translate([0, 0, zBottom])), 'bezel');
+    const lipHole = own(A.t(A.t(Manifold.extrude(innerCs, zTop - zGb + 1)).translate([0, 0, zGb])), 'bezel');
+    const backHole = own(A.t(A.t(Manifold.extrude(holeCs, zGb - zBottom + 2)).translate([0, 0, zBottom - 1])), 'bezel');
     head = A.t(A.t(A.t(tube.subtract(lipHole)).subtract(backHole)).subtract(seatCut));
     decl.bezel = { outer: outerPts, zBottom, nominalWall: hd.bezel.wallMm };
   } else {
@@ -535,7 +546,7 @@ export function buildHead(k: Kernel, A: Arena, v: PieceView, dims: PieceDims, to
   if (onBand) {
     // Trim the head clear of the finger hole.
     const nBand = segmentsFor(rOut, tol, 48);
-    const finger = A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0])));
+    const finger = own(A.t(A.t(A.t(Manifold.cylinder(w + 40, rIn + 0.02, rIn + 0.02, nBand, true)).rotate([90, 0, 0]))), v.head.kind === 'bezel' ? 'bezel' : 'head');
     head = A.t(head.subtract(finger));
   }
   return { head, stone, decl };
@@ -548,7 +559,8 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
   const v = readPiece(tree);
   const dims = pieceDims(v);
 
-  const b = buildBand(k, A, dims, v.profile, tol);
+  const names = opts.nameFaces ? new FaceNames() : undefined;
+  const b = buildBand(k, A, dims, v.profile, tol, names);
   const band = b.band;
   const decl: FeatureDecl = { prongs: [], scale: 1 };
   decl.band = b.decl;
@@ -558,7 +570,7 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
 
   if (v.head && dims.head) {
     const sv = v.head.stone;
-    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true);
+    const h = buildHead(k, A, v, dims, tol, stoneShape(stoneSpec(sv), tol), true, names);
     decl.stone = h.decl.stone;
     decl.prongs.push(...h.decl.prongs);
     if (h.decl.bezel) decl.bezel = h.decl.bezel;
@@ -568,20 +580,22 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
   }
 
   // Any operations the agent added beside the band and head, each declared by its id and
-  // bounds, so the checker can name the added shape a thin place is in. A thickened sheet
-  // among them also declares itself (its nominal thickness and middle surface).
+  // bounds, and its faces named by its id, so the checker can name the added shape a thin
+  // place is in. A thickened sheet among them also declares itself (its nominal thickness and
+  // middle surface).
   const sheets: SheetDecl[] = [];
   const blends: BlendRecord[] = [];
   for (const extra of v.extras) {
     const shape = A.t(buildOp(k, A, extra as TreeNode, tol, { m: IDENTITY, sheets, blends, ...(opts.blendMeshes ? { blendMeshes: opts.blendMeshes } : {}) }));
     const bb = shape.boundingBox();
     (decl.added ??= []).push({ id: extra.id, min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 });
+    names?.claim(shape, { name: extra.id, kind: 'shape' });
     metal = A.t(metal.add(shape));
   }
   if (sheets.length) decl.sheets = sheets;
 
   const scale = opts.applyShrinkage ? 1 + v.shrinkagePct / 100 : 1;
-  const done = finishMetal(A, metal, decl, blends, scale, !!opts.blendSurface);
+  const done = finishMetal(A, metal, decl, blends, scale, !!opts.blendSurface, names);
   return {
     view: v,
     metal: done.mesh,
@@ -597,9 +611,10 @@ function buildWith(k: Kernel, A: Arena, tree: PieceTree, opts: BuildOptions): Bu
  * The last steps of every build, a tree's or a program's: the shrinkage allowance (the
  * solid and its declarations scaled alike), every vertex at the casting file's float32,
  * the kernel's own soundness, and, when asked, points on each smooth blend's own surface.
+ * With `names`, which named part each face of the finished mesh came from (FeatureDecl.faces).
  * Changes `decl` in place.
  */
-export function finishMetal(A: Arena, solid: Manifold, decl: FeatureDecl, blends: BlendRecord[], scale: number, withBlendSurface: boolean): { mesh: MeshOut; volumeMm3: number; bbox: { min: Vec3; max: Vec3 } } {
+export function finishMetal(A: Arena, solid: Manifold, decl: FeatureDecl, blends: BlendRecord[], scale: number, withBlendSurface: boolean, names?: FaceNames): { mesh: MeshOut; volumeMm3: number; bbox: { min: Vec3; max: Vec3 } } {
   let metal = solid;
   if (scale !== 1) {
     metal = A.t(metal.scale(scale));
@@ -612,6 +627,7 @@ export function finishMetal(A: Arena, solid: Manifold, decl: FeatureDecl, blends
   const bb = metal.boundingBox();
   const mesh = metal.getMesh();
   if (withBlendSurface && blends.length) decl.blends = blendSurface(mesh, blends, scale);
+  if (names) decl.faces = names.faces(mesh);
   return { mesh: meshOut(mesh), volumeMm3: metal.volume(), bbox: { min: [...bb.min] as Vec3, max: [...bb.max] as Vec3 } };
 }
 

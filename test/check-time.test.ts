@@ -21,6 +21,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { holdToContract } from './report-contract.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FIXTURE = `${ROOT}test/fixtures/moonstone-openwork-ring.tree.json`;
@@ -35,7 +36,8 @@ interface Run {
   ms: number;
   hwmMiB: number;
   verdict: string;
-  entries: { id: string; result: string; value?: number }[];
+  entries: { id: string; result: string; value?: number; part?: string | null; problem?: string | null }[];
+  report: Record<string, unknown>;
 }
 
 /** check_piece on the tree in a fresh process, held to one CPU where taskset is there to do it. */
@@ -48,7 +50,7 @@ function checkInOwnProcess(treePath: string): Run {
     const r = await checkPiece(tree, 'check');
     const ms = performance.now() - t0;
     const hwm = /VmHWM:\\s+(\\d+)/.exec(readFileSync('/proc/self/status', 'utf8'));
-    process.stdout.write(JSON.stringify({ ms, hwmMiB: hwm ? Number(hwm[1]) / 1024 : NaN, verdict: r.verdict, entries: r.entries.map((e) => ({ id: e.id, result: e.result, value: e.value })) }));
+    process.stdout.write(JSON.stringify({ ms, hwmMiB: hwm ? Number(hwm[1]) / 1024 : NaN, verdict: r.verdict, entries: r.entries.map((e) => ({ id: e.id, result: e.result, value: e.value, part: e.part, problem: e.problem })), report: r.report }));
   `;
   const node = [process.execPath, '--input-type=module', '-e', script];
   const pinned = existsSync('/usr/bin/taskset') ? ['/usr/bin/taskset', '-c', '0', ...node] : node;
@@ -84,6 +86,13 @@ describe('the casting check finishes in time for a wire-and-blend piece', () => 
     assert.equal(at('surface_deviation').result, 'pass', `surface ${at('surface_deviation').value} mm`);
     assert.ok(at('surface_deviation').value! <= 0.01, `surface ${at('surface_deviation').value} mm`);
     assert.equal(run.verdict, 'fail');
+    // The report meets its published contract, and the refused gap is named by the parts whose
+    // faces hold it, by their own names: the band, and the openwork blend by its tree node id, where
+    // a wire meets the band, never "the bezel" round it (fact:surface-check-named-a-blend-point-the-bezel-2026-10-05).
+    holdToContract(run.report, 'the moonstone ring\'s check report');
+    const gap = (run.report['checks'] as { id: string; part: string | null; problem: string | null; where: { other_parts: string[] } }[]).find((c) => c.id === 'gap')!;
+    assert.deepEqual([gap.part, ...gap.where.other_parts].sort(), ['band', 'openwork'], JSON.stringify(gap));
+    assert.match(gap.problem ?? '', /^The gap between (the band and "openwork"|"openwork" and the band) is only 0 mm across, .*; it must be at least 0\.3 mm, or closed\.$/);
     assert.ok(run.ms <= TIME_BUDGET_S * 1000, `the check took ${(run.ms / 1000).toFixed(1)} s at one CPU; the budget is ${TIME_BUDGET_S} s`);
     assert.ok(run.hwmMiB <= MEMORY_BUDGET_MIB, `the check peaked at ${run.hwmMiB.toFixed(0)} MiB; the budget is ${MEMORY_BUDGET_MIB} MiB`);
     console.error(`moonstone-openwork-ring: checked in ${(run.ms / 1000).toFixed(1)} s at one CPU, peak ${run.hwmMiB.toFixed(0)} MiB`);

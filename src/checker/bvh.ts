@@ -211,6 +211,35 @@ export class Bvh {
     return best;
   }
 
+  /** The triangle nearest p, searching no further than maxDist; -1 when none is that near. */
+  nearestTriangle(p: V3, maxDist: number): number {
+    let best = maxDist * maxDist;
+    let at = -1;
+    if (this.n === 0) return at;
+    const stack = [0];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if (this.#boxDistSq(node, p) >= best) continue;
+      if (this.#left[node]! < 0) {
+        const s = this.#first[node]!, e = s + this.#count[node]!;
+        for (let i = s; i < e; i++) {
+          const t = this.#order[i]!;
+          const d = this.distSq(p[0], p[1], p[2], t);
+          if (d < best) {
+            best = d;
+            at = t;
+          }
+        }
+      } else {
+        const l = this.#left[node]!, r = this.#right[node]!;
+        const dl = this.#boxDistSq(l, p), dr = this.#boxDistSq(r, p);
+        if (dl < dr) stack.push(r, l);
+        else stack.push(l, r);
+      }
+    }
+    return at;
+  }
+
   vertex(t: number, k: number): V3 {
     const v = this.tri[t * 3 + k]! * 3;
     return [this.pos[v]!, this.pos[v + 1]!, this.pos[v + 2]!];

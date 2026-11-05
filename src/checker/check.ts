@@ -15,8 +15,16 @@
 //    fact:wall-ball-stopped-at-a-crease-it-reached-through-a-face);
 //  · a section is the whole mesh cut by a plane, clipped afterwards to the part
 //    the declaration names (sections, below; fact:band-check-measures-added-shapes-as-band).
-// And a thin place is named by the part whose metal holds it: the band only inside
-// the band's own declared section, an added shape by its id (partAt, below).
+// And a place is named by the PART whose faces hold it, by the part's own name: the library
+// tags each face of the file with the named part it came from (FeatureDecl.faces; ifc:solid-mesh),
+// and a reading is named by the faces it is measured from and the metal it meets, never by the
+// region round it (named by region, a point on the moonstone ring's openwork was called "the
+// bezel": fact:surface-check-named-a-blend-point-the-bezel-2026-10-05). A face from no named part
+// is said to be in no named part (placeOf, below). A declaration made without face tags (a
+// library build that did not ask for them) is named by region, as before; the engine always asks.
+//
+// Every entry says, besides its numbers, what is wrong in a maker's words (`problem`) and the
+// part it is in (`part`), and carries every list it can, empty when there is nothing in it.
 //
 // A sheet from the tree's thicken operation (a cupped petal, a leaf) declares its
 // middle surface and nominal thickness; the sheet check measures the file square to
@@ -35,7 +43,7 @@
 // whatever it is given.
 
 import { Bvh, CORNER, EDGE, IN_FACE } from './bvh.js';
-import type { AddedDecl, BandDecl, FeatureDecl, P2, SheetDecl } from './features.js';
+import { NO_PART, type AddedDecl, type BandDecl, type FeatureDecl, type P2, type PartDecl, type SheetDecl } from './features.js';
 import { segmentCrossesTri, type V3 } from './geom.js';
 import { readBinaryStl, type ReadMesh } from './stl.js';
 import { surfaceDirections } from './surface.js';
@@ -51,13 +59,28 @@ export interface CheckLimits {
 }
 
 export interface Where {
+  /** The kind of part: "band", "head" (a stone's setting), "sheet", "added shape", "blend", or "piece" (in no named part). */
   part: string;
   feature?: string;
   clock?: string;
-  /** On a sheet: the other sheets that meet it here, when the place lies on more than one. */
-  meets?: string[];
+  /** On a sheet: the other sheets that meet it here; empty when none does. */
+  meets: string[];
   point_mm: [number, number, number];
   description: string;
+  /** The part by its own name (a tree node's id, a program's .named() name, or the library's part); null: in no named part. */
+  part_name: string | null;
+  /** The other named parts that meet here: the metal measured lies between them, or a gap faces across to them. Empty when the place is within one part. */
+  other_parts: string[];
+}
+
+/** One failing feature of a check that measures several (each prong, each sheet). `nominal` is what it was declared to be, when it says. */
+export interface Failing {
+  label: string;
+  value: number;
+  nominal?: number;
+  where: Where;
+  /** The part it is in, by its own name (where.part_name). */
+  part: string | null;
 }
 
 export interface CheckEntry {
@@ -69,9 +92,25 @@ export interface CheckEntry {
   /** The measured value in mm, when there is one. */
   value?: number;
   where: Where | null;
-  /** Every failing feature, when more than one fails (e.g. each thin prong). `nominal` is what the feature was declared to be, when it says. */
-  failing?: { label: string; value: number; nominal?: number; where: Where }[];
+  /** Every failing feature of a check that measures several (e.g. each thin prong); empty when none fails. */
+  failing: Failing[];
   method: string;
+  /** The part the check's place is in, by its own name (where.part_name); null when it has no place, or the place is in no named part. */
+  part: string | null;
+  /** What is wrong, in a maker's words, naming the part it is in; null when the check passes. */
+  problem: string | null;
+}
+
+/** An entry as a check makes it: `failing` defaults to none, and `part` is its place's. */
+export type EntryIn = Omit<CheckEntry, 'failing' | 'part' | 'problem'> & { failing?: Failing[]; problem?: string | null };
+
+export function entry(e: EntryIn): CheckEntry {
+  return { ...e, failing: e.failing ?? [], part: e.where?.part_name ?? null, problem: e.result === 'pass' ? null : (e.problem ?? null) };
+}
+
+/** A check that could not run, which counts as a fail (owner, round 1, Q6). */
+export function couldNotRunEntry(id: CheckEntry['id'], name: string, limit: string, measured: string, method: string): CheckEntry {
+  return entry({ id, name, limit, result: 'could_not_run', measured, where: null, method, problem: `The ${name === id ? id.replace(/_/g, ' ') : name.toLowerCase()} check could not run (${measured}); a check that cannot run counts as a fail, so nothing is exported until it can.` });
 }
 
 /**
@@ -89,12 +128,13 @@ export interface CheckRunResult {
   ms: number;
 }
 
-/** The part a place belongs to, as a check's `where` names it. */
+/** The part a place belongs to, as a check's `where` names it: its kind (`part`), and `name`, its own name, or null in no named part. */
 export interface Part {
   part: string;
   feature?: string;
   clock?: string;
   meets?: string[];
+  name: string | null;
 }
 
 /** What a layer's checks measure with: the file, its thickness readings, the declarations and the limits. */
@@ -103,6 +143,8 @@ export interface LayerContext {
   samples: readonly Sample[];
   decl: FeatureDecl;
   L: CheckLimits;
+  /** The named part a face of the file came from, or null; undefined when the declaration tags no faces. */
+  faceOf(t: number): PartDecl | null | undefined;
 }
 
 /** One check a layer adds. It runs guarded, as every check does: one that throws reads could_not_run. */
@@ -122,8 +164,15 @@ export interface LayerCheck {
 export interface CheckLayer {
   /** Whether the piece declares anything this layer checks. */
   applies(decl: FeatureDecl): boolean;
-  /** The layer's part that holds a place, if one does; asked before the general parts are. */
-  partAt?(p: V3, decl: FeatureDecl): Part | null;
+  /**
+   * The layer's part that holds a place, if one does; asked before the general parts are. `face`
+   * is the named part the place's face came from, when the declaration tags faces: the layer
+   * words its own parts (a prong, the bezel, the stone seat, the head's rail). Without face
+   * tags, it may name a place by its own declarations' regions, as before.
+   */
+  partAt?(p: V3, decl: FeatureDecl, face?: PartDecl): Part | null;
+  /** The words for a place on one of the layer's parts: what it is ("the bezel") and where on it ("on the left of the bezel (at 9:00 ...)"). */
+  placeWords?(w: Where): { of: string; at: string } | null;
   /** Whether a thickness reading at p is judged by one of the layer's own checks instead of the wall check. */
   judgesWallAt?(p: V3, decl: FeatureDecl): boolean;
   /** The layer's checks, in the order they run. They run after the band's, before the sheets'. */
@@ -160,7 +209,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
     const msg = e instanceof Error ? e.message : String(e);
     const ids: CheckEntry['id'][] = ['watertight', 'wall', 'band', 'detail', 'gap', 'surface_deviation'];
     return {
-      entries: ids.map((id) => ({ id, name: id, limit: '-', result: 'could_not_run', measured: `the STL could not be read back: ${msg}`, where: null, method: 'read-back' })),
+      entries: ids.map((id) => couldNotRunEntry(id, id, '-', `the STL could not be read back: ${msg}`, 'read-back')),
       mesh: { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 },
       ms: performance.now() - t0,
     };
@@ -173,13 +222,13 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
       const r = fn();
       entries.push(...(Array.isArray(r) ? r : [r]));
     } catch (e) {
-      entries.push({ id, name, limit, result: 'could_not_run', measured: `the check could not run: ${e instanceof Error ? e.message : String(e)}`, where: null, method: 'error' });
+      entries.push(couldNotRunEntry(id, name, limit, `the check could not run: ${e instanceof Error ? e.message : String(e)}`, 'error'));
     }
   };
 
   let shells = 0, volume = 0;
   guard('watertight', 'One watertight solid', 'manifold edges, no self-intersections, faces outward, exactly one shell', () => {
-    const w = watertight(mesh, bvh);
+    const w = watertight(mesh, bvh, decl, on);
     shells = w.shells;
     volume = w.volume;
     return w.entry;
@@ -190,10 +239,10 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
   const samples = sampleThickness(bvh, surface);
   guard('wall', 'Wall thickness', mm(L.wall), () => wallEntry(bvh, samples, L, decl, on));
   guard('detail', 'Smallest detail', mm(L.detail), () => detailEntry(bvh, samples, L, decl, on));
-  if (decl.band) guard('band', 'Ring band thickness', mm(L.band), () => bandEntry(bvh, decl.band!, L));
-  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L })) guard(c.id, c.name, c.limit, c.run);
+  if (decl.band) guard('band', 'Ring band thickness', mm(L.band), () => bandEntry(bvh, decl.band!, L, decl));
+  for (const layer of on) for (const c of layer.checks({ bvh, samples, decl, L, faceOf: (t) => faceOf(decl, t) })) guard(c.id, c.name, c.limit, c.run);
   if (decl.sheets?.length) guard('sheet', 'Sheet thickness', `${mm(L.wall)}, square to the surface`, () => sheetEntry(bvh, surface, decl.sheets!, L));
-  guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L));
+  guard('gap', 'Smallest gap', mm(L.gap), () => gapEntry(bvh, surface, L, decl, on));
   guard('surface_deviation', 'Surface smoothness', mm(L.surfaceDeviation), () => {
     if (!reference) throw new Error('no finer reference tessellation was supplied');
     return surfaceEntry(bvh, L, reference instanceof Uint8Array ? readBinaryStl(reference) : reference, decl, on);
@@ -203,7 +252,7 @@ export function runChecks(stl: Uint8Array, decl: FeatureDecl, L: CheckLimits, re
 
 // ------------------------------------------------------------- watertight
 
-function watertight(mesh: ReadMesh, bvh: Bvh): { entry: CheckEntry; shells: number; volume: number } {
+function watertight(mesh: ReadMesh, bvh: Bvh, decl: FeatureDecl, layers: readonly CheckLayer[]): { entry: CheckEntry; shells: number; volume: number } {
   const tri = mesh.triangles;
   const n = mesh.count;
   const edges = new Map<string, number>();
@@ -260,6 +309,7 @@ function watertight(mesh: ReadMesh, bvh: Bvh): { entry: CheckEntry; shells: numb
   // Self-intersections: an edge of one triangle crossing the inside of another that shares no vertex with it.
   let crossings = 0;
   let firstCross: V3 | null = null;
+  let crossTris: [number, number] = [-1, -1];
   bvh.forEachOverlap((a, b) => {
     const ta = [tri[a * 3]!, tri[a * 3 + 1]!, tri[a * 3 + 2]!], tb = [tri[b * 3]!, tri[b * 3 + 1]!, tri[b * 3 + 2]!];
     if (ta.some((x) => tb.includes(x))) return;
@@ -268,6 +318,7 @@ function watertight(mesh: ReadMesh, bvh: Bvh): { entry: CheckEntry; shells: numb
     for (let k = 0; k < 3; k++) {
       if (segmentCrossesTri(A[k]!, A[(k + 1) % 3]!, B[0], B[1], B[2]) || segmentCrossesTri(B[k]!, B[(k + 1) % 3]!, A[0], A[1], A[2])) {
         crossings++;
+        if (!firstCross) crossTris = [a, b];
         firstCross ??= A[k]!;
         return;
       }
@@ -282,16 +333,26 @@ function watertight(mesh: ReadMesh, bvh: Bvh): { entry: CheckEntry; shells: numb
   if (vol <= 0) problems.push(`faces point inward (signed volume ${r3(vol)} mm³)`);
   if (crossings) problems.push(`${crossings} self-intersecting triangle pair(s)`);
   const cross = firstCross as V3 | null;
+  // The first self-intersection is named by the parts of the two faces that cross there.
+  const own = cross ? faceOf(decl, crossTris[0]) : undefined;
+  const across = cross ? faceOf(decl, crossTris[1]) : undefined;
+  const where = cross
+    ? own === undefined
+      ? placeAt({ part: 'piece', name: null }, cross, 'the first self-intersection found')
+      : placeOf(cross, decl, layers, 'the first self-intersection found', own, across ? [across] : [])
+    : null;
+  const at = where ? placeWords(where, layers, decl) : null;
   return {
-    entry: {
+    entry: entry({
       id: 'watertight',
       name: 'One watertight solid',
       limit: 'manifold edges, no self-intersections, faces outward, exactly one shell',
       result: problems.length ? 'fail' : 'pass',
       measured: problems.length ? problems.join('; ') : `closed and manifold, ${shells} shell, consistently wound, no self-intersection, volume ${r3(vol)} mm³`,
-      where: cross ? { part: 'piece', point_mm: pt(cross), description: 'the first self-intersection found' } : null,
+      where,
       method: 'read back from the written STL: edge pairing, union-find shells, signed volume, triangle-triangle crossing tests',
-    },
+      problem: `The piece is not one closed solid: ${problems.join('; ')}${at ? `; the first self-intersection is ${at.of ? `in ${at.of}, ` : 'in no named part, '}${at.at}` : ''}.`,
+    }),
     shells,
     volume: vol,
   };
@@ -623,47 +684,52 @@ export function minSample(samples: readonly Sample[], keep: (s: Sample) => boole
 }
 
 /**
- * Which part a place belongs to. `p` is the place on the surface; `centre`, for a
- * thickness reading, is the middle of the metal the reading is about, and it decides
- * between the band and a shape the tree added: the band only when it lies inside the
- * band's own declared section (the band check's region), otherwise the added shape
- * whose bounds hold it. Labelling by the band's envelope instead, 0.3 mm round it,
- * called a thin overhang beside the band "the band" and advised a thicker band, which
- * does not reach it (fact:wall-check-reads-overhang-beside-band-edge). A sheet from the
- * thicken operation is named before the added shape round it: the place lies within
- * half its thickness of the sheet's middle surface, and every sheet that close is named
+ * Which part a place belongs to, BY REGION, for a declaration that tags no faces (a library
+ * build that did not ask for them; the engine always asks, and placeOf then names the part by
+ * the faces). `p` is the place on the surface; `centre`, for a thickness reading, is the middle
+ * of the metal the reading is about, and it decides between the band and a shape the tree
+ * added: the band only when it lies inside the band's own declared section (the band check's
+ * region), otherwise the added shape whose bounds hold it. Labelling by the band's envelope
+ * instead, 0.3 mm round it, called a thin overhang beside the band "the band" and advised a
+ * thicker band, which does not reach it (fact:wall-check-reads-overhang-beside-band-edge). A
+ * sheet from the thicken operation is named before the added shape round it: the place lies
+ * within half its thickness of the sheet's middle surface, and every sheet that close is named
  * (where two meet).
  */
-function partAt(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], centre?: V3): Part {
-  // A layer's own parts first (the jewelry layer's prongs and bezel: src/jewelry/checks.ts).
+function partByRegion(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], centre?: V3): Part {
   for (const l of layers) {
     const own = l.partAt?.(p, decl);
     if (own) return own;
   }
-  const bandAt = () => ({ part: 'band', feature: `${Math.round(((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360)}° round the band from the top` });
-  const sheetPart = (q: V3) => {
-    const [sheet, ...others] = sheetsAt(q, decl);
-    return sheet ? { part: 'sheet', feature: sheet.label, ...(others.length ? { meets: others.map((o) => o.label) } : {}) } : null;
-  };
+  const sheet = sheetPart(centre ?? p, decl);
   if (centre) {
     const b = decl.band;
     if (b) {
       const rho = Math.hypot(centre[0], centre[2]);
-      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt();
+      if (rho >= b.innerRadius && rho <= b.outerRadius && Math.abs(centre[1]) <= b.halfWidth) return bandAt(p);
     }
-    const sheet = sheetPart(centre);
     if (sheet) return sheet;
     const holding = (decl.added ?? []).filter((a) => inBox(a, centre));
-    if (holding.length) return { part: 'added shape', feature: holding.map((a) => a.id).join(', ') };
-    return { part: 'piece' };
+    if (holding.length) return { part: 'added shape', feature: holding.map((a) => a.id).join(', '), name: holding.length === 1 ? holding[0]!.id : null };
+    return { part: 'piece', name: null };
   }
-  const sheet = sheetPart(p);
   if (sheet) return sheet;
   if (decl.band) {
     const rho = Math.hypot(p[0], p[2]);
-    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt();
+    if (rho <= decl.band.outerRadius + 0.3 && Math.abs(p[1]) <= decl.band.halfWidth + 0.3) return bandAt(p);
   }
-  return { part: 'piece' };
+  return { part: 'piece', name: null };
+}
+
+/** A place on the band, by how far round from the top it is. */
+function bandAt(p: V3): Part {
+  return { part: 'band', feature: `${Math.round(((Math.atan2(p[0], p[2]) * 180) / Math.PI + 360) % 360)}° round the band from the top`, name: 'band' };
+}
+
+/** The sheet a point lies within (and the others that meet it there), by the sheets' own declarations. */
+function sheetPart(q: V3, decl: FeatureDecl): Part | null {
+  const [sheet, ...others] = sheetsAt(q, decl);
+  return sheet ? { part: 'sheet', feature: sheet.label, ...(others.length ? { meets: others.map((o) => o.label) } : {}), name: sheet.label } : null;
 }
 
 /** Whether a point lies in an added shape's bounds (a hair's tolerance for points on them). */
@@ -679,13 +745,115 @@ export function quoteIds(ids: string): string {
     .join(' or ');
 }
 
-function whereOf(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], what: string, centre?: V3): Where {
-  const a = partAt(p, decl, layers, centre);
-  const where = { part: a.part, ...(a.feature ? { feature: a.feature } : {}), ...(a.clock ? { clock: a.clock } : {}), ...(a.meets ? { meets: a.meets } : {}), point_mm: pt(p) };
-  if (a.part === 'added shape') return { ...where, description: `${what} in the added shape ${quoteIds(a.feature!)}` };
-  if (a.part === 'sheet') return { ...where, description: `${what} on the sheet "${a.feature}"${a.meets ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}` };
+// ------------------------------------------------------- naming a place by its faces
+
+/** The named part a face of the file came from: null for none, undefined when the declaration tags no faces. */
+export function faceOf(decl: FeatureDecl, t: number): PartDecl | null | undefined {
+  const f = decl.faces;
+  if (!f) return undefined;
+  const i = f.of[t];
+  return i === undefined || i === NO_PART ? null : (f.parts[i] ?? null);
+}
+
+/** The named parts whose faces the ball of a thickness reading touches: the metal it measures lies between them. */
+function partsMet(bvh: Bvh, decl: FeatureDecl, s: Sample): PartDecl[] {
+  const f = decl.faces;
+  if (!f) return [];
+  const seen = new Set<number>();
+  bvh.forEachWithin(s.centre[0], s.centre[1], s.centre[2], (s.thickness / 2) * 1.01 + 0.002, (t) => {
+    const i = f.of[t]!;
+    if (i !== NO_PART) seen.add(i);
+  });
+  return [...seen].map((i) => f.parts[i]!);
+}
+
+/**
+ * Which named part a reading is in, from the face it is measured from (`own`) and the faces
+ * its ball or ray meets (`met`): the face's own part, except that a cut (the stone's seat) is
+ * no metal of its own, so a reading at its faces is in the metal it is cut into, when it meets
+ * that metal. A face from no named part leaves the reading in no named part, whatever it meets:
+ * the other parts it meets are said, never taken for it. `others`: the named parts it meets
+ * besides.
+ */
+function nameReading(own: PartDecl | null, met: readonly PartDecl[]): { name: PartDecl | null; others: string[] } {
+  let name = own;
+  if (own?.cut) {
+    const into = met.filter((m) => !m.cut).sort((a, b) => Number(b.kind === 'setting') - Number(a.kind === 'setting'));
+    if (into.length) name = into[0]!;
+  }
+  const others = [...new Set(met.map((m) => m.name))].filter((n) => n !== name?.name);
+  return { name, others };
+}
+
+/** A part, as a reading's sentence names it: "the band", "the bezel", "prong 2 of 4", "\"fin\"". */
+export function partWords(name: string, kind: PartDecl['kind'] | 'sheet' | 'blend'): string {
+  if (kind === 'shape') return `"${name}"`;
+  if (kind === 'sheet') return `the sheet "${name}"`;
+  if (kind === 'blend') return `the smooth blend "${name}"`;
+  return /\d/.test(name) ? name : `the ${name}`;
+}
+
+/** A part by its name, in words, its kind as the declaration's faces say it (a shape's, when they do not say). */
+export function partWordsIn(decl: FeatureDecl | undefined, name: string): string {
+  return partWords(name, decl?.faces?.parts.find((p) => p.name === name)?.kind ?? (name === 'band' ? 'band' : 'shape'));
+}
+
+/** "the band and "fin"": the other parts a place meets, in words. */
+function othersWords(decl: FeatureDecl, others: readonly string[]): string {
+  const w = others.map((n) => partWordsIn(decl, n));
+  return w.length <= 1 ? (w[0] ?? '') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`;
+}
+
+/** A full place: the part it is in (as the layers word their own) and the others it meets. */
+export function placeAt(part: Part, p: V3, description: string, others: readonly string[] = []): Where {
+  return {
+    part: part.part,
+    ...(part.feature ? { feature: part.feature } : {}),
+    ...(part.clock ? { clock: part.clock } : {}),
+    meets: part.meets ?? [],
+    point_mm: pt(p),
+    description,
+    part_name: part.name,
+    other_parts: [...others],
+  };
+}
+
+/** How a place's description says the part (as the report has always said it), and the others it meets. */
+function describe(a: Part, what: string, decl: FeatureDecl, others: readonly string[]): string {
+  const meets = others.length ? `, where it meets ${othersWords(decl, others)}` : '';
+  if (a.part === 'added shape') return `${what} in the added shape ${quoteIds(a.feature!)}${meets}`;
+  if (a.part === 'sheet') return `${what} on the sheet "${a.feature}"${a.meets?.length ? `, where it meets ${a.meets.map((m) => `"${m}"`).join(' and ')}` : ''}${meets}`;
+  if (a.part === 'piece' && a.name === null && decl.faces) return `${what} in no named part${meets}`;
   const at = a.feature ? `${a.feature}${a.clock && a.part === 'head' ? ` (at ${a.clock} seen from above, the finger pointing to 12)` : ''}` : a.part;
-  return { ...where, description: `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}` };
+  return `${what} on the ${a.part === 'head' ? 'head' : a.part}: ${at}${meets}`;
+}
+
+/**
+ * A place, named by the part whose faces hold it: `own` is the part of the face the reading is
+ * measured from, `met` the parts its ball or ray meets. A sheet's own declaration names a place
+ * within its thickness first, and says which other sheets meet it there. Without face tags,
+ * by region (partByRegion).
+ */
+function placeOf(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], what: string, own: PartDecl | null | undefined, met: readonly PartDecl[] = [], centre?: V3): Where {
+  if (own === undefined) {
+    const a = partByRegion(p, decl, layers, centre);
+    return placeAt(a, p, describe(a, what, decl, []));
+  }
+  const sheet = sheetPart(centre ?? p, decl);
+  const { name, others } = nameReading(own, met);
+  let a: Part;
+  if (sheet) a = sheet;
+  else if (!name) a = { part: 'piece', name: null };
+  else if (name.kind === 'band') a = { ...bandAt(p), name: name.name };
+  else if (name.kind === 'setting') a = layers.map((l) => l.partAt?.(p, decl, name)).find((x): x is Part => !!x) ?? { part: 'head', feature: name.name, clock: clockAt(p[0], p[1]), name: name.name };
+  else a = { part: 'added shape', feature: name.name, name: name.name };
+  const besides = others.filter((o) => o !== a.name && !(a.meets ?? []).includes(o) && !(sheet && o === own?.name));
+  return placeAt(a, p, describe(a, what, decl, besides), besides);
+}
+
+/** A place on a thickness reading's surface, named by its face and the parts its ball meets. */
+function readingPlace(bvh: Bvh, decl: FeatureDecl, layers: readonly CheckLayer[], s: Sample, what: string): Where {
+  return placeOf(s.p, decl, layers, what, faceOf(decl, s.t), partsMet(bvh, decl, s), s.centre);
 }
 
 /**
@@ -693,44 +861,73 @@ function whereOf(p: V3, decl: FeatureDecl, layers: readonly CheckLayer[], what: 
  * blend declares on its surface, so which part it lies on is known, not guessed from the
  * region round it: named by region, the moonstone ring's rail under its bezel's open back
  * was called "the bezel", and the bezel was suspected of an engine fault it did not have
- * (fact:a-blends-level-set-chamfers-the-creases-of-its-own-field-2026-10-05).
+ * (fact:a-blends-level-set-chamfers-the-creases-of-its-own-field-2026-10-05). Its part's name
+ * is its face's (the shape that holds the blend), or the blend's own without face tags.
  */
-function onBlend(p: V3, label: string, what: string): Where {
+function onBlend(p: V3, label: string, what: string, face: PartDecl | null | undefined): Where {
   const clock = clockAt(p[0], p[1]);
-  return { part: 'blend', feature: label, clock, point_mm: pt(p), description: `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)` };
+  return placeAt({ part: 'blend', feature: label, clock, name: face === undefined ? label : (face?.name ?? null) }, p, `${what} on the smooth blend "${label}" (at ${clock} seen from above, the finger pointing to 12)`);
 }
 
-export const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part that holds the sphere's centre (the band only inside its own section)";
+// --------------------------------------------------------- a problem in words
+
+/** Where on the piece a place is, in words: on a part of a layer's, as the layer says it; on the band, how far round; otherwise its point. */
+export function placeWords(w: Where, layers: readonly CheckLayer[], decl: FeatureDecl): { of: string | null; at: string } {
+  const meets = w.other_parts.length ? `where it meets ${othersWords(decl, w.other_parts)}, ` : '';
+  const point = `at ${JSON.stringify(w.point_mm)} mm`;
+  for (const l of layers) {
+    const own = l.placeWords?.(w);
+    if (own) return { of: own.of, at: `${meets}${own.at}` };
+  }
+  if (w.part === 'band') return { of: 'the band', at: `${meets}${w.feature}` };
+  if (w.part === 'sheet') return { of: partWords(w.feature!, 'sheet'), at: `${w.meets.length ? `where it meets ${w.meets.map((m) => `"${m}"`).join(' and ')}, ` : ''}${meets}${point}` };
+  if (w.part === 'blend') return { of: w.part_name ? partWords(w.part_name, 'shape') : null, at: `${meets}on the smooth blend "${w.feature}", ${point}` };
+  if (w.part_name) return { of: partWords(w.part_name, 'shape'), at: `${meets}${point}` };
+  return { of: null, at: `${meets}${point}` };
+}
+
+/** "The wall of the band is 0.62 mm at its thinnest, ...": a thickness reading's problem, in words. */
+function thinWords(e: { value?: number; where: Where | null }, layers: readonly CheckLayer[], decl: FeatureDecl, what: 'wall' | 'detail', limit: number): string {
+  const v = r3(e.value ?? 0);
+  const { of, at } = e.where ? placeWords(e.where, layers, decl) : { of: null, at: 'somewhere on the piece' };
+  if (what === 'wall') return of ? `The wall of ${of} is ${v} mm at its thinnest, ${at}; it must be at least ${r3(limit)} mm.` : `The wall is ${v} mm at its thinnest, in no named part, ${at}; it must be at least ${r3(limit)} mm.`;
+  return of ? `The finest detail, in ${of}, is ${v} mm across, ${at}; it must be at least ${r3(limit)} mm.` : `The finest detail is ${v} mm across, in no named part, ${at}; it must be at least ${r3(limit)} mm.`;
+}
+
+export const MAXSPHERE = "largest inscribed sphere at every triangle centroid of the written STL, grown along the surface's direction there (a triangle's own normal, except that a sliver too narrow to have a direction takes the direction of the surface it was cut from), only surfaces facing back (more than 105° away) bounding it, and a crease or corner only when the sphere meets it square-on (no face meeting there lies nearer the sphere's centre) and from more than 105° away; the place is named by the part its face came from (a cut, the stone's seat, by the metal it is cut into), with the other named parts the sphere meets";
 
 function wallEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
-  // A reading a layer's own check judges instead (the jewelry layer's prong columns, by their narrowest section) is left to it.
   const m = minSample(samples, (s) => !layers.some((l) => l.judgesWallAt?.(s.p, decl)));
   if (!m) throw new Error('no thickness could be measured');
-  return {
+  const where = readingPlace(bvh, decl, layers, m, 'thinnest wall');
+  return entry({
     id: 'wall',
     name: 'Wall thickness',
     limit: mm(L.wall),
     result: m.thickness >= L.wall ? 'pass' : 'fail',
     measured: mm(m.thickness),
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, layers, 'thinnest wall', m.centre),
+    where,
     method: `${MAXSPHERE}; prong columns are judged by the prong check's narrowest section instead`,
-  };
+    problem: thinWords({ value: m.thickness, where }, layers, decl, 'wall', L.wall),
+  });
 }
 
-function detailEntry(_bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
+function detailEntry(bvh: Bvh, samples: Sample[], L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
   const m = minSample(samples);
   if (!m) throw new Error('no thickness could be measured');
-  return {
+  const where = readingPlace(bvh, decl, layers, m, 'the thinnest feature');
+  return entry({
     id: 'detail',
     name: 'Smallest detail',
     limit: mm(L.detail),
     result: m.thickness >= L.detail ? 'pass' : 'fail',
     measured: `${mm(m.thickness)} (the thinnest feature anywhere)`,
     value: r3(m.thickness),
-    where: whereOf(m.p, decl, layers, 'the thinnest feature', m.centre),
+    where,
     method: MAXSPHERE,
-  };
+    problem: thinWords({ value: m.thickness, where }, layers, decl, 'detail', L.detail),
+  });
 }
 
 // ------------------------------------------------------------------ sheets
@@ -795,12 +992,12 @@ function sheetEntry(bvh: Bvh, S: Float64Array, sheets: SheetDecl[], L: CheckLimi
       value: r3(w.d),
       nominal: r3(sh.nominalThickness),
       measured,
-      where: { part: 'sheet', feature: sh.label, point_mm: pt(w.p), description: `the sheet "${sh.label}", its thinnest place measured square to its surface` },
+      where: placeAt({ part: 'sheet', feature: sh.label, name: sh.label }, w.p, `the sheet "${sh.label}", its thinnest place measured square to its surface`),
     });
   }
   const failing = results.filter((r) => r.value < L.wall);
   const thinnest = results.reduce((a, b) => (b.value < a.value ? b : a));
-  return {
+  return entry({
     id: 'sheet',
     name: 'Sheet thickness',
     limit: `${mm(L.wall)}, square to the surface`,
@@ -808,9 +1005,10 @@ function sheetEntry(bvh: Bvh, S: Float64Array, sheets: SheetDecl[], L: CheckLimi
     measured: `${mm(thinnest.value)} ("${thinnest.label}"); each, measured (declared): ${results.map((r) => `${r.label} ${r.value} (${r.nominal})`).join(', ')} mm`,
     value: thinnest.value,
     where: thinnest.where,
-    ...(failing.length ? { failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where })) } : {}),
+    failing: failing.map(({ label, value, nominal, where }) => ({ label, value, nominal, where, part: where.part_name })),
     method: `each sheet made by the thicken operation, measured square to its surface at the points on its middle surface it declares (${results.map((r) => `${r.measured} on ${r.label}`).join(', ')}): a ray each way along the surface's normal to the first face of the written STL, the two distances summed, where both faces face along the rays within 45° (the sheet's own faces); points cut away, or beside a rim or a slanting cut, are skipped and left to the wall check`,
-  };
+    problem: failing.map((f) => `The sheet "${f.label}" is ${f.value} mm thick at its thinnest, measured square to its surface, at ${JSON.stringify(f.where.point_mm)} mm; it must be at least ${r3(L.wall)} mm.`).join(' '),
+  });
 }
 
 // --------------------------------------------------------------- sections
@@ -933,7 +1131,7 @@ export function trianglesWhere(bvh: Bvh, keep: (lo: V3, hi: V3, rhoMax: number) 
   return Uint32Array.from(out);
 }
 
-function bandEntry(bvh: Bvh, band: BandDecl, L: CheckLimits): CheckEntry {
+function bandEntry(bvh: Bvh, band: BandDecl, L: CheckLimits, decl: FeatureDecl): CheckEntry {
   const { innerRadius: rIn, outerRadius: rOut, halfWidth: hw } = band;
   // Every triangle a section's inside test could need: anything in the band's slab along the
   // finger that reaches out past the inside of the band (a corner's distance from the axis is
@@ -950,35 +1148,38 @@ function bandEntry(bvh: Bvh, band: BandDecl, L: CheckLimits): CheckEntry {
     if (!ins) throw new Error(`the band's own section ${deg}° round from the top holds no metal, so the file and the band's declaration disagree and the band cannot be measured there`);
     if (!worst || ins.d < worst.d) worst = { d: ins.d, deg, p: [dir[0] * ins.at[0], ins.at[1], dir[2] * ins.at[0]] };
   }
-  return {
+  // The band's own section is the band, by its declaration: named by its part's name.
+  const name = decl.faces?.parts.find((p) => p.kind === 'band')?.name ?? 'band';
+  return entry({
     id: 'band',
     name: 'Ring band thickness',
     limit: mm(L.band),
     result: worst!.d >= L.band ? 'pass' : 'fail',
     measured: mm(worst!.d),
     value: r3(worst!.d),
-    where: { part: 'band', feature: `${worst!.deg}° round the band from the top`, point_mm: pt(worst!.p), description: `the band's thinnest section, ${worst!.deg}° round from the top` },
+    where: placeAt({ part: 'band', feature: `${worst!.deg}° round the band from the top`, name }, worst!.p, `the band's thinnest section, ${worst!.deg}° round from the top`),
     method: "the band's cross-section every 5° all the way round, cut from the whole piece and then clipped to the band's own section (its inner and outer radius and its width), measured as the largest circle that fits inside it; metal outside the band's own section, a head or an added shape, is not counted as band",
-  };
+    problem: `The band is ${r3(worst!.d)} mm thick at its thinnest section, ${worst!.deg}° round the band from the top; it must be at least ${r3(L.band)} mm.`,
+  });
 }
 
 // ------------------------------------------------------------------- gaps
 
-function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
+function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
   // Along the surface's direction, and facing judged by it, for the same reason as the
   // thickness: two slivers leaning opposite ways looked like walls 0.001 mm apart.
   const C = bvh.centroid;
-  let best: { d: number; p: V3 } | null = null;
+  let best: { d: number; p: V3; t: number; across: number } | null = null;
   const reach = Math.max(2, L.gap * 3);
   for (let t = 0; t < bvh.n; t++) {
     const n: V3 = [S[t * 3]!, S[t * 3 + 1]!, S[t * 3 + 2]!];
     const p: V3 = [C[t * 3]! + n[0] * 1e-5, C[t * 3 + 1]! + n[1] * 1e-5, C[t * 3 + 2]! + n[2] * 1e-5];
     const facing = (u: number) => S[u * 3]! * n[0] + S[u * 3 + 1]! * n[1] + S[u * 3 + 2]! * n[2] < -0.9;
     const hit = bvh.ray(p, n, reach, facing);
-    if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p };
+    if (hit && (!best || hit.dist < best.d)) best = { d: hit.dist, p, t, across: hit.t };
   }
   if (!best) {
-    return {
+    return entry({
       id: 'gap',
       name: 'Smallest gap',
       limit: mm(L.gap),
@@ -986,18 +1187,34 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits): CheckEntry {
       measured: `no gap narrower than ${mm(reach)} between facing surfaces`,
       where: null,
       method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
-    };
+    });
   }
-  return {
+  // The gap is named by the part of the face it opens from, and the part it faces across to, when that is another.
+  const own = faceOf(decl, best.t);
+  const across = faceOf(decl, best.across);
+  const what = 'the narrowest gap between two facing surfaces';
+  const where = own === undefined ? placeAt({ part: 'piece', name: null }, best.p, what) : placeOf(best.p, decl, layers, what, own, across ? [across] : []);
+  const v = r3(best.d);
+  const { of, at } = placeWords({ ...where, other_parts: [] }, layers, decl);
+  const problem =
+    own === undefined
+      ? `A gap is only ${v} mm across, ${at}; it must be at least ${r3(L.gap)} mm, or closed.`
+      : !of
+        ? `A gap is only ${v} mm across, in no named part${where.other_parts.length ? `, facing ${othersWords(decl, where.other_parts)}` : ''}, ${at}; it must be at least ${r3(L.gap)} mm, or closed.`
+        : where.other_parts.length
+          ? `The gap between ${of} and ${othersWords(decl, where.other_parts)} is only ${v} mm across, ${at}; it must be at least ${r3(L.gap)} mm, or closed.`
+          : `A gap in ${of} is only ${v} mm across, ${at}; it must be at least ${r3(L.gap)} mm, or closed.`;
+  return entry({
     id: 'gap',
     name: 'Smallest gap',
     limit: mm(L.gap),
     result: best.d >= L.gap ? 'pass' : 'fail',
     measured: mm(best.d),
-    value: r3(best.d),
-    where: { part: 'piece', point_mm: pt(best.p), description: 'the narrowest gap between two facing surfaces' },
-    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite)",
-  };
+    value: v,
+    where,
+    method: "a ray outward from every triangle centroid along the surface's direction there (a sliver's taken from the surface it was cut from), to the nearest surface facing back (within 25° of opposite); the gap is named by the part of the face it opens from, and the part it faces across to",
+    problem,
+  });
 }
 
 // --------------------------------------------------------------- surface
@@ -1043,14 +1260,20 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
     measure(b.points, b.label);
     onBlends += b.points.length / 3;
   }
-  return {
+  // The place is named by the part of the written face nearest the point that stands furthest off it.
+  const face = decl.faces ? faceOf(decl, bvh.nearestTriangle(worst.p, cap)) : undefined;
+  const what = 'the facets stand furthest from the curved surface';
+  const where = worst.blend !== undefined ? onBlend(worst.p, worst.blend, what, face) : placeOf(worst.p, decl, layers, what, face);
+  const { of, at } = placeWords(where, layers, decl);
+  return entry({
     id: 'surface_deviation',
     name: 'Surface smoothness',
     limit: mm(L.surfaceDeviation),
     result: worst.dev <= L.surfaceDeviation ? 'pass' : 'fail',
     measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''})`,
     value: r3(worst.dev),
-    where: worst.blend !== undefined ? onBlend(worst.p, worst.blend, 'the facets stand furthest from the curved surface') : whereOf(worst.p, decl, layers, 'the facets stand furthest from the curved surface'),
+    where,
     method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`,
-  };
+    problem: `The casting file's facets stand ${r3(worst.dev)} mm off the curved surface${of ? ` of ${of}` : ', in no named part'}, ${at}; they may stand at most ${r3(L.surfaceDeviation)} mm off it.`,
+  });
 }

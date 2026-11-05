@@ -1,0 +1,930 @@
+{
+  "format": "flo2-cad.tools-contract/1",
+  "interface": "ifc:engine-tools-over-mcp",
+  "note": "The engine's tools as tools/list serves them: name, annotations and the shape of the arguments (the prose that guides the agent is left out). Written by scripts/contracts.mjs (npm run contracts); test/contracts.test.ts compares it with what dist/main.js lists in both protocol eras. flo2's door allowlists exactly these names, so a change here is a change to both repos.",
+  "tools": [
+    {
+      "name": "start_piece",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Start a piece"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "band_profile": {
+            "enum": [
+              "comfort_fit",
+              "half_round",
+              "flat",
+              "round"
+            ],
+            "type": "string"
+          },
+          "band_thickness": {
+            "type": "string"
+          },
+          "band_width": {
+            "type": "string"
+          },
+          "bezel_lip": {
+            "type": "string"
+          },
+          "bezel_wall": {
+            "type": "string"
+          },
+          "limits": {
+            "additionalProperties": false,
+            "properties": {
+              "band": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "detail": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "gap": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "prong": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "shrinkage": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "surface_deviation": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              },
+              "wall": {
+                "additionalProperties": false,
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "wall",
+              "band",
+              "prong",
+              "detail",
+              "gap",
+              "surface_deviation",
+              "shrinkage"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "material": {
+            "type": "string"
+          },
+          "metal": {
+            "enum": [
+              "sterling_silver_925",
+              "gold_14k_yellow",
+              "gold_18k_yellow",
+              "platinum_950"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preview": {
+            "default": true,
+            "type": "boolean"
+          },
+          "process": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "program": {
+            "maxLength": 100000,
+            "type": "string"
+          },
+          "prong_count": {
+            "enum": [
+              4,
+              6
+            ],
+            "type": "integer"
+          },
+          "prong_thickness": {
+            "type": "string"
+          },
+          "ring_size": {
+            "additionalProperties": false,
+            "properties": {
+              "size": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "system": {
+                "enum": [
+                  "US",
+                  "UK",
+                  "EU"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "system",
+              "size"
+            ],
+            "type": "object"
+          },
+          "shrinkage": {
+            "type": "string"
+          },
+          "stone_carat": {
+            "type": "string"
+          },
+          "stone_depth": {
+            "type": "string"
+          },
+          "stone_diameter": {
+            "type": "string"
+          },
+          "stone_length": {
+            "type": "string"
+          },
+          "stone_orientation": {
+            "enum": [
+              "east_west",
+              "north_south"
+            ],
+            "type": "string"
+          },
+          "stone_setting": {
+            "enum": [
+              "prong_head",
+              "bezel",
+              "none"
+            ],
+            "type": "string"
+          },
+          "stone_shape": {
+            "enum": [
+              "round",
+              "emerald"
+            ],
+            "type": "string"
+          },
+          "stone_width": {
+            "type": "string"
+          },
+          "template": {
+            "enum": [
+              "solitaire_ring",
+              "plain_band",
+              "emerald_bezel_solitaire"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "change_piece",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Change the piece"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "preview": {
+            "default": true,
+            "type": "boolean"
+          },
+          "program": {
+            "maxLength": 100000,
+            "type": "string"
+          },
+          "set": {
+            "additionalProperties": false,
+            "minProperties": 1,
+            "patternProperties": {
+              "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$": {}
+            },
+            "properties": {
+              "band_profile": {
+                "enum": [
+                  "comfort_fit",
+                  "half_round",
+                  "flat",
+                  "round"
+                ],
+                "type": "string"
+              },
+              "band_thickness": {
+                "type": "string"
+              },
+              "band_width": {
+                "type": "string"
+              },
+              "bezel_lip": {
+                "type": "string"
+              },
+              "bezel_wall": {
+                "type": "string"
+              },
+              "limits": {
+                "additionalProperties": false,
+                "properties": {
+                  "band": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "detail": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "gap": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "prong": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "shrinkage": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "surface_deviation": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  },
+                  "wall": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "wall",
+                  "band",
+                  "prong",
+                  "detail",
+                  "gap",
+                  "surface_deviation",
+                  "shrinkage"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "enum": [
+                  "sterling_silver_925",
+                  "gold_14k_yellow",
+                  "gold_18k_yellow",
+                  "platinum_950"
+                ],
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "prong_count": {
+                "enum": [
+                  4,
+                  6
+                ],
+                "type": "integer"
+              },
+              "prong_thickness": {
+                "type": "string"
+              },
+              "ring_size": {
+                "additionalProperties": false,
+                "properties": {
+                  "size": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "system": {
+                    "enum": [
+                      "US",
+                      "UK",
+                      "EU"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "system",
+                  "size"
+                ],
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "stone_carat": {
+                "type": "string"
+              },
+              "stone_depth": {
+                "type": "string"
+              },
+              "stone_diameter": {
+                "type": "string"
+              },
+              "stone_length": {
+                "type": "string"
+              },
+              "stone_orientation": {
+                "enum": [
+                  "east_west",
+                  "north_south"
+                ],
+                "type": "string"
+              },
+              "stone_setting": {
+                "enum": [
+                  "prong_head",
+                  "bezel",
+                  "none"
+                ],
+                "type": "string"
+              },
+              "stone_shape": {
+                "enum": [
+                  "round",
+                  "emerald"
+                ],
+                "type": "string"
+              },
+              "stone_width": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "tree": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "flo2-cad.tree/1",
+                  "flo2-cad.program/1"
+                ],
+                "type": "string"
+              },
+              "limits": {
+                "type": "object"
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": "string"
+              },
+              "program": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "root": {
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "template": {
+                "enum": [
+                  "solitaire_ring",
+                  "plain_band",
+                  "emerald_bezel_solitaire"
+                ],
+                "type": "string"
+              },
+              "units": {
+                "const": "mm"
+              }
+            },
+            "required": [
+              "format",
+              "name",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "preview_piece",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Show the piece"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tree": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "flo2-cad.tree/1",
+                  "flo2-cad.program/1"
+                ],
+                "type": "string"
+              },
+              "limits": {
+                "type": "object"
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": "string"
+              },
+              "program": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "root": {
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "template": {
+                "enum": [
+                  "solitaire_ring",
+                  "plain_band",
+                  "emerald_bezel_solitaire"
+                ],
+                "type": "string"
+              },
+              "units": {
+                "const": "mm"
+              }
+            },
+            "required": [
+              "format",
+              "name",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "views": {
+            "default": [
+              "three_quarter",
+              "side",
+              "setting_closeup"
+            ],
+            "items": {
+              "enum": [
+                "three_quarter",
+                "front",
+                "side",
+                "top",
+                "setting_closeup"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_piece",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Check it will cast"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tree": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "flo2-cad.tree/1",
+                  "flo2-cad.program/1"
+                ],
+                "type": "string"
+              },
+              "limits": {
+                "type": "object"
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": "string"
+              },
+              "program": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "root": {
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "template": {
+                "enum": [
+                  "solitaire_ring",
+                  "plain_band",
+                  "emerald_bezel_solitaire"
+                ],
+                "type": "string"
+              },
+              "units": {
+                "const": "mm"
+              }
+            },
+            "required": [
+              "format",
+              "name",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "export_for_casting",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Make the casting files"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tree": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "flo2-cad.tree/1",
+                  "flo2-cad.program/1"
+                ],
+                "type": "string"
+              },
+              "limits": {
+                "type": "object"
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": "string"
+              },
+              "program": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "root": {
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "template": {
+                "enum": [
+                  "solitaire_ring",
+                  "plain_band",
+                  "emerald_bezel_solitaire"
+                ],
+                "type": "string"
+              },
+              "units": {
+                "const": "mm"
+              }
+            },
+            "required": [
+              "format",
+              "name",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "name": "describe_piece",
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Describe the piece"
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "tree": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "flo2-cad.tree/1",
+                  "flo2-cad.program/1"
+                ],
+                "type": "string"
+              },
+              "limits": {
+                "type": "object"
+              },
+              "material": {
+                "type": "string"
+              },
+              "metal": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "process": {
+                "type": "string"
+              },
+              "program": {
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "root": {
+                "type": "object"
+              },
+              "shrinkage": {
+                "type": "string"
+              },
+              "template": {
+                "enum": [
+                  "solitaire_ring",
+                  "plain_band",
+                  "emerald_bezel_solitaire"
+                ],
+                "type": "string"
+              },
+              "units": {
+                "const": "mm"
+              }
+            },
+            "required": [
+              "format",
+              "name",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ]
+}

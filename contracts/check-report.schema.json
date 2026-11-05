@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/flo2-connector/flo2-cad/blob/main/contracts/check-report.schema.json",
+  "title": "flo2-cad check report, <name>.check.json (format flo2-cad.check-report/1)",
+  "description": "The published contract ifc:check-report: the checker's answer for one revision of a piece, sent with every check_piece and export_for_casting reply and with every casting file. A field is added only with this schema, and none is removed or renamed while the format says /1. Every list the report can carry is present, empty when there is nothing in it: an absent list is never a way of saying none. Every failing place names the part it is in by the part's own name (a tree node's id, a program's .named() name, or the library's part: band, head, bezel, prong N of M, stone seat), or says it is in no named part (null). test/contracts.test.ts and every test that makes a report hold the engine to this file.",
+  "type": "object",
+  "required": ["format", "piece", "revision", "tree_sha256", "verdict", "export", "metal", "stl", "shrinkage", "stone", "volume_mm3", "weight_g", "checks", "limits", "limits_from", "engine", "kernel", "timing_ms"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "flo2-cad.check-report/1" },
+    "piece": { "type": "string", "minLength": 1, "description": "The piece's name, as its file names it." },
+    "revision": { "type": "integer", "minimum": 1 },
+    "tree_sha256": { "$ref": "#/$defs/sha256", "description": "The sha256 of the piece's file (tree or program piece), canonical JSON." },
+    "program": {
+      "description": "Only for a piece written as a program.",
+      "type": "object",
+      "required": ["sha256", "lines", "evaluated"],
+      "additionalProperties": false,
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "lines": { "type": "integer", "minimum": 1 },
+        "evaluated": {
+          "oneOf": [
+            { "const": "did not run" },
+            {
+              "type": "object",
+              "required": ["ms", "peak_memory_mib"],
+              "additionalProperties": false,
+              "properties": { "ms": { "type": "integer", "minimum": 0 }, "peak_memory_mib": { "type": ["number", "null"] } }
+            }
+          ]
+        }
+      }
+    },
+    "verdict": { "enum": ["pass", "fail", "no_verdict"], "description": "no_verdict: no limit profile covers the piece's material, process and size and it carries no limits of its own; nothing is judged and nothing is released." },
+    "export": { "enum": ["not_requested", "released", "refused"] },
+    "metal": {
+      "type": "object",
+      "description": "What the piece is cast in: one of the four metals (id), or a material by name (id null).",
+      "required": ["id", "name", "density_g_cm3", "casting_note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "enum": ["sterling_silver_925", "gold_14k_yellow", "gold_18k_yellow", "platinum_950", null] },
+        "name": { "type": "string", "minLength": 1 },
+        "density_g_cm3": { "type": ["number", "null"] },
+        "casting_note": { "type": ["string", "null"] }
+      }
+    },
+    "stl": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["file", "sha256", "bytes", "triangles", "units"],
+          "additionalProperties": false,
+          "properties": {
+            "file": { "type": "string", "pattern": "\\.stl$", "description": "<piece>.stl" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "bytes": { "type": "integer", "minimum": 84 },
+            "triangles": { "type": "integer", "minimum": 0 },
+            "units": { "const": "mm" }
+          }
+        }
+      ]
+    },
+    "shrinkage": {
+      "type": "object",
+      "required": ["applied", "allowance"],
+      "additionalProperties": false,
+      "properties": { "applied": { "type": "boolean" }, "allowance": { "type": "string", "pattern": "^(off|\\d+(\\.\\d+)? %)$" } }
+    },
+    "stone": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "description": "The stone, which is never in a casting file.",
+          "required": ["in_casting_file", "shape", "measured_mm", "orientation", "carat_for_reference", "placeholder"],
+          "additionalProperties": false,
+          "properties": {
+            "in_casting_file": { "const": false },
+            "shape": { "enum": ["round", "emerald", "custom"] },
+            "measured_mm": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "diameter": { "type": "number" }, "length": { "type": "number" }, "width": { "type": "number" }, "depth": { "type": "number" } },
+              "required": ["depth"]
+            },
+            "orientation": { "type": ["string", "null"] },
+            "carat_for_reference": { "type": ["string", "null"] },
+            "placeholder": { "type": "array", "items": { "type": "string" }, "description": "Which of the stone's sizes are placeholders; empty when every one was measured." }
+          }
+        }
+      ]
+    },
+    "volume_mm3": { "type": "number", "minimum": 0 },
+    "weight_g": { "type": ["number", "null"] },
+    "checks": { "type": "array", "items": { "$ref": "#/$defs/check" }, "description": "Every check that ran, in order; empty only when there is no verdict." },
+    "limits": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["wall", "band", "prong", "detail", "gap", "surfaceDeviation", "gripMin", "lipMinOfCrown", "lipMaxOfCrown", "lipMinOfCabochon", "units", "sources"],
+          "additionalProperties": false,
+          "properties": {
+            "wall": { "type": "number" },
+            "band": { "type": "number" },
+            "prong": { "type": "number" },
+            "detail": { "type": "number" },
+            "gap": { "type": "number" },
+            "surfaceDeviation": { "type": "number" },
+            "gripMin": { "type": "number" },
+            "lipMinOfCrown": { "type": "number" },
+            "lipMaxOfCrown": { "type": "number" },
+            "lipMinOfCabochon": { "type": "number" },
+            "units": { "const": "mm" },
+            "sources": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "limits_from": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "profile", "name", "material", "process", "size", "each", "unmatched"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "profile" },
+            "profile": { "type": "string" },
+            "name": { "type": "string" },
+            "material": { "$ref": "#/$defs/material" },
+            "process": { "$ref": "#/$defs/process" },
+            "size": {
+              "allOf": [{ "$ref": "#/$defs/size" }],
+              "required": ["range_mm", "range_sources"],
+              "properties": {
+                "range_mm": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+                "range_sources": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "each": {
+              "type": "object",
+              "required": ["wall", "band", "prong", "detail", "gap", "surfaceDeviation", "shrinkage"],
+              "additionalProperties": false,
+              "properties": {
+                "wall": { "$ref": "#/$defs/citedMm" },
+                "band": { "$ref": "#/$defs/citedMm" },
+                "prong": { "$ref": "#/$defs/citedMm" },
+                "detail": { "$ref": "#/$defs/citedMm" },
+                "gap": { "$ref": "#/$defs/citedMm" },
+                "surfaceDeviation": { "$ref": "#/$defs/citedMm" },
+                "shrinkage": { "type": "object", "required": ["percent", "source"], "additionalProperties": false, "properties": { "percent": { "type": "number" }, "source": { "type": "string" } } }
+              }
+            },
+            "unmatched": { "$ref": "#/$defs/unmatched" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "by", "name", "material", "process", "size", "each", "unmatched"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "supplied" },
+            "by": { "const": "the person" },
+            "name": { "type": "string" },
+            "material": { "$ref": "#/$defs/material" },
+            "process": { "$ref": "#/$defs/process" },
+            "size": { "$ref": "#/$defs/size" },
+            "each": {
+              "type": "object",
+              "required": ["wall", "band", "prong", "detail", "gap", "surface_deviation", "shrinkage"],
+              "additionalProperties": false,
+              "properties": {
+                "wall": { "$ref": "#/$defs/suppliedLimit" },
+                "band": { "$ref": "#/$defs/suppliedLimit" },
+                "prong": { "$ref": "#/$defs/suppliedLimit" },
+                "detail": { "$ref": "#/$defs/suppliedLimit" },
+                "gap": { "$ref": "#/$defs/suppliedLimit" },
+                "surface_deviation": { "$ref": "#/$defs/suppliedLimit" },
+                "shrinkage": { "$ref": "#/$defs/suppliedLimit" }
+              }
+            },
+            "unmatched": { "$ref": "#/$defs/unmatched" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "material", "process", "size", "unmatched", "why", "how_to_go_on"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "none" },
+            "material": { "$ref": "#/$defs/material" },
+            "process": { "$ref": "#/$defs/process" },
+            "size": { "$ref": "#/$defs/size" },
+            "unmatched": { "$ref": "#/$defs/unmatched" },
+            "why": { "type": "array", "items": { "type": "string" } },
+            "how_to_go_on": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "engine": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": { "name": { "const": "flo2-cad" }, "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" } }
+    },
+    "kernel": {
+      "type": "object",
+      "required": ["name", "version", "unmodified"],
+      "additionalProperties": false,
+      "properties": { "name": { "const": "manifold-3d" }, "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" }, "unmodified": { "const": true } }
+    },
+    "timing_ms": {
+      "type": "object",
+      "required": ["build", "check", "total"],
+      "additionalProperties": false,
+      "properties": { "build": { "type": "integer", "minimum": 0 }, "check": { "type": "integer", "minimum": 0 }, "total": { "type": "integer", "minimum": 0 } }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "verdict": { "const": "no_verdict" } } },
+      "then": { "properties": { "limits": { "type": "null" }, "stl": { "type": "null" }, "checks": { "maxItems": 0 }, "export": { "enum": ["not_requested", "refused"] }, "limits_from": { "properties": { "kind": { "const": "none" } } } } },
+      "else": { "properties": { "limits": { "type": "object" }, "checks": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "export": { "const": "released" } } },
+      "then": { "properties": { "verdict": { "const": "pass" }, "stl": { "type": "object" } } }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "pass" } } },
+      "then": { "properties": { "checks": { "items": { "properties": { "result": { "const": "pass" } } } } } }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "partName": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "A part by its own name: a tree node's id or a program's .named() name, or the library's part (\"band\", \"head\", \"bezel\", \"prong 2 of 4\", \"stone seat\"). null: in no named part (or, on a check, the check has no place)."
+    },
+    "point": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "where": {
+      "type": "object",
+      "description": "A place on the piece. part says what kind of part it is in (as it always has); part_name says which one, by its own name.",
+      "required": ["part", "point_mm", "description", "meets", "part_name", "other_parts"],
+      "additionalProperties": false,
+      "properties": {
+        "part": { "enum": ["band", "head", "sheet", "added shape", "blend", "piece"], "description": "The kind of part: piece means in no named part (or the whole piece)." },
+        "feature": { "type": "string", "description": "Within that kind: the band's angle from the top, the prong's label, \"bezel\", \"stone seat\", \"rail\", or a shape's or sheet's own name." },
+        "clock": { "type": "string", "pattern": "^\\d{1,2}:\\d\\d$", "description": "Seen from above, the finger pointing to 12 o'clock." },
+        "meets": { "type": "array", "items": { "type": "string" }, "description": "On a sheet: the other sheets that meet it here; empty when none does (or the place is on no sheet)." },
+        "point_mm": { "$ref": "#/$defs/point" },
+        "description": { "type": "string", "minLength": 1 },
+        "part_name": { "$ref": "#/$defs/partName" },
+        "other_parts": { "type": "array", "items": { "type": "string" }, "description": "The other named parts that meet at this place (the metal measured lies between them, or a gap faces across to them); empty when the place is within one part." }
+      }
+    },
+    "failing": {
+      "type": "object",
+      "required": ["label", "value", "where", "part"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "value": { "type": "number" },
+        "nominal": { "type": "number" },
+        "where": { "$ref": "#/$defs/where" },
+        "part": { "$ref": "#/$defs/partName" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "name", "limit", "result", "measured", "where", "failing", "method", "fix", "part", "problem"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "enum": ["watertight", "wall", "band", "prong", "bezel_wall", "bezel_lip", "prong_grip", "sheet", "detail", "gap", "surface_deviation"] },
+        "name": { "type": "string", "minLength": 1 },
+        "limit": { "type": "string", "minLength": 1 },
+        "result": { "enum": ["pass", "fail", "could_not_run"] },
+        "measured": { "type": ["string", "null"] },
+        "value": { "type": "number" },
+        "where": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/where" }] },
+        "failing": { "type": "array", "items": { "$ref": "#/$defs/failing" }, "description": "Each failing feature of a check that measures several (each prong, each sheet); empty when none fails." },
+        "method": { "type": "string", "minLength": 1 },
+        "fix": { "type": ["string", "null"], "description": "What to change, in the person's terms; null when it passes, or when another check's fix already covers the same place." },
+        "part": { "$ref": "#/$defs/partName", "description": "The part the check's place is in, by its own name (where.part_name); null when the check has no place or the place is in no named part." },
+        "problem": { "type": ["string", "null"], "description": "What is wrong, in a maker's words, naming the part it is in; null when it passes." }
+      },
+      "allOf": [
+        { "if": { "properties": { "result": { "const": "pass" } } }, "then": { "properties": { "problem": { "type": "null" }, "fix": { "type": "null" }, "failing": { "maxItems": 0 } } }, "else": { "properties": { "problem": { "type": "string", "minLength": 1 } } } }
+      ]
+    },
+    "material": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": { "id": { "type": ["string", "null"] }, "name": { "type": "string" } }
+    },
+    "process": {
+      "type": "object",
+      "required": ["id", "stated", "words"],
+      "additionalProperties": false,
+      "properties": { "id": { "type": "string" }, "stated": { "type": "boolean" }, "words": { "type": "string" } }
+    },
+    "size": {
+      "type": "object",
+      "required": ["largest_mm", "bounding_box_mm", "measured"],
+      "properties": {
+        "largest_mm": { "type": ["number", "null"] },
+        "bounding_box_mm": { "type": "array", "items": { "type": "number" }, "maxItems": 3, "description": "Across x, y and z; empty when the piece could not be built and measured." },
+        "measured": { "type": "string" },
+        "range_mm": true,
+        "range_sources": true
+      },
+      "additionalProperties": false
+    },
+    "unmatched": {
+      "type": "array",
+      "description": "Each limit profile that does not cover the piece, and which of its material, process and size it does not cover; empty when every profile covers it (with supplied limits, it still says which profiles do not).",
+      "items": {
+        "type": "object",
+        "required": ["profile", "name", "did_not_match"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": { "type": "string" },
+          "name": { "type": "string" },
+          "did_not_match": { "type": "array", "items": { "enum": ["material", "process", "size"] } }
+        }
+      }
+    },
+    "citedMm": {
+      "type": "object",
+      "required": ["mm", "source"],
+      "additionalProperties": false,
+      "properties": { "mm": { "type": "number" }, "source": { "type": "string" } }
+    },
+    "suppliedLimit": {
+      "type": "object",
+      "required": ["value", "source"],
+      "additionalProperties": false,
+      "properties": { "value": { "type": "string" }, "source": { "type": "string" } }
+    }
+  }
+}

@@ -52,10 +52,17 @@ function plainDecimal(s: string): string {
   return out.includes('.') ? out.replace(/0+$/, '').replace(/\.$/, '') : out;
 }
 
-export function write3mf(mesh: Mesh, metadata: Readonly<Record<string, string>>): Buffer {
+/**
+ * `metadata` is written in its order: the core's names (Title, Application, Description ...) as
+ * they are, and any other as "prefix:name", its prefix declared in `namespaces` (prefix to URI),
+ * as the core specification asks of metadata it does not name. No namespace is a required
+ * extension, so a reader that does not know one reads the model as it is.
+ */
+export function write3mf(mesh: Mesh, metadata: Readonly<Record<string, string>>, namespaces: Readonly<Record<string, string>> = {}): Buffer {
   const parts: string[] = [];
   parts.push('<?xml version="1.0" encoding="UTF-8"?>\n');
-  parts.push('<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n');
+  const ns = Object.entries(namespaces).map(([prefix, uri]) => ` xmlns:${prefix}="${xmlEscape(uri)}"`).join('');
+  parts.push(`<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"${ns}>\n`);
   for (const [k, v] of Object.entries(metadata)) parts.push(`  <metadata name="${xmlEscape(k)}">${xmlEscape(v)}</metadata>\n`);
   parts.push('  <resources>\n    <object id="1" type="model">\n      <mesh>\n        <vertices>\n');
   const p = mesh.positions;

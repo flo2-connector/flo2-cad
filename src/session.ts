@@ -360,7 +360,7 @@ export class Session {
     const head =
       r.verdict === 'pass'
         ? 'Every casting check passes on the file as an export would write it; export_for_casting will release it.'
-        : `It would NOT cast as it is. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`;
+        : `It would NOT cast as it is:\n${r.problems.map((f) => `- ${f}`).join('\n')}\nWhat to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`;
     const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${(r.report['shrinkage'] as { allowance: string }).allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`, limitsLine(r, tree)];
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
     if (ph) texts.push(`PLACEHOLDER: ${ph} The checks are only as true as the stone's size.`);
@@ -381,7 +381,7 @@ export class Session {
     }
     if (r.verdict !== 'pass' || !r.stl || !r.threeMf) {
       const texts = [
-        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released. What to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`,
+        `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released:\n${r.problems.map((f) => `- ${f}`).join('\n')}\nWhat to thicken and where:\n${r.fixes.map((f) => `- ${f}`).join('\n')}`,
         this.#verdictText(tree, r),
         `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,
         limitsLine(r, tree),

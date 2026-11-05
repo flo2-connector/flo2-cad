@@ -11,16 +11,16 @@
 // reached only through its boundary and run only on a piece that declares a stone or a setting.
 
 import { createHash } from 'node:crypto';
-import { quoteIds, runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
+import { couldNotRunEntry, partWordsIn, quoteIds, runChecks, type CheckEntry, type CheckLimits } from './checker/check.js';
 import type { FeatureDecl } from './checker/features.js';
 import { writeBinaryStl } from './files/stl.js';
 import { write3mf } from './files/threemf.js';
 import { buildPiece, EXPORT_TOL, PREVIEW_TOL, REFERENCE_TOL, type Across, type Built, type MeshOut, type PieceDims } from './library/build.js';
 import { failingSettingFeatures, isSettingCheck, JEWELRY_CHECKS, programSettingFix, SETTING, STONE_DEFAULTS, treeSettingFix, treeSettingWallFix } from './jewelry/index.js';
-import { chooseLimits, materialName, metalOf, noVerdictWords, processOf, processWords, unmatched, type CastStatement, type LimitsChoice, type PieceSize } from './limits/choose.js';
-import { LIMIT_KEYS, limitValues, PRECIOUS_METALS_LOST_WAX_JEWELRY, type Limits } from './limits/profiles.js';
+import { chooseLimits, materialName, matchProfile, metalOf, noVerdictWords, processOf, processWords, unmatched, type CastStatement, type LimitsChoice, type PieceSize } from './limits/choose.js';
+import { LIMIT_KEYS, limitValues, PRECIOUS_METALS_LOST_WAX_JEWELRY, PROFILES, type Limits } from './limits/profiles.js';
 import { suppliedSources, suppliedWords } from './limits/supplied.js';
-import { METALS, type Metal } from './metals.js';
+import { METALS, type Metal, type MetalId } from './metals.js';
 import { isProgramPiece, type Piece, type ProgramPiece } from './piece/program.js';
 import { findNode, readPiece, shrinkagePercent, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
 import type { PartReport } from './program/library.js';
@@ -52,6 +52,65 @@ export function canonicalJson(v: unknown): string {
 }
 
 export const sha256 = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
+
+/**
+ * Every check report the engine makes is handed to each of these as it is made: the test suite
+ * holds each one to its published contract, contracts/check-report.schema.json
+ * (test/hold-reports.ts). None is registered in service.
+ */
+export const REPORT_WATCHERS: ((report: Record<string, unknown>) => void)[] = [];
+
+// ------------------------------------------------------- what the casting files say
+
+/** The four metals by their fineness marks, as a casting file's 80-byte STL header names them (contracts/casting-file.json). */
+const METAL_MARK: Readonly<Record<MetalId, string>> = { sterling_silver_925: 'Ag925', gold_14k_yellow: 'Au585Y', gold_18k_yellow: 'Au750Y', platinum_950: 'Pt950' };
+
+/** A word in the STL header: each run of characters other than A-Z, a-z, 0-9, "." and "-" written "_". */
+const headerWord = (s: string) => s.replace(/[^A-Za-z0-9.-]+/g, '_');
+
+/**
+ * The text of a casting file's 80-byte STL header (contracts/casting-file.json): the engine and
+ * kernel and their versions, the units, the revision, the shrinkage allowance, the metal or
+ * material, the process and the piece. Material, process and name share what is left of the 80
+ * bytes: the longest is cut a character at a time, marked "~", until they fit. The 3MF's
+ * metadata and the check report say them all in full.
+ */
+export function castingHeader(piece: CastStatement & { name: string; revision: number }, shrinkagePct: number): string {
+  const fixed = `${ENGINE_NAME} ${ENGINE_VERSION} ${KERNEL_NAME} ${KERNEL_VERSION} mm r${piece.revision} shrink=${shrinkagePct > 0 ? `${shrinkagePct}%` : 'off'}`;
+  const words = [piece.metal ? METAL_MARK[piece.metal] : headerWord(materialName(piece)), headerWord(processOf(piece).id), piece.name];
+  const room = 80 - fixed.length - words.length;
+  for (let total = words.reduce((n, w) => n + w.length, 0); total > room; total--) {
+    const i = words.reduce((best, w, k) => (w.length > words[best]!.length ? k : best), 0);
+    if (words[i]!.length <= 1) break;
+    words[i] = `${words[i]!.slice(0, -2)}~`;
+  }
+  return `${fixed} ${words.join(' ')}`;
+}
+
+/** The namespace of flo2-cad's own 3MF metadata (contracts/casting-file.json). */
+export const THREEMF_NAMESPACE = { prefix: 'flo2', uri: 'https://github.com/flo2-connector/flo2-cad/contracts/casting-file.json' } as const;
+
+/** A 3MF's metadata (contracts/casting-file.json): the core's Title, Application and Description, and flo2-cad's own, each field by itself. */
+function castingMetadata(piece: CastStatement & { name: string; revision: number }, shrinkagePct: number, description: string): Record<string, string> {
+  const p = processOf(piece);
+  const f = (k: string) => `${THREEMF_NAMESPACE.prefix}:${k}`;
+  return {
+    Title: piece.name,
+    Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
+    Description: description,
+    [f('engine')]: `${ENGINE_NAME} ${ENGINE_VERSION}`,
+    [f('kernel')]: `${KERNEL_NAME} ${KERNEL_VERSION}`,
+    [f('piece')]: piece.name,
+    [f('revision')]: String(piece.revision),
+    [f('metal')]: piece.metal ?? 'none',
+    [f('material')]: materialName(piece),
+    [f('process')]: p.id,
+    [f('process_assumed')]: String(!p.stated),
+    [f('shrinkage')]: shrinkagePct > 0 ? `${shrinkagePct} %` : 'off',
+    [f('units')]: 'mm',
+    [f('check_report')]: `${piece.name}.check.json`,
+  };
+}
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
 /** Casting limits with the jewelry layer's setting rules beside them, as every check report lists its limits. */
@@ -185,6 +244,8 @@ export interface CheckOutcome {
   size: PieceSize | null;
   report: Record<string, unknown>;
   entries: (CheckEntry & { fix: string | null })[];
+  /** What is wrong, in a maker's words, each naming the part it is in: one for each failing place (a wall or detail that tripped on a part whose own check failed is that check's). */
+  problems: string[];
   fixes: string[];
   stl: Buffer | null;
   threeMf: Buffer | null;
@@ -226,8 +287,16 @@ function roundingFor(n: TreeNode | undefined, across: number): number {
   return Math.ceil(((across / 2 + 0.05) / narrowing) * 20) / 20;
 }
 
+/** "Two surfaces of "block"", "Two surfaces of the band and "fin"": a gap's parts, in its advice. */
+function gapParts(e: CheckEntry, decl: FeatureDecl | undefined): string {
+  const names = [e.where?.part_name, ...(e.where?.other_parts ?? [])].filter((n): n is string => !!n);
+  if (!names.length) return '';
+  const w = names.map((n) => partWordsIn(decl, n));
+  return ` of ${w.length === 1 ? w[0] : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`}`;
+}
+
 /** What to thicken and where, in the person's terms, for one failing check, against the piece's limits `L`. */
-function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string): string | null {
+function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string, decl?: FeatureDecl): string | null {
   if (e.result === 'pass') return null;
   if (e.result === 'could_not_run') return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   // A stone's setting: the jewelry layer's own advice.
@@ -276,7 +345,7 @@ function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string): strin
       }
       return `The finest detail is ${e.value} mm across at ${JSON.stringify(e.where?.point_mm)}; make it at least ${L.detail} mm, or remove it.`;
     case 'gap':
-      return `Two surfaces are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${L.gap} mm in ${material}, or close it completely.`;
+      return `Two surfaces${gapParts(e, decl)} are only ${e.value} mm apart at ${JSON.stringify(e.where?.point_mm)} mm; open the gap to at least ${L.gap} mm in ${material}, or close it completely.`;
     case 'watertight':
       return `The piece is not one closed solid (${e.measured}). Join any added shape to the ring, or remove it.`;
     case 'surface_deviation':
@@ -286,15 +355,7 @@ function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string): strin
 }
 
 function couldNotRun(msg: string): CheckEntry[] {
-  return (['watertight', 'wall', 'band', 'detail', 'gap', 'surface_deviation'] as const).map((id) => ({
-    id,
-    name: id,
-    limit: '-',
-    result: 'could_not_run' as const,
-    measured: msg,
-    where: null,
-    method: 'the piece could not be built, so the check could not run',
-  }));
+  return (['watertight', 'wall', 'band', 'detail', 'gap', 'surface_deviation'] as const).map((id) => couldNotRunEntry(id, id, '-', msg, 'the piece could not be built, so the check could not run'));
 }
 
 /** The piece's size as finished, from a casting file's bounds and the shrinkage scale it was written at. */
@@ -312,7 +373,12 @@ function materialReport(cast: CastStatement): Record<string, unknown> {
 const sizeReport = (size: PieceSize | null) =>
   size
     ? { largest_mm: r2(size.largestMm), bounding_box_mm: size.boxMm.map(r2), measured: "the largest side of the piece's bounding box, as finished (the casting file before any shrinkage allowance)" }
-    : { largest_mm: null, measured: 'not measured: the piece could not be built' };
+    : { largest_mm: null, bounding_box_mm: [], measured: 'not measured: the piece could not be built' };
+
+/** Each limit profile that does not cover the piece's material, process and size, and which of them it does not: empty when none fails to. */
+function unmatchedReport(cast: CastStatement, size: PieceSize | null, matches = PROFILES.map((p) => matchProfile(p, cast, size?.largestMm ?? null))) {
+  return matches.filter((m) => unmatched(m).length).map((m) => ({ profile: m.profile.id, name: m.profile.name, did_not_match: unmatched(m) }));
+}
 
 /** A report's "limits" (as every report has listed them) and "limits_from" (where they came from, or why there are none). */
 function limitsReport(choice: LimitsChoice, cast: CastStatement, size: PieceSize | null): { limits: Record<string, unknown> | null; limits_from: Record<string, unknown> } {
@@ -331,13 +397,14 @@ function limitsReport(choice: LimitsChoice, cast: CastStatement, size: PieceSize
         process,
         size: { ...sizeReport(size), range_mm: [choice.profile.size.minMm.value, choice.profile.size.maxMm.value], range_sources: [choice.profile.size.minMm.source, choice.profile.size.maxMm.source] },
         each: { ...Object.fromEntries(LIMIT_KEYS.map((k) => [k, { mm: pm.limits[k].value, source: pm.limits[k].source }])), shrinkage: { percent: pm.shrinkagePct.value, source: pm.shrinkagePct.source } },
+        unmatched: unmatchedReport(cast, size),
       },
     };
   }
   if (choice.kind === 'supplied') {
     return {
       limits: { ...withSettingRules(choice.limits), units: 'mm', sources: [...suppliedSources(choice.supplied), ...SETTING.sources] },
-      limits_from: { kind: 'supplied', by: 'the person', name: 'limits supplied with the piece', material, process, size: sizeReport(size), each: choice.supplied.each },
+      limits_from: { kind: 'supplied', by: 'the person', name: 'limits supplied with the piece', material, process, size: sizeReport(size), each: choice.supplied.each, unmatched: unmatchedReport(cast, size) },
     };
   }
   const words = noVerdictWords(cast, size, choice.matches);
@@ -348,7 +415,7 @@ function limitsReport(choice: LimitsChoice, cast: CastStatement, size: PieceSize
       material,
       process,
       size: sizeReport(size),
-      unmatched: choice.matches.map((m) => ({ profile: m.profile.id, name: m.profile.name, did_not_match: unmatched(m) })),
+      unmatched: unmatchedReport(cast, size, choice.matches),
       why: words.why,
       how_to_go_on: words.howToGoOn,
     },
@@ -390,13 +457,12 @@ export async function checkPiece(piece: Piece, mode: 'check' | 'export', limits:
   try {
     // Each blend's level set, built once for the casting file and taken again by the reference build.
     const meshes = new Map<string, Mesh>();
-    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false } });
+    built = await buildPiece(tree, { tol: EXPORT_TOL, applyShrinkage: true, blendSurface: true, blendMeshes: { meshes, reuse: false }, nameFaces: true });
     tBuild = performance.now() - t0;
     size = sizeOf(built.bbox.min, built.bbox.max, 1 + v.shrinkagePct / 100);
     choice = chooseLimits(tree, size.largestMm);
     if (choice.kind !== 'none') {
-      const shrink = v.shrinkagePct > 0 ? `${v.shrinkagePct}%` : 'off';
-      stl = writeBinaryStl(built.metal, `${ENGINE_NAME} ${ENGINE_VERSION} ${tree.name} r${tree.revision} ${tree.metal ?? tree.material} mm shrinkage ${shrink}`);
+      stl = writeBinaryStl(built.metal, castingHeader(tree, v.shrinkagePct));
       // The same piece, far more finely tessellated: what the surface check measures against.
       const ref = await buildPiece(tree, { tol: REFERENCE_TOL, applyShrinkage: true, blendMeshes: { meshes, reuse: true } });
       const refStl = writeBinaryStl(ref.metal, 'flo2-cad reference');
@@ -411,17 +477,22 @@ export async function checkPiece(piece: Piece, mode: 'check' | 'export', limits:
   }
   const L = choice.kind === 'none' ? null : choice.limits;
   const name = materialName(tree);
-  const withFix = L ? entries.map((e) => ({ ...e, fix: fixFor(e, v, L, name) })) : [];
+  const withFix = L ? entries.map((e) => ({ ...e, fix: fixFor(e, v, L, name, built?.decl) })) : [];
   // One fix per place: when a prong or the bezel fails its own check, the wall and
   // detail checks that tripped on the same feature need no second instruction.
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === 'sheet' && e.result === 'fail')?.failing ?? []).map((f) => f.label));
+  const same = new Set<CheckEntry>();
   for (const e of withFix) {
     if ((e.id === 'wall' || e.id === 'detail') && e.result === 'fail') {
       const f = e.where?.feature;
-      if ((f && settingFails.has(f)) || (e.where?.part === 'sheet' && f && failingSheets.has(f))) e.fix = null;
+      if ((f && settingFails.has(f)) || (e.where?.part === 'sheet' && f && failingSheets.has(f))) {
+        e.fix = null;
+        same.add(e);
+      }
     }
   }
+  const problems = withFix.filter((e) => e.result !== 'pass' && e.problem && !same.has(e)).map((e) => e.problem!);
   const verdict = !L ? 'no_verdict' : withFix.every((e) => e.result === 'pass') ? 'pass' : 'fail';
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix!);
   const shrinkApplied = v.shrinkagePct > 0;
@@ -457,15 +528,16 @@ export async function checkPiece(piece: Piece, mode: 'check' | 'export', limits:
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) },
   };
+  for (const w of REPORT_WATCHERS) w(report);
   let threeMf: Buffer | null = null;
   if (built && stl && verdict === 'pass' && mode === 'export') {
-    threeMf = write3mf(built.metal, {
-      Title: tree.name,
-      Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${tree.revision}; ${name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : 'not applied'}; stone not included${choice.kind === 'supplied' ? '; checked against limits supplied with the piece (see the check report)' : ''}`,
-    });
+    threeMf = write3mf(
+      built.metal,
+      castingMetadata(tree, v.shrinkagePct, `revision ${tree.revision}; ${name}; shrinkage ${shrinkApplied ? `${v.shrinkagePct} % applied` : 'not applied'}; stone not included${choice.kind === 'supplied' ? '; checked against limits supplied with the piece (see the check report)' : ''}`),
+      { [THREEMF_NAMESPACE.prefix]: THREEMF_NAMESPACE.uri },
+    );
   }
-  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === 'no_verdict' ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, problems, fixes, stl: verdict === 'no_verdict' ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
 
 // --------------------------------------------------------------- describe
@@ -598,7 +670,7 @@ export async function describeProgram(p: ProgramPiece, view: ProgramView): Promi
 type HeadPart = Extract<PartReport, { call: 'prongHead' | 'bezel' }>;
 
 /** What to thicken and where, for a program's piece: in the terms of the call in the program that makes that place, against the piece's limits `L`. */
-function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readonly PartReport[]): string | null {
+function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readonly PartReport[], decl?: FeatureDecl): string | null {
   if (e.result === 'pass') return null;
   if (e.result === 'could_not_run') return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   const head = parts.find((x): x is HeadPart => x.call !== 'ringShank');
@@ -614,11 +686,11 @@ function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readon
     case 'wall':
     case 'detail': {
       const limit = e.id === 'wall' ? L.wall : L.detail;
-      const where = e.where?.part === 'added shape' ? ` in the shape named ${quoteIds(e.where.feature!)}` : e.where?.part === 'sheet' ? ` on the sheet "${e.where.feature}"` : e.where?.part === 'band' ? ' in the band' : e.where?.part === 'head' ? ` in the setting (${e.where.feature})` : '';
+      const where = e.where?.part === 'added shape' ? ` in the shape named ${quoteIds(e.where.feature!)}` : e.where?.part === 'sheet' ? ` on the sheet "${e.where.feature}"` : e.where?.part === 'band' ? ' in the band' : e.where?.part === 'head' ? ` in the setting (${e.where.feature})` : e.where && e.where.part_name === null ? ' in no named part' : '';
       return `The metal${where} is only ${e.value} mm${at(e.where?.point_mm)}, and ${e.id === 'wall' ? 'a wall' : 'the finest detail'} needs ${limit} mm. In the program, make the shape that makes that place thicker, or move the shapes so they meet squarely with no thin wedge between them. (Name a shape with .named("...") and the check names it too.)`;
     }
     case 'gap':
-      return `Two surfaces are only ${e.value} mm apart${at(e.where?.point_mm)}; open the gap to at least ${L.gap} mm in ${material}, or close it completely.`;
+      return `Two surfaces${gapParts(e, decl)} are only ${e.value} mm apart${at(e.where?.point_mm)}; open the gap to at least ${L.gap} mm in ${material}, or close it completely.`;
     case 'watertight':
       return `The piece is not one closed solid (${e.measured}). Join every shape to the rest (union them so they overlap), or remove the loose one.`;
     case 'surface_deviation':
@@ -644,7 +716,7 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
   let size: PieceSize | null = null;
   let choice = chooseLimits(p, null);
   try {
-    const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale, blendSurface: true }, { tol: REFERENCE_TOL, scale, reuseBlends: true, positionsOnly: true }], limits);
+    const r = await runProgram(p.program, [{ tol: EXPORT_TOL, scale, blendSurface: true, nameFaces: true }, { tol: REFERENCE_TOL, scale, reuseBlends: true, positionsOnly: true }], limits);
     tBuild = performance.now() - t0;
     evaluated = { ms: Math.round(r.ms), peak_memory_mib: r.peakRssMiB };
     const exp = r.runs[0]!;
@@ -654,7 +726,7 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
     size = meshBounds(mesh, scale);
     choice = chooseLimits(p, size.largestMm);
     if (choice.kind !== 'none') {
-      stl = writeBinaryStl(mesh, `${ENGINE_NAME} ${ENGINE_VERSION} ${p.name} r${p.revision} ${p.metal ?? p.material} mm shrinkage ${pct > 0 ? `${pct}%` : 'off'} program`);
+      stl = writeBinaryStl(mesh, castingHeader(p, pct));
       const problems = declarationProblems(mesh, decl);
       if (problems.length) {
         entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(' ')}`);
@@ -670,15 +742,20 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
   }
   const L = choice.kind === 'none' ? null : choice.limits;
   const name = materialName(p);
-  const withFix = L ? entries.map((e) => ({ ...e, fix: programFixFor(e, L, name, parts) })) : [];
+  const withFix = L ? entries.map((e) => ({ ...e, fix: programFixFor(e, L, name, parts, decl) })) : [];
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === 'sheet' && e.result === 'fail')?.failing ?? []).map((f) => f.label));
+  const same = new Set<CheckEntry>();
   for (const e of withFix) {
     if ((e.id === 'wall' || e.id === 'detail') && e.result === 'fail') {
       const f = e.where?.feature;
-      if ((f && settingFails.has(f)) || (e.where?.part === 'sheet' && f && failingSheets.has(f))) e.fix = null;
+      if ((f && settingFails.has(f)) || (e.where?.part === 'sheet' && f && failingSheets.has(f))) {
+        e.fix = null;
+        same.add(e);
+      }
     }
   }
+  const problems = withFix.filter((e) => e.result !== 'pass' && e.problem && !same.has(e)).map((e) => e.problem!);
   const verdict = !L ? 'no_verdict' : withFix.every((e) => e.result === 'pass') ? 'pass' : 'fail';
   const fixes = withFix.filter((e) => e.fix).map((e) => e.fix!);
   const headPart = parts.find((x): x is HeadPart => x.call !== 'ringShank');
@@ -716,13 +793,14 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
     kernel: { name: KERNEL_NAME, version: KERNEL_VERSION, unmodified: true },
     timing_ms: { build: Math.round(tBuild), check: Math.round(tCheck), total: Math.round(performance.now() - t0) },
   };
+  for (const w of REPORT_WATCHERS) w(report);
   let threeMf: Buffer | null = null;
   if (mesh && stl && verdict === 'pass' && mode === 'export') {
-    threeMf = write3mf(mesh, {
-      Title: p.name,
-      Application: `${ENGINE_NAME} ${ENGINE_VERSION} (${KERNEL_NAME} ${KERNEL_VERSION})`,
-      Description: `revision ${p.revision}; ${name}; shrinkage ${pct > 0 ? `${pct} % applied` : 'not applied'}; stone not included; written as a program${choice.kind === 'supplied' ? '; checked against limits supplied with the piece (see the check report)' : ''}`,
-    });
+    threeMf = write3mf(
+      mesh,
+      castingMetadata(p, pct, `revision ${p.revision}; ${name}; shrinkage ${pct > 0 ? `${pct} % applied` : 'not applied'}; stone not included; written as a program${choice.kind === 'supplied' ? '; checked against limits supplied with the piece (see the check report)' : ''}`),
+      { [THREEMF_NAMESPACE.prefix]: THREEMF_NAMESPACE.uri },
+    );
   }
-  return { verdict, choice, size, report, entries: withFix, fixes, stl: verdict === 'no_verdict' ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
+  return { verdict, choice, size, report, entries: withFix, problems, fixes, stl: verdict === 'no_verdict' ? null : stl, threeMf, ms: { build: tBuild, check: tCheck, total: performance.now() - t0 } };
 }
