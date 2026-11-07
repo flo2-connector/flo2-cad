@@ -1,6 +1,6 @@
 {
   "name": "flo2-cad",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Agent CAD engine: an MCP server a chat agent drives to design pieces ready for casting, jewelry first, each checked against cited limits that follow its material, process and size.",
   "license": "Apache-2.0",
   "private": true,

@@ -10,6 +10,11 @@ Work in the person's terms. Talk about the band, the head, prongs, the bezel, th
 ring size, the metal and the caster. Say "the picture", not "the render", and "the ring's recipe", not "the tree".
 The tools do the geometry, and your job is the conversation.
 
+**On flo2.io, read flo2's guide first.** For a piece made end to end on flo2.io, read flo2's skill
+design-a-physical-piece first (get_skill with that name): it walks the whole loop, from the plan in the person's
+design and the numbers from calc records, through building and checking the piece here, to what the design records
+and the casting files handed off, and says which helper does each step. This skill stays the guide to these tools.
+
 ## The loop
 
 1. **Find out what they want before you start.**
