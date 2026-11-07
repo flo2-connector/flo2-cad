@@ -12,7 +12,9 @@ limits that fit the piece's material, process and size, each cited. It is a gene
 
 The spec is the flo2-hosted design "Agent CAD engine" (`38eca9450f850bf7`). Build agents start from
 [AGENTS.md](AGENTS.md); agents that design jewelry start from
-[skills/design-jewelry/SKILL.md](skills/design-jewelry/SKILL.md).
+[skills/design-jewelry/SKILL.md](skills/design-jewelry/SKILL.md). On flo2.io, a piece made end to end (planned in the
+person's design, its numbers from calc records, built, checked, recorded and handed off) starts from flo2's own skill
+design-a-physical-piece, which this skill points to since 0.4.1.
 
 **Limits follow the material, the process and the size** (0.3.0; see
 [Limits: named profiles, no verdict, or your own](#limits-named-profiles-no-verdict-or-your-own)). A piece states what it
@@ -371,7 +373,7 @@ declare.
   left out never means none.
 
 **What a casting file says about itself.** The STL's header reads, for example,
-`flo2-cad 0.4.0 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
+`flo2-cad 0.4.1 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
 versions, the units, the revision, the shrinkage allowance, the metal by its fineness mark (Ag925, Au585Y, Au750Y,
 Pt950) or the material by name, the process and the piece. In 80 bytes the material, the process and the name may be
 cut, marked `~`. The 3MF says each in full as metadata of its own (`flo2:engine`, `flo2:kernel`, `flo2:piece`,
@@ -428,7 +430,7 @@ The program-built solitaire is the template's mesh: the same triangle count, vol
 
 ```sh
 node dist/main.js                 # MCP on stdio; needs only Node 24
-node dist/main.js --version       # flo2-cad 0.4.0 (manifold-3d 3.5.4)
+node dist/main.js --version       # flo2-cad 0.4.1 (manifold-3d 3.5.4)
 node dist/main.js --list-tools    # the published tool list as JSON
 
 docker build -t flo2-cad .

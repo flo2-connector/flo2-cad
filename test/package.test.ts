@@ -101,3 +101,20 @@ describe('the plugin package', () => {
     }
   });
 });
+
+// flo2's guide to the whole loop (integrated-flo's physical-piece loop, step 6,
+// 2026-11-07): a piece made end to end on flo2.io is planned in the person's
+// design, its numbers taken from calc records, built and checked here, recorded,
+// and its casting files handed off; flo2's skill design-a-physical-piece walks
+// that loop. This skill still stands alone for these tools (an agent connected
+// to the engine without flo2 reads it as before), so it only points there.
+describe('the skill and flo2\'s guide', () => {
+  it('points a piece made end to end on flo2.io to flo2\'s design-a-physical-piece first, before its own loop, and names it nowhere else', () => {
+    const text = readFileSync(join(ROOT, 'skills/design-jewelry/SKILL.md'), 'utf8');
+    const flat = text.replace(/\s+/g, ' ');
+    assert.match(flat, /For a piece made end to end on flo2\.io, read flo2's skill design-a-physical-piece first \(get_skill with that name\): it walks the whole loop/);
+    assert.ok(text.indexOf('design-a-physical-piece') < text.indexOf('\n## The loop\n'), 'read before the loop');
+    assert.equal(text.split('design-a-physical-piece').length - 1, 1, 'one pointer, and the rest of the skill is about these tools');
+    assert.match(flat, /This skill stays the guide to these tools\./);
+  });
+});
