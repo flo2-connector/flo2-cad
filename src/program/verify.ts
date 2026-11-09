@@ -30,13 +30,15 @@
 import { NO_PART, type AddedDecl, type BandDecl, type BezelDecl, type BlendDecl, type FeatureDecl, type P2, type P3, type PartDecl, type ProngDecl, type SheetDecl, type StoneDecl } from '../checker/features.js';
 import type { MeshOut } from '../library/build.js';
 import type { ChildRun } from './child.js';
-import { MAX_REACH_MM, type PartReport } from './library.js';
+import { MAX_REACH_MM, type NamedShape, type PartReport } from './library.js';
 
 export interface RunOut {
   metal: MeshOut;
   stone?: MeshOut;
   decl?: FeatureDecl;
   parts?: PartReport[];
+  /** The shapes the program named that the piece holds (library.ts, Decls.names): what describe_piece lists. */
+  named?: NamedShape[];
 }
 
 const MAX_TRIANGLES = 6_000_000;
@@ -217,12 +219,27 @@ function readParts(v: unknown): PartReport[] {
   });
 }
 
+/** The shapes the program named, each a proper name and a kind, each once: what describe_piece lists. */
+function readNamed(v: unknown): NamedShape[] {
+  if (v === undefined) return [];
+  const seen = new Set<string>();
+  return arr(v, 'the named shapes', 4096).map((x): NamedShape => {
+    if (!isObj(x)) throw new Error('a named shape is malformed');
+    const name = str(x['name'], 'a named shape', 40);
+    if (!ID.test(name)) throw new Error('a named shape has no proper name');
+    if (seen.has(name)) throw new Error('a named shape is listed twice');
+    seen.add(name);
+    if (x['kind'] !== 'shape' && x['kind'] !== 'blend') throw new Error('a named shape is of no known kind');
+    return { name, kind: x['kind'] };
+  });
+}
+
 /** One run of the child's answer, rebuilt and checked (run.ts). */
 export function readRun(v: unknown, blobs: Buffer[], spec: ChildRun): RunOut {
   if (!isObj(v)) throw new Error('a run is missing');
   const metal = readMesh(v['metal'], blobs, 'the piece', spec.scale, !!spec.positionsOnly);
   if (spec.positionsOnly) return { metal };
-  const out: RunOut = { metal, decl: readDecl(v['decl'], blobs, spec.scale), parts: readParts(v['parts']) };
+  const out: RunOut = { metal, decl: readDecl(v['decl'], blobs, spec.scale), parts: readParts(v['parts']), named: readNamed(v['named']) };
   if (out.decl!.faces && out.decl!.faces.of.length !== metal.triangles.length / 3) throw new Error("the faces' parts do not match the piece's triangles");
   if (spec.wantStone && v['stone'] !== undefined) out.stone = readMesh(v['stone'], blobs, 'the stone', spec.scale, false);
   return out;

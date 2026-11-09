@@ -23,7 +23,7 @@ import { suppliedSources, suppliedWords } from './limits/supplied.js';
 import { METALS, type Metal, type MetalId } from './metals.js';
 import { isProgramPiece, type Piece, type ProgramPiece } from './piece/program.js';
 import { findNode, readPiece, shrinkagePercent, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
-import type { PartReport } from './program/library.js';
+import type { NamedShape, PartReport } from './program/library.js';
 import { ProgramFailed, programLimits, runProgram, type ProgramLimits } from './program/run.js';
 import { declarationProblems, type RunOut } from './program/verify.js';
 import type { Mesh } from './kernel/manifold.js';
@@ -623,9 +623,24 @@ export function programPartsWords(parts: readonly PartReport[]): string {
   return words.length ? words.join('; ') : 'shapes of its own (no library part)';
 }
 
+/** The shapes a program names, in a sentence: what follows its library parts in its summary; empty when it names none. */
+export function programNamedWords(named: readonly NamedShape[]): string {
+  return named.length ? `the shapes it names: ${named.map((n) => `"${n.name}"`).join(', ')}` : '';
+}
+
 export function programSummary(p: ProgramPiece, view?: ProgramView): string {
   const parts = view?.run.parts;
-  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${materialName(p)}${parts ? `: ${programPartsWords(parts)}` : ''}. Shrinkage allowance: ${p.shrinkage}.`;
+  const named = programNamedWords(view?.run.named ?? []);
+  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${materialName(p)}${parts ? `: ${programPartsWords(parts)}${named ? `; ${named}` : ''}` : ''}. Shrinkage allowance: ${p.shrinkage}.`;
+}
+
+/**
+ * One line per shape a program names, for describe_piece: `- Shape "cup"` (a .named() shape or
+ * an op(node)'s id) or `- Smooth blend "stem_join"`. Each is a name a check report can name a
+ * part by, beside the library's parts, and the name flo2 maps a part to a component by.
+ */
+export function programNamedLines(named: readonly NamedShape[]): string[] {
+  return named.map((n) => `- ${n.kind === 'blend' ? 'Smooth blend' : 'Shape'} "${n.name}"`);
 }
 
 /** The dimensions each library part in a program reports, as describe_piece prints a tree's. */
