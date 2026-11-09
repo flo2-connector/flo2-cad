@@ -26804,6 +26804,9 @@ function insideMesh(m, p) {
   }
   return votes >= 2;
 }
+function undeclaredMetal(problems) {
+  return `the piece does not hold what its library parts declared: ${problems.join(" ")}`;
+}
 function declarationProblems(m, d) {
   const problems = [];
   if (d.band) {
@@ -26811,7 +26814,7 @@ function declarationProblems(m, d) {
     for (let deg = 0; deg < 360; deg += 45) {
       const a = deg * Math.PI / 180;
       if (!insideMesh(m, [Math.sin(a) * r, 0, Math.cos(a) * r])) {
-        problems.push(`the ring band (ringShank) has no metal ${deg}\xB0 round from the top: something cut it there. A band that is open or cut away is built with your own shapes, not ringShank.`);
+        problems.push(`the ring band (ringShank) has no metal ${deg}\xB0 round from the top: something cut it there. A band you cut into (openwork, an open shank) is built from the kernel instead: revolve its section round the Y axis, and leave \`on\` out of its setting, moving the setting onto the band yourself.`);
         break;
       }
     }
@@ -27292,7 +27295,7 @@ function renderPreview(items, views, opts) {
 
 // src/version.ts
 var ENGINE_NAME = "flo2-cad";
-var ENGINE_VERSION = "0.4.2";
+var ENGINE_VERSION = "0.4.3";
 var KERNEL_NAME = "manifold-3d";
 var KERNEL_VERSION = "3.5.4";
 
@@ -27820,7 +27823,8 @@ async function checkProgram(p, mode, limits) {
       stl = writeBinaryStl(mesh, castingHeader(p, pct));
       const problems2 = declarationProblems(mesh, decl);
       if (problems2.length) {
-        entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems2.join(" ")}`);
+        entries = couldNotRun(undeclaredMetal(problems2));
+        meshInfo = { triangles: mesh.triangles.length / 3, vertices: mesh.positions.length / 3, shells: 0, volumeMm3: meshVolume(mesh) };
       } else {
         const run = runChecks(stl, decl, choice.limits, { positions: r.runs[1].metal.positions }, [JEWELRY_CHECKS]);
         entries = run.entries;
@@ -27896,9 +27900,10 @@ async function checkProgram(p, mode, limits) {
 // src/program/guide.ts
 var PROGRAM_RULES = [
   'A program is JavaScript (strict mode) that builds the piece and ends with `return <solid>;`. Every bare number is a length in mm, or an angle in degrees where an angle is asked for; a string carries its unit ("1.2 mm"), and inches or any other unit are refused: convert them yourself.',
-  "It runs confined, in a separate process with a time and memory limit, and can reach nothing but the calls below: no require or import, no process, files, network or timers. It cannot wait for anything (no await). console.log lines come back with the reply. It is run once for a picture and twice for a check, so it must build the same piece every time; Math.random is seeded the same on every run.",
+  "It runs confined, in a separate process with a time and memory limit, and can reach nothing but the calls below: no require or import, no process, files, network or timers. It cannot wait for anything (no await). console.log lines come back with the reply. It is run once for a picture and twice for a check, so it must build the same piece every time; Math.random is seeded the same on every run. Both of a check's runs are finer than a picture's (the casting file, then the surface check's reference), so a check takes longer and needs more memory than a picture: a piece near the limits can draw and still not check.",
   "Frame: X across the hand, Y along the finger, Z up through the stone. A ring shank stands round the Y axis through the origin, and a stone setting stands upright on top of it at +Z. The checker measures them there, so a band may only turn about Y, and a setting may move anywhere and turn only about Z: anything else is refused, naming the part. scale() and hull() refuse a solid holding a library part.",
-  "A piece holds at most one ring shank and one stone setting; build anything beyond that from the kernel. A stone is never metal and never in a casting file."
+  "A piece holds at most one ring shank and one stone setting; build anything beyond that from the kernel. A stone is never metal and never in a casting file.",
+  "A library part declares where its metal is (a whole band, each prong, the bezel wall, a sheet), and the check measures the part there: a program that cuts that metal away is refused when it is started or changed, naming the part. A band you cut into (openwork, an open shank) is built from the kernel instead: revolve its section round the Y axis, and leave `on` out of its setting, moving the setting onto the band yourself."
 ];
 var PROGRAM_CALLS_GUIDE = [
   "LIBRARY (today's parts; each takes start_piece's settings and its defaults, checked the same way, and reads back its dimensions as `.dims`):",
@@ -28369,6 +28374,18 @@ var Session = class {
       throw e;
     }
   }
+  /**
+   * A program this call brings in that cuts away the metal a library part declares is refused
+   * now, in the words a check would use: no check could run on it (verify.ts), and the person
+   * would otherwise learn it a revision later, as a chat did in CAD step 7 (2026-11-09)
+   * (fact:root-cause-a-cut-library-part-was-said-only-at-the-check-2026-11-09). The test reads
+   * the picture's mesh just built; a check still tests the casting file, for a piece brought
+   * back in a file.
+   */
+  #refuseUndeclaredMetal(view, path) {
+    const problems = view.run.decl ? declarationProblems(view.run.metal, view.run.decl) : [];
+    if (problems.length) throw new CallError(path, `${undeclaredMetal(problems)} Nothing was changed.`);
+  }
   async #withProgram(p, lead, wantPreview, view) {
     const files = [];
     if (wantPreview) {
@@ -28413,6 +28430,7 @@ var Session = class {
     });
     checkCastStatement(p, "");
     const view = await this.#evaluate(p, "program");
+    this.#refuseUndeclaredMetal(view, "program");
     this.#piece = p;
     return this.#withProgram(p, "Started.", wantPreview, view);
   }
@@ -28475,6 +28493,7 @@ var Session = class {
     }
     validatePiece(next, "tree");
     const view = await this.#evaluate(next, program !== void 0 ? "program" : "tree.program");
+    if (program !== void 0) this.#refuseUndeclaredMetal(view, "program");
     this.#piece = next;
     return this.#withProgram(next, `Changed ${lines.join("; ")}.`, wantPreview, view);
   }

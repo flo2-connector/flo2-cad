@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   // READY. The program's clock starts now, here and in the engine (run.ts).
   await ready();
   const t0 = performance.now();
-  const A = new Arena();
+  // What a blend made, as plain meshes (not kernel objects), kept from one run for the next to take again.
   const kept: Map<string, import('../kernel/manifold.js').Mesh> = new Map();
   const blobs: Buffer[] = [];
   const blob = blobber(blobs);
@@ -155,6 +155,16 @@ async function main(): Promise<void> {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail('time', 'the program ran past its time limit', null, logs);
     const blendMeshes: BlendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
+    // EACH RUN HOLDS ITS OWN KERNEL OBJECTS, AND FREES THEM BEFORE THE NEXT RUN STARTS, as a tree's
+    // build frees its own when it ends (build.ts, buildPiece). One Arena for every run held the
+    // casting file's whole build in the kernel's heap while the finer reference was built on top
+    // of it, so a check needed both builds' memory at once: in CAD step 7 (2026-11-09) an openwork
+    // ring needing 179 MiB for its casting file and 436 MiB for its reference stopped at the
+    // 512 MiB limit, and needed 538 MiB; freed per run it peaks at 441 MiB
+    // (fact:root-cause-a-checks-two-builds-held-each-others-memory-in-one-child-2026-11-09,
+    // test/a-check-needs-its-larger-build.test.ts). What a run hands back is copied out of the
+    // kernel first: its meshes, its declarations, and a blend's mesh in `kept`.
+    const A = new Arena();
     const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx) as (bridge: (n: unknown, a: unknown) => string) => unknown;
@@ -199,6 +209,8 @@ async function main(): Promise<void> {
       if (e instanceof CallError) return fail('program', `${e.path}: ${e.problem}`, null, logs);
       return fail('engine', `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }
+    // A run that failed returned above, and the child then exits, which frees everything.
+    A.free();
   }
   await writeFrame({ ok: true, runs, blobs: blobs.map((b) => b.length), logs, ms: Math.round(performance.now() - t0) }, blobs);
 }

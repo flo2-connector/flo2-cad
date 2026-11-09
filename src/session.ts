@@ -49,6 +49,7 @@ import {
 } from './piece/tree.js';
 import { CABOCHON_EXAMPLE, programGuide } from './program/guide.js';
 import { ProgramFailed, programLimits, type ProgramLimits } from './program/run.js';
+import { declarationProblems, undeclaredMetal } from './program/verify.js';
 import { treeAsProgram } from './program/from-tree.js';
 import type { ViewName } from './render/render.js';
 import { MIME, callError, reply, type OutFile, type ToolReply } from './reply.js';
@@ -201,6 +202,19 @@ export class Session {
     }
   }
 
+  /**
+   * A program this call brings in that cuts away the metal a library part declares is refused
+   * now, in the words a check would use: no check could run on it (verify.ts), and the person
+   * would otherwise learn it a revision later, as a chat did in CAD step 7 (2026-11-09)
+   * (fact:root-cause-a-cut-library-part-was-said-only-at-the-check-2026-11-09). The test reads
+   * the picture's mesh just built; a check still tests the casting file, for a piece brought
+   * back in a file.
+   */
+  #refuseUndeclaredMetal(view: ProgramView, path: string): void {
+    const problems = view.run.decl ? declarationProblems(view.run.metal, view.run.decl) : [];
+    if (problems.length) throw new CallError(path, `${undeclaredMetal(problems)} Nothing was changed.`);
+  }
+
   async #withProgram(p: ProgramPiece, lead: string, wantPreview: boolean, view: ProgramView): Promise<ToolReply> {
     const files: OutFile[] = [];
     if (wantPreview) {
@@ -250,6 +264,7 @@ export class Session {
     // The shrinkage allowance is read against what the piece is cast in, and how.
     checkCastStatement(p as unknown as Record<string, unknown>, '');
     const view = await this.#evaluate(p, 'program');
+    this.#refuseUndeclaredMetal(view, 'program');
     this.#piece = p;
     return this.#withProgram(p, 'Started.', wantPreview, view);
   }
@@ -317,6 +332,7 @@ export class Session {
     // The shrinkage allowance is read against the metal it is for.
     validatePiece(next, 'tree');
     const view = await this.#evaluate(next, program !== undefined ? 'program' : 'tree.program');
+    if (program !== undefined) this.#refuseUndeclaredMetal(view, 'program');
     this.#piece = next;
     return this.#withProgram(next, `Changed ${lines.join('; ')}.`, wantPreview, view);
   }

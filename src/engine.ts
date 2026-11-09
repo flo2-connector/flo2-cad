@@ -25,7 +25,7 @@ import { isProgramPiece, type Piece, type ProgramPiece } from './piece/program.j
 import { findNode, readPiece, shrinkagePercent, type PieceTree, type PieceView, type TreeNode } from './piece/tree.js';
 import type { NamedShape, PartReport } from './program/library.js';
 import { ProgramFailed, programLimits, runProgram, type ProgramLimits } from './program/run.js';
-import { declarationProblems, type RunOut } from './program/verify.js';
+import { declarationProblems, undeclaredMetal, type RunOut } from './program/verify.js';
 import type { Mesh } from './kernel/manifold.js';
 import { lengthMm } from './units.js';
 import { reachDeg, sheetSpec } from './library/thicken.js';
@@ -744,7 +744,9 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
       stl = writeBinaryStl(mesh, castingHeader(p, pct));
       const problems = declarationProblems(mesh, decl);
       if (problems.length) {
-        entries = couldNotRun(`the piece does not hold what its library parts declared: ${problems.join(' ')}`);
+        entries = couldNotRun(undeclaredMetal(problems));
+        // No check ran, but the casting file was written: the report says the file it wrote.
+        meshInfo = { triangles: mesh.triangles.length / 3, vertices: mesh.positions.length / 3, shells: 0, volumeMm3: meshVolume(mesh) };
       } else {
         const run = runChecks(stl, decl, choice.limits, { positions: r.runs[1]!.metal.positions }, [JEWELRY_CHECKS]);
         entries = run.entries;

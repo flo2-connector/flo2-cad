@@ -70,7 +70,11 @@ describe("describe_piece names a program's own named shapes", () => {
 
   it("a named cutter is listed: the cut's faces carry its name, so a check can name a place on them", async () => {
     const s = new Session(QUICK);
-    await s.call('start_piece', { program: `${SHANK}\nreturn band.subtract(cylinder(0.6, 4, { center: true }).rotate([90, 0, 0]).translate([0, 0, 9.5]).named('hole'));`, name: 'cut', preview: false });
+    // A channel across the top of the band, 0.36 mm deep, leaving the band's own metal whole. Until
+    // 2026-11-09 this drilled a 0.6 mm hole through the band's middle, a piece no check could ever
+    // run on; start_piece now refuses that (test/a-cut-library-part-is-refused-when-built.test.ts).
+    const started = await s.call('start_piece', { program: `${SHANK}\nreturn band.subtract(cylinder(0.3, 4, { center: true }).rotate([90, 0, 0]).translate([0, 0, 10.2]).named('hole'));`, name: 'cut', preview: false });
+    assert.equal(started.isError, false, texts(started).join('\n'));
     assert.deepEqual(namedLines(texts(await s.call('describe_piece', {}))), ['Shape hole']);
   });
 

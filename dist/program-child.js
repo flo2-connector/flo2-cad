@@ -3744,7 +3744,6 @@ async function main() {
   const k = await kernel();
   await ready();
   const t0 = performance.now();
-  const A = new Arena();
   const kept = /* @__PURE__ */ new Map();
   const blobs = [];
   const blob = blobber(blobs);
@@ -3754,6 +3753,7 @@ async function main() {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail("time", "the program ran past its time limit", null, logs);
     const blendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
+    const A = new Arena();
     const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx);
@@ -3793,6 +3793,7 @@ async function main() {
       if (e instanceof CallError) return fail("program", `${e.path}: ${e.problem}`, null, logs);
       return fail("engine", `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }
+    A.free();
   }
   await writeFrame({ ok: true, runs, blobs: blobs.map((b) => b.length), logs, ms: Math.round(performance.now() - t0) }, blobs);
 }

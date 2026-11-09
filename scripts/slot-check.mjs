@@ -4,8 +4,11 @@
 // unless the reply comes within flo2's door (cap:the-casting-check-finishes-in-time-for-any-piece).
 // The file is a tree or a program piece; a program is evaluated in its own child process
 // inside the container, so this also proves that process starts and runs there.
-//   node scripts/slot-check.mjs <image> <tree.json> [door_s=60] [memory=1g] [must-pass]
-// With "must-pass", the answer must also be that every casting check passes.
+//   node scripts/slot-check.mjs <image> <tree.json> [door_s=60] [memory=1g] [must-pass | must-run]
+// With "must-pass", the answer must also be that every casting check passes. With "must-run",
+// every check must have run, whatever its verdict: a check the program's memory or time limit
+// stopped (COULD_NOT_RUN) fails it, as a piece whose check needed both its builds' memory at
+// once did on flo2-cad 0.4.2 (test/a-check-needs-its-larger-build.test.ts).
 // No dependencies: CI runs it beside the image, before any npm install.
 
 import { spawn } from 'node:child_process';
@@ -44,6 +47,7 @@ child.stdout.on('data', (d) => {
       const text = m.result?.content?.find((c) => c.type === 'text')?.text ?? '';
       if (m.result?.isError || m.error) finish(1, `check_piece failed after ${s.toFixed(1)} s: ${(m.error?.message ?? text).slice(0, 300)}`);
       else if (expect === 'must-pass' && !/Every casting check passes/.test(text)) finish(1, `check_piece on ${tree.name} answered in ${s.toFixed(1)} s, but not with a pass: ${text.slice(0, 400)}`);
+      else if (expect === 'must-run' && /could not run/i.test(text)) finish(1, `check_piece on ${tree.name} answered in ${s.toFixed(1)} s, but a check could not run: ${text.slice(0, 400)}`);
       else finish(s <= door ? 0 : 1, `check_piece on ${tree.name} answered in ${s.toFixed(1)} s (door ${door} s, ${memory}, 1 CPU)`);
     }
   }
