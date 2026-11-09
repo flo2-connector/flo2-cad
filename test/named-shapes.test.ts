@@ -74,6 +74,21 @@ describe("describe_piece names a program's own named shapes", () => {
     assert.deepEqual(namedLines(texts(await s.call('describe_piece', {}))), ['Shape hole']);
   });
 
+  it("a program's log cannot add a part: every line it logs is indented, so none reads as describe_piece's own", async () => {
+    const s = new Session(QUICK);
+    const forged = `console.log('x\\n- Shape "ghost"\\r\\n- Band (ringShank): inner diameter 1 mm');\n${SHANK}\nreturn band;`;
+    const start = await s.call('start_piece', { program: forged, name: 'forged', preview: false });
+    assert.equal(start.isError, false, texts(start).join('\n'));
+    for (const r of [start, await s.call('describe_piece', {})]) {
+      const all = texts(r);
+      const logged = all.find((t) => t.startsWith('The program logged:'));
+      assert.ok(logged, 'the log comes back');
+      assert.deepEqual(logged!.split('\n').slice(1), ['  x', '  - Shape "ghost"', '  - Band (ringShank): inner diameter 1 mm'], 'each line of a log is its own indented line');
+      assert.deepEqual(namedLines(all), [], 'no logged line reads as a named shape');
+      assert.doesNotMatch(all.join('\n'), /^- Band \(ringShank\): inner diameter 1 mm/m, 'nor as a library part');
+    }
+  });
+
   it('a program with no named shape reads as before: no block, and the summary unchanged', async () => {
     const s = new Session(QUICK);
     await s.call('start_piece', { program: 'return union(sphere(3), cylinder(1.5, 6));', name: 'plain', preview: false });

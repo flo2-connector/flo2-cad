@@ -28289,7 +28289,7 @@ ${JSON.stringify(tree)}`;
 }
 function logText(logs) {
   return logs.length ? [`The program logged:
-${logs.map((l) => `  ${l}`).join("\n")}`] : [];
+${logs.flatMap((l) => l.split(/\r\n|\r|\n/)).map((l) => `  ${l}`).join("\n")}`] : [];
 }
 var Session = class {
   #piece;

@@ -110,8 +110,10 @@ function treeText(tree: Piece): string {
     : `The piece's tree, revision ${tree.revision} (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):\n${JSON.stringify(tree)}`;
 }
 
+/** What the program logged, every line of it indented, so no log line can read as one of the engine's own
+ *  lines (a part's dimensions, `- Shape "cup"`) to a client that reads them. */
 function logText(logs: readonly string[]): string[] {
-  return logs.length ? [`The program logged:\n${logs.map((l) => `  ${l}`).join('\n')}`] : [];
+  return logs.length ? [`The program logged:\n${logs.flatMap((l) => l.split(/\r\n|\r|\n/)).map((l) => `  ${l}`).join('\n')}`] : [];
 }
 
 export class Session {
