@@ -272,18 +272,26 @@ export function insideMesh(m: MeshOut, p: P3): boolean {
   return votes >= 2;
 }
 
+/** What start_piece, change_piece and a check say of a piece that does not hold what its library parts declared. */
+export function undeclaredMetal(problems: string[]): string {
+  return `the piece does not hold what its library parts declared: ${problems.join(' ')}`;
+}
+
 /**
  * Every declaration that has no metal where it says, in plain words. Empty when the
- * declarations match the piece. A check of a program's piece runs only when this is empty.
+ * declarations match the piece. A check of a program's piece runs only when this is empty,
+ * and start_piece and change_piece refuse a program of their own call that is not.
  */
 export function declarationProblems(m: MeshOut, d: FeatureDecl): string[] {
   const problems: string[] = [];
   if (d.band) {
+    // Mid-band: half the band's thickness inside its metal, far past a picture's 0.03 mm, so the
+    // picture's mesh start_piece and change_piece test and the casting file's the check tests agree.
     const r = (d.band.innerRadius + d.band.outerRadius) / 2;
     for (let deg = 0; deg < 360; deg += 45) {
       const a = (deg * Math.PI) / 180;
       if (!insideMesh(m, [Math.sin(a) * r, 0, Math.cos(a) * r])) {
-        problems.push(`the ring band (ringShank) has no metal ${deg}° round from the top: something cut it there. A band that is open or cut away is built with your own shapes, not ringShank.`);
+        problems.push(`the ring band (ringShank) has no metal ${deg}° round from the top: something cut it there. A band you cut into (openwork, an open shank) is built from the kernel instead: revolve its section round the Y axis, and leave \`on\` out of its setting, moving the setting onto the band yourself.`);
         break;
       }
     }

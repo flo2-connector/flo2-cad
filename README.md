@@ -147,6 +147,14 @@ named `smoothUnion`), and the summary every reply leads with says them (since 0.
 report names a place by, so a part can be mapped to a component by them. A named cutter is listed too: the cut's
 faces carry its name.
 
+**A library part keeps the metal it declares.** `ringShank` declares a whole band, `prongHead` each prong's column,
+`bezel` its wall and `thicken` its sheet, and a check measures each part there. A program that cuts that metal away is
+refused by `start_piece` and `change_piece` in the words a check would use, and nothing changes (since 0.4.3; before,
+the piece was kept and drawn, and only its check said so, with every check reading `COULD_NOT_RUN`). A band you cut
+into (openwork, an open shank) is built from the kernel instead: revolve its section round the Y axis, and leave
+`on` out of its setting. A cut that leaves the declared metal whole (a groove, a channel) is no cut of it. A check
+still tests a piece brought back in a file, and its report then gives the casting file's real triangles.
+
 **What a program calls** (`src/program/library.ts`; `describe_piece` prints the full list):
 
 - the **library**, today's parts as functions: `ringShank`, `roundStone`, `emeraldStone`, `cabochon` (from its
@@ -187,7 +195,11 @@ from its shape: undeclared, a stone is checked as faceted.
 
 **Limits.** Each evaluation gets **20 s** and **512 MiB** by default; `FLO2_CAD_PROGRAM_SECONDS` and
 `FLO2_CAD_PROGRAM_MEMORY_MIB` change them for a host's slot. A check runs the program twice in one evaluation (the
-casting file's tolerance and the finer reference), so the limit covers both. The clock starts when the evaluation's
+casting file's tolerance and the finer reference), so the limit covers both. Each run frees the kernel's objects
+before the next starts (since 0.4.3), so a check needs the memory of its larger run, not of both together: measured on
+an openwork ring, 179 MiB for the casting file and 436 MiB for the reference, and 441 MiB for the check, which before
+needed 538 MiB and stopped at 512. Both runs are finer than a picture's (89 MiB for that ring), so a piece near the
+limit can draw and still not check. The clock starts when the evaluation's
 process is ready (Node and the kernel loaded, about 0.15 s), not when it is started, and a program that does not parse
 is refused before then, so a busy machine's slow start is never counted as the program's; the start has its own
 bound (10 s), past which the engine says it could not start. Hitting a limit is a plain refusal: "the
@@ -378,7 +390,7 @@ declare.
   left out never means none.
 
 **What a casting file says about itself.** The STL's header reads, for example,
-`flo2-cad 0.4.2 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
+`flo2-cad 0.4.3 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
 versions, the units, the revision, the shrinkage allowance, the metal by its fineness mark (Ag925, Au585Y, Au750Y,
 Pt950) or the material by name, the process and the piece. In 80 bytes the material, the process and the name may be
 cut, marked `~`. The 3MF says each in full as metadata of its own (`flo2:engine`, `flo2:kernel`, `flo2:piece`,
@@ -435,7 +447,7 @@ The program-built solitaire is the template's mesh: the same triangle count, vol
 
 ```sh
 node dist/main.js                 # MCP on stdio; needs only Node 24
-node dist/main.js --version       # flo2-cad 0.4.2 (manifold-3d 3.5.4)
+node dist/main.js --version       # flo2-cad 0.4.3 (manifold-3d 3.5.4)
 node dist/main.js --list-tools    # the published tool list as JSON
 
 docker build -t flo2-cad .

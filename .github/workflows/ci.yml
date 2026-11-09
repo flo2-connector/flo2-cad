@@ -57,3 +57,5 @@ jobs:
         run: node scripts/slot-check.mjs flo2-cad:ci test/fixtures/moonstone-openwork-ring.tree.json 60 1g
       - name: A piece written as a program is evaluated in its own confined process inside the image, and checked within the door at 768 MiB
         run: node scripts/slot-check.mjs flo2-cad:ci test/fixtures/cabochon-in-bezel.tree.json 60 768m must-pass
+      - name: A heavy program's check, its two builds in one child, runs to a verdict at 768 MiB within flo2's 180 s check door
+        run: node scripts/slot-check.mjs flo2-cad:ci test/fixtures/openwork-ring-with-swept-scrolls.program.json 180 768m must-run
