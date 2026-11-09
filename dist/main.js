@@ -26759,11 +26759,24 @@ function readParts(v) {
     return c;
   });
 }
+function readNamed(v) {
+  if (v === void 0) return [];
+  const seen = /* @__PURE__ */ new Set();
+  return arr(v, "the named shapes", 4096).map((x) => {
+    if (!isObj(x)) throw new Error("a named shape is malformed");
+    const name = str(x["name"], "a named shape", 40);
+    if (!ID.test(name)) throw new Error("a named shape has no proper name");
+    if (seen.has(name)) throw new Error("a named shape is listed twice");
+    seen.add(name);
+    if (x["kind"] !== "shape" && x["kind"] !== "blend") throw new Error("a named shape is of no known kind");
+    return { name, kind: x["kind"] };
+  });
+}
 function readRun(v, blobs, spec) {
   if (!isObj(v)) throw new Error("a run is missing");
   const metal = readMesh(v["metal"], blobs, "the piece", spec.scale, !!spec.positionsOnly);
   if (spec.positionsOnly) return { metal };
-  const out = { metal, decl: readDecl(v["decl"], blobs, spec.scale), parts: readParts(v["parts"]) };
+  const out = { metal, decl: readDecl(v["decl"], blobs, spec.scale), parts: readParts(v["parts"]), named: readNamed(v["named"]) };
   if (out.decl.faces && out.decl.faces.of.length !== metal.triangles.length / 3) throw new Error("the faces' parts do not match the piece's triangles");
   if (spec.wantStone && v["stone"] !== void 0) out.stone = readMesh(v["stone"], blobs, "the stone", spec.scale, false);
   return out;
@@ -27279,7 +27292,7 @@ function renderPreview(items, views, opts) {
 
 // src/version.ts
 var ENGINE_NAME = "flo2-cad";
-var ENGINE_VERSION = "0.4.1";
+var ENGINE_VERSION = "0.4.2";
 var KERNEL_NAME = "manifold-3d";
 var KERNEL_VERSION = "3.5.4";
 
@@ -27707,9 +27720,16 @@ function programPartsWords(parts) {
   });
   return words.length ? words.join("; ") : "shapes of its own (no library part)";
 }
+function programNamedWords(named) {
+  return named.length ? `the shapes it names: ${named.map((n) => `"${n.name}"`).join(", ")}` : "";
+}
 function programSummary(p, view) {
   const parts = view?.run.parts;
-  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${materialName(p)}${parts ? `: ${programPartsWords(parts)}` : ""}. Shrinkage allowance: ${p.shrinkage}.`;
+  const named = programNamedWords(view?.run.named ?? []);
+  return `Piece "${p.name}", revision ${p.revision}, written as a program, in ${materialName(p)}${parts ? `: ${programPartsWords(parts)}${named ? `; ${named}` : ""}` : ""}. Shrinkage allowance: ${p.shrinkage}.`;
+}
+function programNamedLines(named) {
+  return named.map((n) => `- ${n.kind === "blend" ? "Smooth blend" : "Shape"} "${n.name}"`);
 }
 function programDimensionLines(parts) {
   const out = [];
@@ -27894,7 +27914,7 @@ var PROGRAM_CALLS_GUIDE = [
   '- circle(r), rect(x, y, { center }), polygon([[x, y], ...]) -> 2D profiles, with .offset(d, { join: "round" | "square" | "miter" }), .add, .subtract, .intersect, .translate([x, y]), .rotate(deg), .scale(f), .mirror([x, y]), .hull(), .bounds(), .area().',
   "- extrude(profile, h, { twist, scale_top, center }), revolve(profile, { degrees }) (x is the distance from the Z axis, y the height).",
   "- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions).",
-  '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
+  '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it, and describe_piece lists it among the parts), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
   "- segments(r): how many straight pieces a circle of radius r gets at this build's fineness. Draw curves you compute yourself with it, so the casting file is as smooth as the check asks."
 ];
 function programGuide(limits) {
@@ -28269,7 +28289,7 @@ ${JSON.stringify(tree)}`;
 }
 function logText(logs) {
   return logs.length ? [`The program logged:
-${logs.map((l) => `  ${l}`).join("\n")}`] : [];
+${logs.flatMap((l) => l.split(/\r\n|\r|\n/)).map((l) => `  ${l}`).join("\n")}`] : [];
 }
 var Session = class {
   #piece;
@@ -28577,10 +28597,13 @@ ${programGuide(this.#limits)}`,
     const n = await describeProgram(p, view);
     const parts = view.run.parts ?? [];
     const dims = programDimensionLines(parts);
+    const named = programNamedLines(view.run.named ?? []);
     const texts = [
       programSummary(p, view),
       ...dims.length ? [`Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:
 ${dims.join("\n")}`] : [],
+      ...named.length ? [`Shapes the program names (by .named("..."), a smooth blend's name, or an op node's id), each a part of the piece beside its library parts; a check report names a place on each by the same name:
+${named.join("\n")}`] : [],
       `Overall size ${n.size[0]} \xD7 ${n.size[1]} \xD7 ${n.size[2]} mm (across the hand \xD7 along the finger \xD7 height). Metal volume about ${n.volumeMm3} mm\xB3 (any stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join("; ")}.`,
       ...castingLimitsTexts(p, n.size),
       `This piece is written as a program. Change it by passing the whole edited program as "program" to change_piece; set takes only ${PROGRAM_PIECE_SETTINGS.join(", ")}. What a program can call:

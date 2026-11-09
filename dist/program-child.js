@@ -2718,7 +2718,7 @@ var PROGRAM_CALLS = [
   "p_bounds",
   "p_area"
 ];
-var emptyDecls = () => ({ prongs: [], sheets: [], blends: [], added: [] });
+var emptyDecls = () => ({ prongs: [], sheets: [], blends: [], added: [], names: [] });
 var NAME_ID = /^[a-z][a-z0-9_]{0,39}$/;
 function fixed(x) {
   const s = x.toFixed(9).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
@@ -2799,7 +2799,8 @@ var ProgramLibrary = class {
       const all = rec.stones.length === 1 ? rec.stones[0] : this.#A.t(this.#k.Manifold.union(rec.stones));
       stone = polygonsToMesh(scale !== 1 ? this.#A.t(all.scale(scale)) : all);
     }
-    return { metal: done.mesh, ...stone ? { stone } : {}, decl, parts: rec.parts };
+    const named = d.names.filter((n, i) => d.names.findIndex((x) => x.name === n.name) === i);
+    return { metal: done.mesh, ...stone ? { stone } : {}, decl, parts: rec.parts, named };
   }
   // ------------------------------------------------------------------ handles
   #add(r) {
@@ -2914,6 +2915,7 @@ var ProgramLibrary = class {
     if (addedAs) {
       const bb = m.boundingBox();
       d.added.push({ id: addedAs, min: [...bb.min], max: [...bb.max] });
+      d.names.push({ name: addedAs, kind: "shape" });
       this.#names?.claim(m, { name: addedAs, kind: "shape" });
     }
     return this.#newSolid(m, d, { node });
@@ -3005,7 +3007,7 @@ var ProgramLibrary = class {
         const cut = a.slice(1).map((s, i) => this.#solid(s, at("difference", i + 1)));
         if (!cut.length) return keep;
         const cutter = cut.length === 1 ? cut[0].m : A.t(Manifold.union(cut.map((r) => r.m)));
-        const d = { ...keep.d, prongs: [...keep.d.prongs], sheets: [...keep.d.sheets], added: [...keep.d.added], blends: [...keep.d.blends, ...cut.flatMap((r) => r.d.blends)] };
+        const d = { ...keep.d, prongs: [...keep.d.prongs], sheets: [...keep.d.sheets], added: [...keep.d.added], blends: [...keep.d.blends, ...cut.flatMap((r) => r.d.blends)], names: [...keep.d.names, ...cut.flatMap((r) => r.d.names)] };
         return this.#newSolid(keep.m.subtract(cutter), d, { stones: keep.stones, parts: keep.parts });
       }
       case "smoothUnion": {
@@ -3027,7 +3029,10 @@ var ProgramLibrary = class {
         });
         const node = { id: label ?? this.#id("blend"), op: "smooth_union", params: { radius: mmText(radius) }, children: rs.map((r) => r.node) };
         const made = this.#fromNode(node, "smoothUnion");
-        if (label) this.#names?.claim(made.m, { name: label, kind: "shape" });
+        if (label) {
+          this.#names?.claim(made.m, { name: label, kind: "shape" });
+          made.d.names.push({ name: label, kind: "blend" });
+        }
         return made;
       }
       case "op": {
@@ -3127,7 +3132,7 @@ var ProgramLibrary = class {
         const s = Array.isArray(a[1]) ? a[1] : [a[1], a[1], a[1]];
         if (s.length !== 3 || !s.every((x) => typeof x === "number" && Number.isFinite(x) && x > 0 && x < 1e3)) throw new CallError("scale", "a factor, or [x, y, z] factors, each more than 0.");
         this.#plain(r, "scale", "change the size it was built to and is checked against; build it at the size you want instead", true);
-        const d = { ...emptyDecls(), added: r.d.added.map((b) => boxThrough(b, [s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0])) };
+        const d = { ...emptyDecls(), added: r.d.added.map((b) => boxThrough(b, [s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0])), names: [...r.d.names] };
         return this.#newSolid(r.m.scale(s), d);
       }
       case "named": {
@@ -3135,7 +3140,7 @@ var ProgramLibrary = class {
         const id = nameId(a[1], "named.name");
         const bb = r.m.boundingBox();
         this.#names?.claim(r.m, { name: id, kind: "shape" }, new Set(r.d.added.map((x) => x.id)));
-        return { ...r, d: { ...r.d, added: [...r.d.added, { id, min: [...bb.min], max: [...bb.max] }] } };
+        return { ...r, d: { ...r.d, added: [...r.d.added, { id, min: [...bb.min], max: [...bb.max] }], names: [...r.d.names, { name: id, kind: "shape" }] } };
       }
       case "bounds": {
         const b = this.#solid(a[0], "bounds").m.boundingBox();
@@ -3211,7 +3216,8 @@ var ProgramLibrary = class {
       ...d.bezel ? { bezel: { ...d.bezel, outer: ring(d.bezel.outer), zBottom: d.bezel.zBottom + tz } } : {},
       sheets: d.sheets.map((s) => ({ ...s, points: s.points.map((p) => applyPoint2(M, p)), normals: s.normals.map((n) => applyDir(M, n)) })),
       blends: d.blends.map((b) => ({ ...b, m: compose(M, b.m) })),
-      added: d.added.map((b) => boxThrough(b, M))
+      added: d.added.map((b) => boxThrough(b, M)),
+      names: [...d.names]
     };
     const A = this.#A;
     return {
@@ -3478,6 +3484,7 @@ function mergeDecls(ds, how) {
     out.sheets.push(...d.sheets);
     out.blends.push(...d.blends);
     out.added.push(...d.added);
+    out.names.push(...d.names);
   }
   return out;
 }
@@ -3779,7 +3786,7 @@ async function main() {
       runs.push({
         metal: meshOut2(res.metal, blob, run.positionsOnly),
         ...run.wantStone && res.stone ? { stone: meshOut2(res.stone, blob) } : {},
-        ...run.positionsOnly ? {} : { decl: { ...decl, blends, ...faces ? { faces } : {} }, parts: res.parts }
+        ...run.positionsOnly ? {} : { decl: { ...decl, blends, ...faces ? { faces } : {} }, parts: res.parts, named: res.named }
       });
     } catch (e) {
       if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs);

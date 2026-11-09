@@ -24,7 +24,7 @@ export const PROGRAM_CALLS_GUIDE = [
   '- circle(r), rect(x, y, { center }), polygon([[x, y], ...]) -> 2D profiles, with .offset(d, { join: "round" | "square" | "miter" }), .add, .subtract, .intersect, .translate([x, y]), .rotate(deg), .scale(f), .mirror([x, y]), .hull(), .bounds(), .area().',
   '- extrude(profile, h, { twist, scale_top, center }), revolve(profile, { degrees }) (x is the distance from the Z axis, y the height).',
   '- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions).',
-  '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
+  '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it, and describe_piece lists it among the parts), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
   '- segments(r): how many straight pieces a circle of radius r gets at this build\'s fineness. Draw curves you compute yourself with it, so the casting file is as smooth as the check asks.',
 ];
 

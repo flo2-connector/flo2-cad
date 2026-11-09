@@ -16,6 +16,7 @@ import {
   preview,
   previewProgram,
   programDimensionLines,
+  programNamedLines,
   programSeatLines,
   programSummary,
   seatLine,
@@ -109,8 +110,10 @@ function treeText(tree: Piece): string {
     : `The piece's tree, revision ${tree.revision} (saved as ${tree.name}.tree.json; pass it back as "tree" to pick this piece up in a new conversation):\n${JSON.stringify(tree)}`;
 }
 
+/** What the program logged, every line of it indented, so no log line can read as one of the engine's own
+ *  lines (a part's dimensions, `- Shape "cup"`) to a client that reads them. */
 function logText(logs: readonly string[]): string[] {
-  return logs.length ? [`The program logged:\n${logs.map((l) => `  ${l}`).join('\n')}`] : [];
+  return logs.length ? [`The program logged:\n${logs.flatMap((l) => l.split(/\r\n|\r|\n/)).map((l) => `  ${l}`).join('\n')}`] : [];
 }
 
 export class Session {
@@ -434,9 +437,11 @@ export class Session {
     const n = await describeProgram(p, view);
     const parts = view.run.parts ?? [];
     const dims = programDimensionLines(parts);
+    const named = programNamedLines(view.run.named ?? []);
     const texts = [
       programSummary(p, view),
       ...(dims.length ? [`Dimensions as built by its library parts (the finished piece, before any shrinkage allowance), each in mm. Work a fit, a weight or a cost from these, never from an assumed size:\n${dims.join('\n')}`] : []),
+      ...(named.length ? [`Shapes the program names (by .named("..."), a smooth blend's name, or an op node's id), each a part of the piece beside its library parts; a check report names a place on each by the same name:\n${named.join('\n')}`] : []),
       `Overall size ${n.size[0]} × ${n.size[1]} × ${n.size[2]} mm (across the hand × along the finger × height). Metal volume about ${n.volumeMm3} mm³ (any stone excluded). Estimated weight: ${n.weights.map((w) => `${w.grams} g in ${w.metal}`).join('; ')}.`,
       ...castingLimitsTexts(p, n.size),
       `This piece is written as a program. Change it by passing the whole edited program as "program" to change_piece; set takes only ${PROGRAM_PIECE_SETTINGS.join(', ')}. What a program can call:\n${programGuide(this.#limits)}\nAn example, a cabochon in a bezel:\n${CABOCHON_EXAMPLE}`,

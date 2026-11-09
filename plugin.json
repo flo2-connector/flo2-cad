@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "flo2-cad",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Design pieces for casting with an agent, jewelry first: a ring in a named size with a prong or bezel head, round or emerald-cut stones sized from their grading report, or any shape written as a program. Each piece is checked against cited casting limits that follow its material, process and size (a named limit profile, or the caster's own limits with their sources) before any STL or 3MF is released; with no cited limits, there is no verdict.",
   "license": "Apache-2.0",
   "author": {

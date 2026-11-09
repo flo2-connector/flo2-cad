@@ -192,7 +192,7 @@ async function main(): Promise<void> {
       runs.push({
         metal: meshOut(res.metal, blob, run.positionsOnly),
         ...(run.wantStone && res.stone ? { stone: meshOut(res.stone, blob) } : {}),
-        ...(run.positionsOnly ? {} : { decl: { ...decl, blends, ...(faces ? { faces } : {}) }, parts: res.parts satisfies PartReport[] }),
+        ...(run.positionsOnly ? {} : { decl: { ...decl, blends, ...(faces ? { faces } : {}) }, parts: res.parts satisfies PartReport[], named: res.named }),
       });
     } catch (e) {
       if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs);
