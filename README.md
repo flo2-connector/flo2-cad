@@ -199,7 +199,13 @@ casting file's tolerance and the finer reference), so the limit covers both. Eac
 before the next starts (since 0.4.3), so a check needs the memory of its larger run, not of both together: measured on
 an openwork ring, 179 MiB for the casting file and 436 MiB for the reference, and 441 MiB for the check, which before
 needed 538 MiB and stopped at 512. Both runs are finer than a picture's (89 MiB for that ring), so a piece near the
-limit can draw and still not check. The clock starts when the evaluation's
+limit can draw and still not check. A `sweep` is a tube along its points (since 0.4.4): rings round each point, mitred at
+each joint, a half ball on each open end, split into runs that are unioned only where a mitre would not hold the round
+wire (a joint sharper than the casting file's tolerance allows, a bend tighter than the wire, or the wire coming back
+within its own width). Before, it was the hull of a ball at each end of every segment, all unioned, every ball kept until
+the build ended: about 8 times a tube's triangles, so one 200-point wire of radius 0.6 mm needed 556 MiB at the
+reference, and four step-7 pieces could not be checked. A check that still runs out of memory says the kind of call it
+ran out in and the heaviest calls before it, and advises how to make the piece lighter. The clock starts when the evaluation's
 process is ready (Node and the kernel loaded, about 0.15 s), not when it is started, and a program that does not parse
 is refused before then, so a busy machine's slow start is never counted as the program's; the start has its own
 bound (10 s), past which the engine says it could not start. Hitting a limit is a plain refusal: "the
@@ -390,7 +396,7 @@ declare.
   left out never means none.
 
 **What a casting file says about itself.** The STL's header reads, for example,
-`flo2-cad 0.4.3 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
+`flo2-cad 0.4.4 manifold-3d 3.5.4 mm r3 shrink=off Au585Y lost_wax moonstone-ope~`: the engine and the kernel with their
 versions, the units, the revision, the shrinkage allowance, the metal by its fineness mark (Ag925, Au585Y, Au750Y,
 Pt950) or the material by name, the process and the piece. In 80 bytes the material, the process and the name may be
 cut, marked `~`. The 3MF says each in full as metadata of its own (`flo2:engine`, `flo2:kernel`, `flo2:piece`,
@@ -447,7 +453,7 @@ The program-built solitaire is the template's mesh: the same triangle count, vol
 
 ```sh
 node dist/main.js                 # MCP on stdio; needs only Node 24
-node dist/main.js --version       # flo2-cad 0.4.3 (manifold-3d 3.5.4)
+node dist/main.js --version       # flo2-cad 0.4.4 (manifold-3d 3.5.4)
 node dist/main.js --list-tools    # the published tool list as JSON
 
 docker build -t flo2-cad .

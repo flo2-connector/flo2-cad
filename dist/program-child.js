@@ -283,38 +283,38 @@ function split(v, path, example) {
   return { num, unit: m[2], text: v };
 }
 function lengthMm(v, path) {
-  const { num, unit, text } = split(v, path, "1.2 mm");
-  if (unit === void 0) {
+  const { num, unit: unit2, text } = split(v, path, "1.2 mm");
+  if (unit2 === void 0) {
     throw new CallError(path, `"${text}" has no unit. Write "${num} mm" if you mean millimetres.`);
   }
-  if (unit === "mm") return num;
-  const f = FOREIGN_LENGTH[unit] ?? FOREIGN_LENGTH[unit.toLowerCase()];
+  if (unit2 === "mm") return num;
+  const f = FOREIGN_LENGTH[unit2] ?? FOREIGN_LENGTH[unit2.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text}" is in ${unit}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num} ${unit} \xD7 ${f} = ${round(num * f)} mm.`
+      `"${text}" is in ${unit2}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num} ${unit2} \xD7 ${f} = ${round(num * f)} mm.`
     );
   }
-  throw new CallError(path, `"${unit}" is not a length unit this engine takes; write the length in mm, for example "1.2 mm".`);
+  throw new CallError(path, `"${unit2}" is not a length unit this engine takes; write the length in mm, for example "1.2 mm".`);
 }
 function angleDeg(v, path) {
-  const { num, unit, text } = split(v, path, "30 deg");
-  if (unit === void 0) {
+  const { num, unit: unit2, text } = split(v, path, "30 deg");
+  if (unit2 === void 0) {
     throw new CallError(path, `"${text}" has no unit. Write "${num} deg" if you mean degrees.`);
   }
-  if (unit === "deg" || unit === "\xB0" || unit === "degrees") return num;
-  const f = FOREIGN_ANGLE[unit.toLowerCase()];
+  if (unit2 === "deg" || unit2 === "\xB0" || unit2 === "degrees") return num;
+  const f = FOREIGN_ANGLE[unit2.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text}" is in ${unit}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num} ${unit} = ${round(num * f)} deg.`
+      `"${text}" is in ${unit2}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num} ${unit2} = ${round(num * f)} deg.`
     );
   }
-  throw new CallError(path, `"${unit}" is not an angle unit this engine takes; write the angle in deg, for example "30 deg".`);
+  throw new CallError(path, `"${unit2}" is not an angle unit this engine takes; write the angle in deg, for example "30 deg".`);
 }
 function percent(v, path) {
-  const { num, unit, text } = split(v, path, "1.5 %");
-  if (unit !== "%") {
+  const { num, unit: unit2, text } = split(v, path, "1.5 %");
+  if (unit2 !== "%") {
     throw new CallError(path, `"${text}" must be a percentage written with "%", for example "1.5 %".`);
   }
   return num;
@@ -329,14 +329,14 @@ function anyQuantity(v, path) {
   if (typeof v !== "string") return;
   const m = QUANTITY.exec(v);
   if (!m) return;
-  const unit = m[2];
-  if (unit === void 0) {
+  const unit2 = m[2];
+  if (unit2 === void 0) {
     throw new CallError(path, `"${v}" has no unit. Every measurement must say its unit: "mm" for lengths, "deg" for angles.`);
   }
-  if (unit === "mm" || unit === "deg" || unit === "\xB0" || unit === "%") return;
-  if (FOREIGN_LENGTH[unit] !== void 0 || FOREIGN_LENGTH[unit.toLowerCase()] !== void 0) lengthMm(v, path);
-  if (FOREIGN_ANGLE[unit.toLowerCase()] !== void 0) angleDeg(v, path);
-  throw new CallError(path, `"${unit}" is not a unit this engine takes; lengths are in mm and angles in deg.`);
+  if (unit2 === "mm" || unit2 === "deg" || unit2 === "\xB0" || unit2 === "%") return;
+  if (FOREIGN_LENGTH[unit2] !== void 0 || FOREIGN_LENGTH[unit2.toLowerCase()] !== void 0) lengthMm(v, path);
+  if (FOREIGN_ANGLE[unit2.toLowerCase()] !== void 0) angleDeg(v, path);
+  throw new CallError(path, `"${unit2}" is not a unit this engine takes; lengths are in mm and angles in deg.`);
 }
 var UK_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 function ringInnerDiameterMm(v, path) {
@@ -391,8 +391,8 @@ function parseFraction(t) {
   return null;
 }
 function caratText(v, path) {
-  const { num, unit, text } = split(v, path, "2.00 ct");
-  if (unit !== "ct") {
+  const { num, unit: unit2, text } = split(v, path, "2.00 ct");
+  if (unit2 !== "ct") {
     throw new CallError(path, `"${text}" must be a carat weight written with "ct", for example "2.00 ct". It is kept for reference only; the stone is sized from its measured length, width and depth.`);
   }
   if (num <= 0 || num > 50) throw new CallError(path, `${num} ct is not a plausible weight for one stone.`);
@@ -1891,8 +1891,8 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
       }
       const [, a, b] = side[0];
       const mid = [(P[a * 3] + P[b * 3]) / 2, (P[a * 3 + 1] + P[b * 3 + 1]) / 2, (P[a * 3 + 2] + P[b * 3 + 2]) / 2];
-      const len = Math.sqrt(dist2(a, b));
-      const limit = Math.min(len, 8 * w);
+      const len2 = Math.sqrt(dist2(a, b));
+      const limit = Math.min(len2, 8 * w);
       const from = side.map(([t]) => normal(T[t * 3], T[t * 3 + 1], T[t * 3 + 2]));
       const mean = [0, 0, 0];
       for (const n of from) mean[0] += n[0], mean[1] += n[1], mean[2] += n[2];
@@ -1907,7 +1907,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
         found = true;
         const da = Math.hypot(out[0] - P[a * 3], out[1] - P[a * 3 + 1], out[2] - P[a * 3 + 2]);
         const db = Math.hypot(out[0] - P[b * 3], out[1] - P[b * 3 + 1], out[2] - P[b * 3 + 2]);
-        if (da < 0.1 * len || db < 0.1 * len) return;
+        if (da < 0.1 * len2 || db < 0.1 * len2) return;
         const m2 = P.length / 3;
         P.push(out[0], out[1], out[2]);
         if (side.some(([, p, q, r], i) => turned(p, m2, r, from[i]) || turned(m2, q, r, from[i]))) turnedOver = true;
@@ -1969,6 +1969,208 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
 var EXPORT_TOL = 45e-4;
 var PREVIEW_TOL = 0.03;
 
+// src/library/sweep.ts
+var sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+var mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+var dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+var len = (a) => Math.hypot(a[0], a[1], a[2]);
+var unit = (a) => mul(a, 1 / len(a));
+function turn(v, from, to) {
+  const axis = cross(from, to);
+  const s = len(axis), c = dot(from, to);
+  if (s < 1e-12) return c > 0 ? v : mul(v, -1);
+  const k = mul(axis, 1 / s);
+  return add(add(mul(v, c), mul(cross(k, v), s)), mul(k, dot(k, v) * (1 - c)));
+}
+function segmentGap(a, b, c, d) {
+  const u = sub(b, a), v = sub(d, c), w = sub(a, c);
+  const A = dot(u, u), B = dot(u, v), C = dot(v, v), D3 = dot(u, w), E = dot(v, w);
+  const den = A * C - B * B;
+  let s = den > 1e-18 ? Math.min(1, Math.max(0, (B * E - C * D3) / den)) : 0;
+  let t = C > 1e-18 ? (B * s + E) / C : 0;
+  if (t < 0) {
+    t = 0;
+    s = A > 1e-18 ? Math.min(1, Math.max(0, -D3 / A)) : 0;
+  } else if (t > 1) {
+    t = 1;
+    s = A > 1e-18 ? Math.min(1, Math.max(0, (B - D3) / A)) : 0;
+  }
+  return len(sub(add(a, mul(u, s)), add(c, mul(v, t))));
+}
+function mitreBreaks(p, closed, r, tol) {
+  const m = p.length, breaks = /* @__PURE__ */ new Set();
+  for (let i = closed ? 0 : 1; i < (closed ? m : m - 1); i++) {
+    const a = p[(i - 1 + m) % m], b = p[i], c = p[(i + 1) % m];
+    const u = sub(b, a), v = sub(c, b);
+    const lu = len(u), lv = len(v);
+    const theta = Math.acos(Math.max(-1, Math.min(1, dot(u, v) / (lu * lv))));
+    const crosses = r * Math.tan(theta / 2) >= 0.5 * Math.min(lu, lv);
+    const standsOff = r * (1 / Math.cos(theta / 2) - 1) > tol;
+    if (theta > 1e-9 && (crosses || standsOff || theta > Math.PI / 2)) breaks.add(i);
+  }
+  return breaks;
+}
+function runsOf(p, closed, r, breaks) {
+  const m = p.length;
+  const start = closed && breaks.size ? Math.min(...breaks) : 0;
+  const order = closed ? [...Array(m + 1).keys()].map((i) => (start + i) % m) : [...p.keys()];
+  const near = 2 * r * (1 + 1e-6);
+  const runs = [];
+  let cur = [order[0]];
+  let arc = [0];
+  let cellsOf = /* @__PURE__ */ new Map();
+  let longest = 0;
+  for (let i = 1; i < order.length; i++) longest = Math.max(longest, len(sub(p[order[i]], p[order[i - 1]])));
+  const cell = near + longest;
+  const key = (q) => `${Math.floor(q[0] / cell)},${Math.floor(q[1] / cell)},${Math.floor(q[2] / cell)}`;
+  const addSeg = (j) => {
+    const a = p[cur[j]], b = p[cur[j + 1]];
+    const k = key(mul(add(a, b), 0.5));
+    (cellsOf.get(k) ?? cellsOf.set(k, []).get(k)).push(j);
+  };
+  const tooNear = (a, b, arcA) => {
+    const mid = mul(add(a, b), 0.5);
+    const [cx, cy, cz] = [Math.floor(mid[0] / cell), Math.floor(mid[1] / cell), Math.floor(mid[2] / cell)];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      for (const j of cellsOf.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+        if (arcA - arc[j + 1] <= Math.PI * r * 1.05) continue;
+        if (segmentGap(a, b, p[cur[j]], p[cur[j + 1]]) < near) return true;
+      }
+    }
+    return false;
+  };
+  for (let i = 1; i < order.length; i++) {
+    const a = p[order[i - 1]], b = p[order[i]];
+    const arcA = arc[arc.length - 1];
+    if (cur.length > 1 && tooNear(a, b, arcA)) {
+      runs.push({ pts: cur, closed: false });
+      cur = [order[i - 1]];
+      arc = [0];
+      cellsOf = /* @__PURE__ */ new Map();
+    }
+    cur.push(order[i]);
+    arc.push(arc[arc.length - 1] + len(sub(b, a)));
+    addSeg(cur.length - 2);
+    if (breaks.has(order[i]) && i < order.length - 1) {
+      runs.push({ pts: cur, closed: false });
+      cur = [order[i]];
+      arc = [0];
+      cellsOf = /* @__PURE__ */ new Map();
+    }
+  }
+  if (cur.length > 1) {
+    if (closed && !breaks.size && !runs.length) runs.push({ pts: cur.slice(0, -1), closed: true });
+    else runs.push({ pts: cur, closed: false });
+  }
+  return runs;
+}
+function runTube(k, pts, closed, r, n, twist) {
+  const m = pts.length;
+  const segs = closed ? m : m - 1;
+  const t = [];
+  for (let i = 0; i < segs; i++) t.push(unit(sub(pts[(i + 1) % m], pts[i])));
+  const t0 = t[0];
+  const seed = Math.abs(t0[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  let N = unit(cross(cross(t0, seed), t0));
+  const frames = [];
+  for (let i = 0; i < segs; i++) {
+    if (i > 0) N = unit(turn(N, t[i - 1], t[i]));
+    frames.push({ N, B: cross(t[i], N) });
+  }
+  let closeTurn = 0;
+  if (closed) {
+    const back = unit(turn(frames[segs - 1].N, t[segs - 1], t0));
+    closeTurn = Math.atan2(dot(cross(back, frames[0].N), t0), dot(back, frames[0].N));
+  }
+  const verts = [];
+  const ringAt = (i) => {
+    const p = pts[i];
+    const segIn = closed ? (i - 1 + segs) % segs : i - 1;
+    const segOut = closed ? i % segs : i;
+    const useIn = segIn >= 0 && (closed || i > 0);
+    const useOut = segOut < segs && (closed || i < m - 1);
+    const s = useIn ? segIn : segOut;
+    const along = t[s];
+    const { N: Ni, B: Bi } = frames[s];
+    const plane = useIn && useOut ? unit(add(t[segIn], t[segOut])) : along;
+    const spin = twist + (closed ? closeTurn * s / segs : 0);
+    const first = verts.length / 3;
+    for (let j = 0; j < n; j++) {
+      const a = 2 * Math.PI * j / n + spin;
+      const q = add(p, add(mul(Ni, r * Math.cos(a)), mul(Bi, r * Math.sin(a))));
+      const d = dot(sub(q, p), plane) / dot(along, plane);
+      const w = sub(q, mul(along, d));
+      verts.push(w[0], w[1], w[2]);
+    }
+    return first;
+  };
+  const tri = [];
+  const band = (a, b) => {
+    for (let j = 0; j < n; j++) {
+      const j1 = (j + 1) % n;
+      tri.push(a + j, b + j, b + j1, a + j, b + j1, a + j1);
+    }
+  };
+  const rings = [];
+  for (let i = 0; i < m; i++) rings.push(ringAt(i));
+  for (let i = 0; i < segs; i++) band(rings[i], rings[(i + 1) % m]);
+  if (!closed) {
+    const cap = (ring, centre, out, Nc, Bc, spin, back) => {
+      const h = Math.max(2, Math.ceil(n / 4));
+      let prev = ring;
+      for (let l = 1; l < h; l++) {
+        const beta = l * Math.PI / 2 / h;
+        const first = verts.length / 3;
+        for (let j = 0; j < n; j++) {
+          const a = 2 * Math.PI * j / n + spin;
+          const q2 = add(add(centre, mul(out, r * Math.sin(beta))), add(mul(Nc, r * Math.cos(beta) * Math.cos(a)), mul(Bc, r * Math.cos(beta) * Math.sin(a))));
+          verts.push(q2[0], q2[1], q2[2]);
+        }
+        if (back) band(first, prev);
+        else band(prev, first);
+        prev = first;
+      }
+      const pole = verts.length / 3;
+      const q = add(centre, mul(out, r));
+      verts.push(q[0], q[1], q[2]);
+      for (let j = 0; j < n; j++) {
+        if (back) tri.push(pole, prev + j, prev + (j + 1) % n);
+        else tri.push(prev + j, pole, prev + (j + 1) % n);
+      }
+    };
+    cap(rings[m - 1], pts[m - 1], t[segs - 1], frames[segs - 1].N, frames[segs - 1].B, twist, false);
+    cap(rings[0], pts[0], mul(t[0], -1), frames[0].N, frames[0].B, twist, true);
+  }
+  const P = verts;
+  let vol = 0;
+  for (let i = 0; i < tri.length; i += 3) {
+    const a = tri[i] * 3, b = tri[i + 1] * 3, c = tri[i + 2] * 3;
+    vol += P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c]);
+  }
+  if (vol < 0) for (let i = 0; i < tri.length; i += 3) {
+    const x = tri[i + 1];
+    tri[i + 1] = tri[i + 2];
+    tri[i + 2] = x;
+  }
+  return new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: Float32Array.from(verts), triVerts: Uint32Array.from(tri) }));
+}
+function buildSweep(k, r, path, closed, tol) {
+  const p = [];
+  for (const q of path) if (!p.length || len(sub(q, p[p.length - 1])) > 1e-9) p.push(q);
+  if (closed && p.length > 1 && len(sub(p[0], p[p.length - 1])) <= 1e-9) p.pop();
+  const n = sphereSegments(r, tol);
+  if (p.length === 1) return k.Manifold.sphere(r, n).translate(p[0]);
+  const isClosed = closed && p.length > 2;
+  const runs = runsOf(p, isClosed, r, mitreBreaks(p, isClosed, r, EXPORT_TOL));
+  const tubes = runs.map((run, i) => runTube(k, run.pts.map((j) => p[j]), run.closed, r, n, (7.31 * i + 3.7) * Math.PI / 180));
+  if (tubes.length === 1) return tubes[0];
+  const out = k.Manifold.union(tubes);
+  for (const x of tubes) x.delete();
+  return out;
+}
+
 // src/library/ops.ts
 var L2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
@@ -2018,14 +2220,7 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
       return A.t(Manifold.revolve(A.t(new CrossSection([prof])), segmentsFor(rMax, tol, 32), D2(p, "degrees", 360)));
     }
     case "sweep": {
-      const r = L2(p, "radius");
-      const path = pts32(p["path"]);
-      const seg = sphereSegments(r, tol);
-      const ball = (q, i) => A.t(A.t(A.t(Manifold.sphere(r, seg)).rotate([0, 0, 7.31 * i + 3.7])).translate(q));
-      const pieces = [];
-      const m = p["closed"] === true ? path.length : path.length - 1;
-      for (let i = 0; i < m; i++) pieces.push(A.t(Manifold.hull([ball(path[i], i), ball(path[(i + 1) % path.length], i)])));
-      return pieces.length === 1 ? pieces[0] : A.t(Manifold.union(pieces));
+      return A.t(buildSweep(k, L2(p, "radius"), pts32(p["path"]), p["closed"] === true, tol));
     }
     case "union":
       return all();
@@ -2297,8 +2492,8 @@ function prongPlaces(stone, outline, count) {
   const n = outline.length;
   const mids = outline.map((p, i) => {
     const q = outline[(i + 1) % n];
-    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
-    return { at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], out: edgeNormal(p, q), len };
+    const len2 = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    return { at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], out: edgeNormal(p, q), len: len2 };
   });
   const corners = mids.filter((m) => Math.abs(m.out[0]) > 0.2 && Math.abs(m.out[1]) > 0.2);
   let places = corners;
@@ -2573,7 +2768,7 @@ function blendSurface(mesh, blends, scale) {
     let n = 0;
     const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
-    const add = (x, y, z, nrm) => {
+    const add2 = (x, y, z, nrm) => {
       projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
       const q0 = on[0], q1 = on[1], q2 = on[2];
       pts[n * 3] = (m[0] * q0 + m[1] * q1 + m[2] * q2 + m[3]) * scale;
@@ -2594,7 +2789,7 @@ function blendSurface(mesh, blends, scale) {
         if (seenVert[i]) continue;
         seenVert[i] = 1;
         const p = at2(i);
-        add(p[0], p[1], p[2], nrm);
+        add2(p[0], p[1], p[2], nrm);
       }
       for (const [i, j] of [
         [ia, ib],
@@ -2606,9 +2801,9 @@ function blendSurface(mesh, blends, scale) {
         if (seenEdge.has(key)) continue;
         seenEdge.add(key);
         const p = at2(lo), q = at2(hi);
-        add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
+        add2((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
       }
-      add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
+      add2((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
     }
     out.push({ label: b.label, points: pts.slice(0, n * 3) });
   }
@@ -2743,8 +2938,13 @@ function ccw2(pts) {
   }
   return a < 0 ? [...pts].reverse() : pts;
 }
+var SHAPE_CALLS = /* @__PURE__ */ new Set(["sphere", "cylinder", "box", "torus", "sweep", "extrude", "revolve", "hull", "hullPoints", "smoothUnion", "op", "ringShank", "prongHead", "bezel", "thicken"]);
 var ProgramLibrary = class {
   #k;
+  /** What each kind of shape call has made so far, for a refusal that ran out of memory to name (fact:root-cause-a-swept-wire-costs-memory-by-how-it-is-built-not-what-it-is-2026-11-10). */
+  #tally = /* @__PURE__ */ new Map();
+  /** The call running now, so a refusal that runs out of memory inside it can name it. */
+  #running = null;
   #A;
   #tol;
   #blendMeshes;
@@ -2770,11 +2970,27 @@ var ProgramLibrary = class {
       if (typeof argsJson !== "string" || argsJson.length > 2e7) throw new CallError(name, "its arguments are too large.");
       const args = JSON.parse(argsJson);
       if (!Array.isArray(args)) throw new CallError(name, "takes a list of arguments.");
+      this.#running = name;
       const out = this.#dispatch(name, args);
+      this.#running = null;
+      if (SHAPE_CALLS.has(name) && out && typeof out === "object" && out.kind === "solid") {
+        const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
+        t.calls++;
+        t.triangles += out.m.numTri();
+        this.#tally.set(name, t);
+      }
       return JSON.stringify({ ok: this.#encode(out) });
     } catch (e) {
       return JSON.stringify({ error: messageOf(e) });
     }
+  }
+  /** The kinds of shape call that made the most triangles so far, the heaviest first. */
+  /** The call that was running when the program stopped, if one was. */
+  stoppedIn() {
+    return this.#running;
+  }
+  heaviest(most = 3) {
+    return [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most);
   }
   /** The solid a program returned, finished as a casting file would hold it. */
   finish(id, scale, withBlendSurface) {
@@ -2868,16 +3084,16 @@ var ProgramLibrary = class {
     }
     return v;
   }
-  #vec3(v, path, unit = "mm") {
-    if (!Array.isArray(v) || v.length !== 3) throw new CallError(path, `must be [x, y, z]${unit === "deg" ? " in degrees" : " in mm"}.`);
-    return v.map((c, i) => unit === "deg" ? this.#deg(c, at(path, i)) : this.#len(c, at(path, i)));
+  #vec3(v, path, unit2 = "mm") {
+    if (!Array.isArray(v) || v.length !== 3) throw new CallError(path, `must be [x, y, z]${unit2 === "deg" ? " in degrees" : " in mm"}.`);
+    return v.map((c, i) => unit2 === "deg" ? this.#deg(c, at(path, i)) : this.#len(c, at(path, i)));
   }
   /** [x, y, z] as one array, or as three numbers. */
-  #vecArgs(args, from, path, unit = "mm") {
+  #vecArgs(args, from, path, unit2 = "mm") {
     const a = args[from];
-    if (Array.isArray(a)) return this.#vec3(a, path, unit);
+    if (Array.isArray(a)) return this.#vec3(a, path, unit2);
     const xyz = [args[from] ?? 0, args[from + 1] ?? 0, args[from + 2] ?? 0];
-    return this.#vec3(xyz, path, unit);
+    return this.#vec3(xyz, path, unit2);
   }
   #pts2(v, path, min = 3) {
     if (!Array.isArray(v) || v.length < min) throw new CallError(path, `a list of at least ${min} points, each [x, y] in mm.`);
@@ -3704,12 +3920,13 @@ async function readStdin() {
 }
 function writeFrame(header, blobs) {
   const head = Buffer.from(JSON.stringify(header), "utf8");
-  const len = Buffer.alloc(4);
-  len.writeUInt32LE(head.length, 0);
-  return new Promise((resolve) => process.stdout.write(Buffer.concat([len, head, ...blobs]), () => resolve()));
+  const len2 = Buffer.alloc(4);
+  len2.writeUInt32LE(head.length, 0);
+  return new Promise((resolve) => process.stdout.write(Buffer.concat([len2, head, ...blobs]), () => resolve()));
 }
-function fail(kind, message, line, logs) {
-  return writeFrame({ ok: false, kind, message, line, logs }, []);
+function fail(kind, message, line, logs, lib) {
+  const memory = kind === "memory" && lib ? { heaviest: lib.heaviest(), stopped_in: lib.stoppedIn() } : {};
+  return writeFrame({ ok: false, kind, message, line, logs, ...memory }, []);
 }
 function ready() {
   return new Promise((resolve) => process.stdout.write(Buffer.alloc(4), () => resolve()));
@@ -3768,7 +3985,7 @@ async function main() {
       out = vm.runInContext("__flo2_run(__flo2_program)", ctx, { timeout: remaining, filename: "flo2-cad-run.js" });
     } catch (e) {
       if (performance.now() - started >= remaining - 25) return fail("time", "the program ran past its time limit", null, logs);
-      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs);
+      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs, lib);
       return fail("engine", e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
     }
     if (typeof out !== "string") return fail("engine", "the program gave no answer", null, logs);
@@ -3776,7 +3993,7 @@ async function main() {
     logs = Array.isArray(r.logs) ? r.logs.filter((x) => typeof x === "string").slice(0, 50) : [];
     if (r.error !== void 0) {
       const msg = String(r.error.message ?? "the program failed");
-      return fail(wasmCapHit ? "memory" : "program", wasmCapHit ? "the geometry kernel reached its memory limit" : msg, typeof r.error.line === "number" ? r.error.line : null, logs);
+      return fail(wasmCapHit ? "memory" : "program", wasmCapHit ? "the geometry kernel reached its memory limit" : msg, typeof r.error.line === "number" ? r.error.line : null, logs, lib);
     }
     try {
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
@@ -3789,7 +4006,7 @@ async function main() {
         ...run.positionsOnly ? {} : { decl: { ...decl, blends, ...faces ? { faces } : {} }, parts: res.parts, named: res.named }
       });
     } catch (e) {
-      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs);
+      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs, lib);
       if (e instanceof CallError) return fail("program", `${e.path}: ${e.problem}`, null, logs);
       return fail("engine", `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }

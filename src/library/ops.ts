@@ -19,6 +19,7 @@ import { angleDeg, lengthMm } from '../units.js';
 import type { Arena } from './build.js';
 import { BlendField, holdToSurface, levelSetStep } from './field.js';
 import { EXPORT_TOL } from './tolerances.js';
+import { buildSweep } from './sweep.js';
 import { buildThicken, compose, IDENTITY, reflection, rotation, translation, type OpContext } from './thicken.js';
 
 type Params = Record<string, unknown>;
@@ -82,16 +83,11 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpCo
       return A.t(Manifold.revolve(A.t(new CrossSection([prof])), segmentsFor(rMax, tol, 32), D(p, 'degrees', 360)));
     }
     case 'sweep': {
-      const r = L(p, 'radius');
-      const path = pts3(p['path']);
-      const seg = sphereSegments(r, tol);
-      // Each segment's end balls are turned a different amount, so where two segments
-      // meet their spheres cross instead of coinciding face for face.
-      const ball = (q: Vec3, i: number) => A.t(A.t(A.t(Manifold.sphere(r, seg)).rotate([0, 0, 7.31 * i + 3.7])).translate(q));
-      const pieces: Manifold[] = [];
-      const m = p['closed'] === true ? path.length : path.length - 1;
-      for (let i = 0; i < m; i++) pieces.push(A.t(Manifold.hull([ball(path[i]!, i), ball(path[(i + 1) % path.length]!, i)])));
-      return pieces.length === 1 ? pieces[0]! : A.t(Manifold.union(pieces));
+      // A tube along the path, its runs unioned where it must be (library/sweep.ts). It used to be
+      // the hull of a ball at each end of every segment, all unioned, with every ball kept in the
+      // Arena until the build ended: about 8 times a tube's triangles, growing with every point
+      // (fact:root-cause-a-swept-wire-costs-memory-by-how-it-is-built-not-what-it-is-2026-11-10).
+      return A.t(buildSweep(k, L(p, 'radius'), pts3(p['path']), p['closed'] === true, tol));
     }
     case 'union':
       return all();

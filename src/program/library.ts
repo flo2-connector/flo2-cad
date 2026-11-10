@@ -174,8 +174,22 @@ function ccw(pts: Vec2[]): Vec2[] {
 }
 
 /** The library and kernel for ONE evaluation of a program, at one tolerance. */
+/** The calls that make a shape of their own (not a move, a boolean or a method), whose triangles a memory refusal tallies. */
+const SHAPE_CALLS: ReadonlySet<string> = new Set(['sphere', 'cylinder', 'box', 'torus', 'sweep', 'extrude', 'revolve', 'hull', 'hullPoints', 'smoothUnion', 'op', 'ringShank', 'prongHead', 'bezel', 'thicken']);
+
+/** One kind of shape call's share of what a program made: how many calls, and their triangles. */
+export interface CallTally {
+  call: string;
+  calls: number;
+  triangles: number;
+}
+
 export class ProgramLibrary {
   readonly #k: Kernel;
+  /** What each kind of shape call has made so far, for a refusal that ran out of memory to name (fact:root-cause-a-swept-wire-costs-memory-by-how-it-is-built-not-what-it-is-2026-11-10). */
+  readonly #tally = new Map<string, { calls: number; triangles: number }>();
+  /** The call running now, so a refusal that runs out of memory inside it can name it. */
+  #running: string | null = null;
   readonly #A: Arena;
   readonly #tol: number;
   readonly #blendMeshes: BlendMeshes | undefined;
@@ -203,11 +217,29 @@ export class ProgramLibrary {
       if (typeof argsJson !== 'string' || argsJson.length > 20_000_000) throw new CallError(name, 'its arguments are too large.');
       const args = JSON.parse(argsJson) as unknown;
       if (!Array.isArray(args)) throw new CallError(name, 'takes a list of arguments.');
+      this.#running = name;
       const out = this.#dispatch(name as ProgramCall, args);
+      this.#running = null;
+      if (SHAPE_CALLS.has(name) && out && typeof out === 'object' && (out as { kind?: unknown }).kind === 'solid') {
+        const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
+        t.calls++;
+        t.triangles += (out as SolidRec).m.numTri();
+        this.#tally.set(name, t);
+      }
       return JSON.stringify({ ok: this.#encode(out) });
     } catch (e) {
       return JSON.stringify({ error: messageOf(e) });
     }
+  }
+
+  /** The kinds of shape call that made the most triangles so far, the heaviest first. */
+  /** The call that was running when the program stopped, if one was. */
+  stoppedIn(): string | null {
+    return this.#running;
+  }
+
+  heaviest(most = 3): CallTally[] {
+    return [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most);
   }
 
   /** The solid a program returned, finished as a casting file would hold it. */

@@ -27,7 +27,7 @@ import { CallError } from '../errors.js';
 import { kernel } from '../kernel/manifold.js';
 import { Arena, type MeshOut } from '../library/build.js';
 import type { BlendMeshes } from '../library/thicken.js';
-import { ProgramLibrary, type PartReport } from './library.js';
+import { ProgramLibrary, type CallTally, type PartReport } from './library.js';
 import { PRELUDE, PRELUDE_FILENAME, PROGRAM_FILENAME } from './prelude.js';
 
 export interface ChildRun {
@@ -91,8 +91,9 @@ function writeFrame(header: unknown, blobs: Buffer[]): Promise<void> {
   return new Promise((resolve) => process.stdout.write(Buffer.concat([len, head, ...blobs]), () => resolve()));
 }
 
-function fail(kind: FailKind, message: string, line: number | null, logs: string[]): Promise<void> {
-  return writeFrame({ ok: false, kind, message, line, logs }, []);
+function fail(kind: FailKind, message: string, line: number | null, logs: string[], lib?: ProgramLibrary): Promise<void> {
+  const memory = kind === 'memory' && lib ? { heaviest: lib.heaviest() satisfies CallTally[], stopped_in: lib.stoppedIn() } : {};
+  return writeFrame({ ok: false, kind, message, line, logs, ...memory }, []);
 }
 
 /** READY: an empty frame. The engine (run.ts) starts the program's backstop when it reads it. */
@@ -183,7 +184,7 @@ async function main(): Promise<void> {
       // program's realm, and anything else here is the program's own (reading it could
       // run its code outside its limit). The clock says which it was.
       if (performance.now() - started >= remaining - 25) return fail('time', 'the program ran past its time limit', null, logs);
-      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs);
+      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs, lib);
       return fail('engine', e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
     }
     if (typeof out !== 'string') return fail('engine', 'the program gave no answer', null, logs);
@@ -191,7 +192,7 @@ async function main(): Promise<void> {
     logs = Array.isArray(r.logs) ? r.logs.filter((x): x is string => typeof x === 'string').slice(0, 50) : [];
     if (r.error !== undefined) {
       const msg = String(r.error.message ?? 'the program failed');
-      return fail(wasmCapHit ? 'memory' : 'program', wasmCapHit ? 'the geometry kernel reached its memory limit' : msg, typeof r.error.line === 'number' ? r.error.line : null, logs);
+      return fail(wasmCapHit ? 'memory' : 'program', wasmCapHit ? 'the geometry kernel reached its memory limit' : msg, typeof r.error.line === 'number' ? r.error.line : null, logs, lib);
     }
     try {
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
@@ -205,7 +206,7 @@ async function main(): Promise<void> {
         ...(run.positionsOnly ? {} : { decl: { ...decl, blends, ...(faces ? { faces } : {}) }, parts: res.parts satisfies PartReport[], named: res.named }),
       });
     } catch (e) {
-      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs);
+      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs, lib);
       if (e instanceof CallError) return fail('program', `${e.path}: ${e.problem}`, null, logs);
       return fail('engine', `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }

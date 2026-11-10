@@ -1084,11 +1084,11 @@ function node(obj, key, make) {
 function flattenError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
-  for (const sub2 of error2.issues) {
-    if (sub2.path.length > 0) {
-      node(fieldErrors, sub2.path[0], () => []).push(mapper(sub2));
+  for (const sub3 of error2.issues) {
+    if (sub3.path.length > 0) {
+      node(fieldErrors, sub3.path[0], () => []).push(mapper(sub3));
     } else {
-      formErrors.push(mapper(sub2));
+      formErrors.push(mapper(sub3));
     }
   }
   return { formErrors, fieldErrors };
@@ -10797,9 +10797,9 @@ function scanXMcpHeaderDeclarations(inputSchema) {
       if (fault$1 !== void 0) return fault$1;
     }
     for (const k of NON_REACHABLE_SUBSCHEMA_KEYWORDS) {
-      const sub2 = schema[k];
-      if (sub2 === void 0) continue;
-      const branches = Array.isArray(sub2) ? sub2 : sub2 !== null && typeof sub2 === "object" && OBJECT_VALUED_SUBSCHEMA_KEYWORDS.has(k) ? Object.values(sub2) : [sub2];
+      const sub3 = schema[k];
+      if (sub3 === void 0) continue;
+      const branches = Array.isArray(sub3) ? sub3 : sub3 !== null && typeof sub3 === "object" && OBJECT_VALUED_SUBSCHEMA_KEYWORDS.has(k) ? Object.values(sub3) : [sub3];
       for (const branch of branches) {
         const fault$1 = visit(branch, [...path, `<${k}>`], false);
         if (fault$1 !== void 0) return fault$1;
@@ -13299,11 +13299,11 @@ var require_codegen = /* @__PURE__ */ __commonJSMin(((exports) => {
       return this;
     }
     endBlock(nodeCount) {
-      const len2 = this._blockStarts.pop();
-      if (len2 === void 0) throw new Error("CodeGen: not in self-balancing block");
-      const toClose = this._nodes.length - len2;
+      const len3 = this._blockStarts.pop();
+      if (len3 === void 0) throw new Error("CodeGen: not in self-balancing block");
+      const toClose = this._nodes.length - len3;
       if (toClose < 0 || nodeCount !== void 0 && toClose !== nodeCount) throw new Error(`CodeGen: wrong number of nodes: ${toClose} vs ${nodeCount} expected`);
-      this._nodes.length = len2;
+      this._nodes.length = len3;
       return this;
     }
     func(name, args = code_1.nil, async, funcBody) {
@@ -14053,8 +14053,8 @@ var require_code = /* @__PURE__ */ __commonJSMin(((exports) => {
     validateItems(() => gen.break());
     return valid;
     function validateItems(notValid) {
-      const len2 = gen.const("len", (0, codegen_1._)`${data}.length`);
-      gen.forRange("i", 0, len2, (i) => {
+      const len3 = gen.const("len", (0, codegen_1._)`${data}.length`);
+      gen.forRange("i", 0, len3, (i) => {
         cxt.subschema({
           keyword,
           dataProp: i,
@@ -15253,9 +15253,9 @@ var require_utils = /* @__PURE__ */ __commonJSMin(((exports, module) => {
     let input = path;
     const output = [];
     let nextSlash = -1;
-    let len2 = 0;
-    while (len2 = input.length) {
-      if (len2 === 1) if (input === ".") break;
+    let len3 = 0;
+    while (len3 = input.length) {
+      if (len3 === 1) if (input === ".") break;
       else if (input === "/") {
         output.push("/");
         break;
@@ -15263,7 +15263,7 @@ var require_utils = /* @__PURE__ */ __commonJSMin(((exports, module) => {
         output.push(input);
         break;
       }
-      else if (len2 === 2) {
+      else if (len3 === 2) {
         if (input[0] === ".") {
           if (input[1] === ".") break;
           else if (input[1] === "/") {
@@ -15276,7 +15276,7 @@ var require_utils = /* @__PURE__ */ __commonJSMin(((exports, module) => {
             break;
           }
         }
-      } else if (len2 === 3) {
+      } else if (len3 === 3) {
         if (input === "/..") {
           if (output.length !== 0) output.pop();
           output.push("/");
@@ -16468,14 +16468,14 @@ var require_multipleOf = /* @__PURE__ */ __commonJSMin(((exports) => {
 var require_ucs2length = /* @__PURE__ */ __commonJSMin(((exports) => {
   Object.defineProperty(exports, "__esModule", { value: true });
   function ucs2length(str2) {
-    const len2 = str2.length;
+    const len3 = str2.length;
     let length = 0;
     let pos = 0;
     let value;
-    while (pos < len2) {
+    while (pos < len3) {
       length++;
       value = str2.charCodeAt(pos++);
-      if (value >= 55296 && value <= 56319 && pos < len2) {
+      if (value >= 55296 && value <= 56319 && pos < len3) {
         value = str2.charCodeAt(pos);
         if ((value & 64512) === 56320) pos++;
       }
@@ -16505,8 +16505,8 @@ var require_limitLength = /* @__PURE__ */ __commonJSMin(((exports) => {
     code(cxt) {
       const { keyword, data, schemaCode, it } = cxt;
       const op = keyword === "maxLength" ? codegen_1.operators.GT : codegen_1.operators.LT;
-      const len2 = it.opts.unicode === false ? (0, codegen_1._)`${data}.length` : (0, codegen_1._)`${(0, util_1.useFunc)(cxt.gen, ucs2length_1.default)}(${data})`;
-      cxt.fail$data((0, codegen_1._)`${len2} ${op} ${schemaCode}`);
+      const len3 = it.opts.unicode === false ? (0, codegen_1._)`${data}.length` : (0, codegen_1._)`${(0, util_1.useFunc)(cxt.gen, ucs2length_1.default)}(${data})`;
+      cxt.fail$data((0, codegen_1._)`${len3} ${op} ${schemaCode}`);
     }
   };
   exports.default = def;
@@ -16827,8 +16827,8 @@ var require_additionalItems = /* @__PURE__ */ __commonJSMin(((exports) => {
     schemaType: ["boolean", "object"],
     before: "uniqueItems",
     error: {
-      message: ({ params: { len: len2 } }) => (0, codegen_1.str)`must NOT have more than ${len2} items`,
-      params: ({ params: { len: len2 } }) => (0, codegen_1._)`{limit: ${len2}}`
+      message: ({ params: { len: len3 } }) => (0, codegen_1.str)`must NOT have more than ${len3} items`,
+      params: ({ params: { len: len3 } }) => (0, codegen_1._)`{limit: ${len3}}`
     },
     code(cxt) {
       const { parentSchema, it } = cxt;
@@ -16843,17 +16843,17 @@ var require_additionalItems = /* @__PURE__ */ __commonJSMin(((exports) => {
   function validateAdditionalItems(cxt, items) {
     const { gen, schema, data, keyword, it } = cxt;
     it.items = true;
-    const len2 = gen.const("len", (0, codegen_1._)`${data}.length`);
+    const len3 = gen.const("len", (0, codegen_1._)`${data}.length`);
     if (schema === false) {
       cxt.setParams({ len: items.length });
-      cxt.pass((0, codegen_1._)`${len2} <= ${items.length}`);
+      cxt.pass((0, codegen_1._)`${len3} <= ${items.length}`);
     } else if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
-      const valid = gen.var("valid", (0, codegen_1._)`${len2} <= ${items.length}`);
+      const valid = gen.var("valid", (0, codegen_1._)`${len3} <= ${items.length}`);
       gen.if((0, codegen_1.not)(valid), () => validateItems(valid));
       cxt.ok(valid);
     }
     function validateItems(valid) {
-      gen.forRange("i", items.length, len2, (i) => {
+      gen.forRange("i", items.length, len3, (i) => {
         cxt.subschema({
           keyword,
           dataProp: i,
@@ -16894,10 +16894,10 @@ var require_items = /* @__PURE__ */ __commonJSMin(((exports) => {
     checkStrictTuple(parentSchema);
     if (it.opts.unevaluated && schArr.length && it.items !== true) it.items = util_1.mergeEvaluated.items(gen, schArr.length, it.items);
     const valid = gen.name("valid");
-    const len2 = gen.const("len", (0, codegen_1._)`${data}.length`);
+    const len3 = gen.const("len", (0, codegen_1._)`${data}.length`);
     schArr.forEach((sch, i) => {
       if ((0, util_1.alwaysValidSchema)(it, sch)) return;
-      gen.if((0, codegen_1._)`${len2} > ${i}`, () => cxt.subschema({
+      gen.if((0, codegen_1._)`${len3} > ${i}`, () => cxt.subschema({
         keyword,
         schemaProp: i,
         dataProp: i
@@ -16941,8 +16941,8 @@ var require_items2020 = /* @__PURE__ */ __commonJSMin(((exports) => {
     schemaType: ["object", "boolean"],
     before: "uniqueItems",
     error: {
-      message: ({ params: { len: len2 } }) => (0, codegen_1.str)`must NOT have more than ${len2} items`,
-      params: ({ params: { len: len2 } }) => (0, codegen_1._)`{limit: ${len2}}`
+      message: ({ params: { len: len3 } }) => (0, codegen_1.str)`must NOT have more than ${len3} items`,
+      params: ({ params: { len: len3 } }) => (0, codegen_1._)`{limit: ${len3}}`
     },
     code(cxt) {
       const { schema, parentSchema, it } = cxt;
@@ -16978,7 +16978,7 @@ var require_contains = /* @__PURE__ */ __commonJSMin(((exports) => {
         min = minContains === void 0 ? 1 : minContains;
         max = maxContains;
       } else min = 1;
-      const len2 = gen.const("len", (0, codegen_1._)`${data}.length`);
+      const len3 = gen.const("len", (0, codegen_1._)`${data}.length`);
       cxt.setParams({
         min,
         max
@@ -16993,8 +16993,8 @@ var require_contains = /* @__PURE__ */ __commonJSMin(((exports) => {
         return;
       }
       if ((0, util_1.alwaysValidSchema)(it, schema)) {
-        let cond = (0, codegen_1._)`${len2} >= ${min}`;
-        if (max !== void 0) cond = (0, codegen_1._)`${cond} && ${len2} <= ${max}`;
+        let cond = (0, codegen_1._)`${len3} >= ${min}`;
+        if (max !== void 0) cond = (0, codegen_1._)`${cond} && ${len3} <= ${max}`;
         cxt.pass(cond);
         return;
       }
@@ -17015,7 +17015,7 @@ var require_contains = /* @__PURE__ */ __commonJSMin(((exports) => {
         validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
       }
       function validateItems(_valid, block) {
-        gen.forRange("i", 0, len2, (i) => {
+        gen.forRange("i", 0, len3, (i) => {
           cxt.subschema({
             keyword: "contains",
             dataProp: i,
@@ -18221,25 +18221,25 @@ var require_unevaluatedItems = /* @__PURE__ */ __commonJSMin(((exports) => {
     type: "array",
     schemaType: ["boolean", "object"],
     error: {
-      message: ({ params: { len: len2 } }) => (0, codegen_1.str)`must NOT have more than ${len2} items`,
-      params: ({ params: { len: len2 } }) => (0, codegen_1._)`{limit: ${len2}}`
+      message: ({ params: { len: len3 } }) => (0, codegen_1.str)`must NOT have more than ${len3} items`,
+      params: ({ params: { len: len3 } }) => (0, codegen_1._)`{limit: ${len3}}`
     },
     code(cxt) {
       const { gen, schema, data, it } = cxt;
       const items = it.items || 0;
       if (items === true) return;
-      const len2 = gen.const("len", (0, codegen_1._)`${data}.length`);
+      const len3 = gen.const("len", (0, codegen_1._)`${data}.length`);
       if (schema === false) {
         cxt.setParams({ len: items });
-        cxt.fail((0, codegen_1._)`${len2} > ${items}`);
+        cxt.fail((0, codegen_1._)`${len3} > ${items}`);
       } else if (typeof schema == "object" && !(0, util_1.alwaysValidSchema)(it, schema)) {
-        const valid = gen.var("valid", (0, codegen_1._)`${len2} <= ${items}`);
+        const valid = gen.var("valid", (0, codegen_1._)`${len3} <= ${items}`);
         gen.if((0, codegen_1.not)(valid), () => validateItems(valid, items));
         cxt.ok(valid);
       }
       it.items = true;
       function validateItems(valid, from) {
-        gen.forRange("i", from, len2, (i) => {
+        gen.forRange("i", from, len3, (i) => {
           cxt.subschema({
             keyword: "unevaluatedItems",
             dataProp: i,
@@ -21739,9 +21739,9 @@ var Bvh = class {
     let axis = 0;
     let ext = -1;
     for (let k = 0; k < 3; k++) if (cmx[k] - cmn[k] > ext) ext = cmx[k] - cmn[k], axis = k;
-    const sub2 = this.#order.subarray(start, end);
+    const sub3 = this.#order.subarray(start, end);
     const cen = this.centroid;
-    sub2.sort((p, q) => cen[p * 3 + axis] - cen[q * 3 + axis]);
+    sub3.sort((p, q) => cen[p * 3 + axis] - cen[q * 3 + axis]);
     const mid = start + (count >> 1);
     this.#count[node2] = 0;
     this.#left[node2] = this.#build(start, mid);
@@ -22302,10 +22302,10 @@ function watertight(mesh, bvh, decl, layers) {
   if (shells !== 1) problems.push(`${shells} separate shells (loose parts or internal voids)`);
   if (vol <= 0) problems.push(`faces point inward (signed volume ${r3(vol)} mm\xB3)`);
   if (crossings) problems.push(`${crossings} self-intersecting triangle pair(s)`);
-  const cross3 = firstCross;
-  const own2 = cross3 ? faceOf(decl, crossTris[0]) : void 0;
-  const across = cross3 ? faceOf(decl, crossTris[1]) : void 0;
-  const where = cross3 ? own2 === void 0 ? placeAt({ part: "piece", name: null }, cross3, "the first self-intersection found") : placeOf(cross3, decl, layers, "the first self-intersection found", own2, across ? [across] : []) : null;
+  const cross4 = firstCross;
+  const own2 = cross4 ? faceOf(decl, crossTris[0]) : void 0;
+  const across = cross4 ? faceOf(decl, crossTris[1]) : void 0;
+  const where = cross4 ? own2 === void 0 ? placeAt({ part: "piece", name: null }, cross4, "the first self-intersection found") : placeOf(cross4, decl, layers, "the first self-intersection found", own2, across ? [across] : []) : null;
   const at2 = where ? placeWords(where, layers, decl) : null;
   return {
     entry: entry({
@@ -22363,8 +22363,8 @@ function sampleThickness(bvh, S) {
       }
       return true;
     };
-    const unit = Math.abs(n[0] * n[0] + n[1] * n[1] + n[2] * n[2] - 1) < 1e-9;
-    const holds = (gx, gy, gz, gr) => unit && Math.hypot(gx - nearC[0], gy - nearC[1], gz - nearC[2]) + gr <= nearR;
+    const unit2 = Math.abs(n[0] * n[0] + n[1] * n[1] + n[2] * n[2] - 1) < 1e-9;
+    const holds = (gx, gy, gz, gr) => unit2 && Math.hypot(gx - nearC[0], gy - nearC[1], gz - nearC[2]) + gr <= nearR;
     let laid = false;
     {
       const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
@@ -22383,7 +22383,7 @@ function sampleThickness(bvh, S) {
       if (laid) met = balls.any(bvh, r, cx, cy, cz, rr, bounds, metFromAcross);
       else {
         met = bvh.anyWithinNearestFirst(cx, cy, cz, rr, bounds, metFromAcross);
-        if (!met && unit) {
+        if (!met && unit2) {
           const gx = p[0] - n[0] * hi, gy = p[1] - n[1] * hi, gz = p[2] - n[2] * hi, gr = hi * (1 + 1e-9) + 1e-9;
           if (!holds(gx, gy, gz, gr)) {
             nearC = [gx, gy, gz];
@@ -22982,10 +22982,10 @@ function writeBinaryStl(mesh, headerText) {
     const ux = p[b] - p[a], uy = p[b + 1] - p[a + 1], uz = p[b + 2] - p[a + 2];
     const vx = p[c] - p[a], vy = p[c + 1] - p[a + 1], vz = p[c + 2] - p[a + 2];
     let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const len2 = Math.hypot(nx, ny, nz) || 1;
-    nx /= len2;
-    ny /= len2;
-    nz /= len2;
+    const len3 = Math.hypot(nx, ny, nz) || 1;
+    nx /= len3;
+    ny /= len3;
+    nz /= len3;
     out.writeFloatLE(nx, o);
     out.writeFloatLE(ny, o + 4);
     out.writeFloatLE(nz, o + 8);
@@ -23701,38 +23701,38 @@ function split(v, path, example) {
   return { num, unit: m[2], text: v };
 }
 function lengthMm(v, path) {
-  const { num, unit, text: text2 } = split(v, path, "1.2 mm");
-  if (unit === void 0) {
+  const { num, unit: unit2, text: text2 } = split(v, path, "1.2 mm");
+  if (unit2 === void 0) {
     throw new CallError(path, `"${text2}" has no unit. Write "${num} mm" if you mean millimetres.`);
   }
-  if (unit === "mm") return num;
-  const f = FOREIGN_LENGTH[unit] ?? FOREIGN_LENGTH[unit.toLowerCase()];
+  if (unit2 === "mm") return num;
+  const f = FOREIGN_LENGTH[unit2] ?? FOREIGN_LENGTH[unit2.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text2}" is in ${unit}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num} ${unit} \xD7 ${f} = ${round(num * f)} mm.`
+      `"${text2}" is in ${unit2}; this engine takes lengths in mm only. Convert it yourself and show the person the conversion: ${num} ${unit2} \xD7 ${f} = ${round(num * f)} mm.`
     );
   }
-  throw new CallError(path, `"${unit}" is not a length unit this engine takes; write the length in mm, for example "1.2 mm".`);
+  throw new CallError(path, `"${unit2}" is not a length unit this engine takes; write the length in mm, for example "1.2 mm".`);
 }
 function angleDeg(v, path) {
-  const { num, unit, text: text2 } = split(v, path, "30 deg");
-  if (unit === void 0) {
+  const { num, unit: unit2, text: text2 } = split(v, path, "30 deg");
+  if (unit2 === void 0) {
     throw new CallError(path, `"${text2}" has no unit. Write "${num} deg" if you mean degrees.`);
   }
-  if (unit === "deg" || unit === "\xB0" || unit === "degrees") return num;
-  const f = FOREIGN_ANGLE[unit.toLowerCase()];
+  if (unit2 === "deg" || unit2 === "\xB0" || unit2 === "degrees") return num;
+  const f = FOREIGN_ANGLE[unit2.toLowerCase()];
   if (f !== void 0) {
     throw new CallError(
       path,
-      `"${text2}" is in ${unit}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num} ${unit} = ${round(num * f)} deg.`
+      `"${text2}" is in ${unit2}; this engine takes angles in deg only. Convert it yourself and show the person the conversion: ${num} ${unit2} = ${round(num * f)} deg.`
     );
   }
-  throw new CallError(path, `"${unit}" is not an angle unit this engine takes; write the angle in deg, for example "30 deg".`);
+  throw new CallError(path, `"${unit2}" is not an angle unit this engine takes; write the angle in deg, for example "30 deg".`);
 }
 function percent(v, path) {
-  const { num, unit, text: text2 } = split(v, path, "1.5 %");
-  if (unit !== "%") {
+  const { num, unit: unit2, text: text2 } = split(v, path, "1.5 %");
+  if (unit2 !== "%") {
     throw new CallError(path, `"${text2}" must be a percentage written with "%", for example "1.5 %".`);
   }
   return num;
@@ -23747,14 +23747,14 @@ function anyQuantity(v, path) {
   if (typeof v !== "string") return;
   const m = QUANTITY.exec(v);
   if (!m) return;
-  const unit = m[2];
-  if (unit === void 0) {
+  const unit2 = m[2];
+  if (unit2 === void 0) {
     throw new CallError(path, `"${v}" has no unit. Every measurement must say its unit: "mm" for lengths, "deg" for angles.`);
   }
-  if (unit === "mm" || unit === "deg" || unit === "\xB0" || unit === "%") return;
-  if (FOREIGN_LENGTH[unit] !== void 0 || FOREIGN_LENGTH[unit.toLowerCase()] !== void 0) lengthMm(v, path);
-  if (FOREIGN_ANGLE[unit.toLowerCase()] !== void 0) angleDeg(v, path);
-  throw new CallError(path, `"${unit}" is not a unit this engine takes; lengths are in mm and angles in deg.`);
+  if (unit2 === "mm" || unit2 === "deg" || unit2 === "\xB0" || unit2 === "%") return;
+  if (FOREIGN_LENGTH[unit2] !== void 0 || FOREIGN_LENGTH[unit2.toLowerCase()] !== void 0) lengthMm(v, path);
+  if (FOREIGN_ANGLE[unit2.toLowerCase()] !== void 0) angleDeg(v, path);
+  throw new CallError(path, `"${unit2}" is not a unit this engine takes; lengths are in mm and angles in deg.`);
 }
 var UK_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 function ringInnerDiameterMm(v, path) {
@@ -23809,8 +23809,8 @@ function parseFraction(t) {
   return null;
 }
 function caratText(v, path) {
-  const { num, unit, text: text2 } = split(v, path, "2.00 ct");
-  if (unit !== "ct") {
+  const { num, unit: unit2, text: text2 } = split(v, path, "2.00 ct");
+  if (unit2 !== "ct") {
     throw new CallError(path, `"${text2}" must be a carat weight written with "ct", for example "2.00 ct". It is kept for reference only; the stone is sized from its measured length, width and depth.`);
   }
   if (num <= 0 || num > 50) throw new CallError(path, `${num} ct is not a plausible weight for one stone.`);
@@ -25708,8 +25708,8 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
       }
       const [, a, b] = side[0];
       const mid = [(P[a * 3] + P[b * 3]) / 2, (P[a * 3 + 1] + P[b * 3 + 1]) / 2, (P[a * 3 + 2] + P[b * 3 + 2]) / 2];
-      const len2 = Math.sqrt(dist2(a, b));
-      const limit = Math.min(len2, 8 * w);
+      const len3 = Math.sqrt(dist2(a, b));
+      const limit = Math.min(len3, 8 * w);
       const from = side.map(([t]) => normal(T[t * 3], T[t * 3 + 1], T[t * 3 + 2]));
       const mean = [0, 0, 0];
       for (const n of from) mean[0] += n[0], mean[1] += n[1], mean[2] += n[2];
@@ -25724,7 +25724,7 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
         found = true;
         const da = Math.hypot(out[0] - P[a * 3], out[1] - P[a * 3 + 1], out[2] - P[a * 3 + 2]);
         const db = Math.hypot(out[0] - P[b * 3], out[1] - P[b * 3 + 1], out[2] - P[b * 3 + 2]);
-        if (da < 0.1 * len2 || db < 0.1 * len2) return;
+        if (da < 0.1 * len3 || db < 0.1 * len3) return;
         const m2 = P.length / 3;
         P.push(out[0], out[1], out[2]);
         if (side.some(([, p, q, r], i) => turned(p, m2, r, from[i]) || turned(m2, q, r, from[i]))) turnedOver = true;
@@ -25787,6 +25787,208 @@ var EXPORT_TOL = 45e-4;
 var PREVIEW_TOL = 0.03;
 var REFERENCE_TOL = 15e-4;
 
+// src/library/sweep.ts
+var sub2 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+var add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+var mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+var dot2 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+var cross2 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+var len2 = (a) => Math.hypot(a[0], a[1], a[2]);
+var unit = (a) => mul(a, 1 / len2(a));
+function turn(v, from, to) {
+  const axis = cross2(from, to);
+  const s = len2(axis), c = dot2(from, to);
+  if (s < 1e-12) return c > 0 ? v : mul(v, -1);
+  const k = mul(axis, 1 / s);
+  return add(add(mul(v, c), mul(cross2(k, v), s)), mul(k, dot2(k, v) * (1 - c)));
+}
+function segmentGap(a, b, c, d) {
+  const u = sub2(b, a), v = sub2(d, c), w = sub2(a, c);
+  const A = dot2(u, u), B = dot2(u, v), C = dot2(v, v), D3 = dot2(u, w), E = dot2(v, w);
+  const den = A * C - B * B;
+  let s = den > 1e-18 ? Math.min(1, Math.max(0, (B * E - C * D3) / den)) : 0;
+  let t = C > 1e-18 ? (B * s + E) / C : 0;
+  if (t < 0) {
+    t = 0;
+    s = A > 1e-18 ? Math.min(1, Math.max(0, -D3 / A)) : 0;
+  } else if (t > 1) {
+    t = 1;
+    s = A > 1e-18 ? Math.min(1, Math.max(0, (B - D3) / A)) : 0;
+  }
+  return len2(sub2(add(a, mul(u, s)), add(c, mul(v, t))));
+}
+function mitreBreaks(p, closed, r, tol) {
+  const m = p.length, breaks = /* @__PURE__ */ new Set();
+  for (let i = closed ? 0 : 1; i < (closed ? m : m - 1); i++) {
+    const a = p[(i - 1 + m) % m], b = p[i], c = p[(i + 1) % m];
+    const u = sub2(b, a), v = sub2(c, b);
+    const lu = len2(u), lv = len2(v);
+    const theta = Math.acos(Math.max(-1, Math.min(1, dot2(u, v) / (lu * lv))));
+    const crosses = r * Math.tan(theta / 2) >= 0.5 * Math.min(lu, lv);
+    const standsOff = r * (1 / Math.cos(theta / 2) - 1) > tol;
+    if (theta > 1e-9 && (crosses || standsOff || theta > Math.PI / 2)) breaks.add(i);
+  }
+  return breaks;
+}
+function runsOf(p, closed, r, breaks) {
+  const m = p.length;
+  const start = closed && breaks.size ? Math.min(...breaks) : 0;
+  const order = closed ? [...Array(m + 1).keys()].map((i) => (start + i) % m) : [...p.keys()];
+  const near = 2 * r * (1 + 1e-6);
+  const runs = [];
+  let cur = [order[0]];
+  let arc = [0];
+  let cellsOf = /* @__PURE__ */ new Map();
+  let longest = 0;
+  for (let i = 1; i < order.length; i++) longest = Math.max(longest, len2(sub2(p[order[i]], p[order[i - 1]])));
+  const cell = near + longest;
+  const key = (q) => `${Math.floor(q[0] / cell)},${Math.floor(q[1] / cell)},${Math.floor(q[2] / cell)}`;
+  const addSeg = (j) => {
+    const a = p[cur[j]], b = p[cur[j + 1]];
+    const k = key(mul(add(a, b), 0.5));
+    (cellsOf.get(k) ?? cellsOf.set(k, []).get(k)).push(j);
+  };
+  const tooNear = (a, b, arcA) => {
+    const mid = mul(add(a, b), 0.5);
+    const [cx, cy, cz] = [Math.floor(mid[0] / cell), Math.floor(mid[1] / cell), Math.floor(mid[2] / cell)];
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+      for (const j of cellsOf.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+        if (arcA - arc[j + 1] <= Math.PI * r * 1.05) continue;
+        if (segmentGap(a, b, p[cur[j]], p[cur[j + 1]]) < near) return true;
+      }
+    }
+    return false;
+  };
+  for (let i = 1; i < order.length; i++) {
+    const a = p[order[i - 1]], b = p[order[i]];
+    const arcA = arc[arc.length - 1];
+    if (cur.length > 1 && tooNear(a, b, arcA)) {
+      runs.push({ pts: cur, closed: false });
+      cur = [order[i - 1]];
+      arc = [0];
+      cellsOf = /* @__PURE__ */ new Map();
+    }
+    cur.push(order[i]);
+    arc.push(arc[arc.length - 1] + len2(sub2(b, a)));
+    addSeg(cur.length - 2);
+    if (breaks.has(order[i]) && i < order.length - 1) {
+      runs.push({ pts: cur, closed: false });
+      cur = [order[i]];
+      arc = [0];
+      cellsOf = /* @__PURE__ */ new Map();
+    }
+  }
+  if (cur.length > 1) {
+    if (closed && !breaks.size && !runs.length) runs.push({ pts: cur.slice(0, -1), closed: true });
+    else runs.push({ pts: cur, closed: false });
+  }
+  return runs;
+}
+function runTube(k, pts, closed, r, n, twist) {
+  const m = pts.length;
+  const segs = closed ? m : m - 1;
+  const t = [];
+  for (let i = 0; i < segs; i++) t.push(unit(sub2(pts[(i + 1) % m], pts[i])));
+  const t0 = t[0];
+  const seed = Math.abs(t0[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  let N = unit(cross2(cross2(t0, seed), t0));
+  const frames = [];
+  for (let i = 0; i < segs; i++) {
+    if (i > 0) N = unit(turn(N, t[i - 1], t[i]));
+    frames.push({ N, B: cross2(t[i], N) });
+  }
+  let closeTurn = 0;
+  if (closed) {
+    const back = unit(turn(frames[segs - 1].N, t[segs - 1], t0));
+    closeTurn = Math.atan2(dot2(cross2(back, frames[0].N), t0), dot2(back, frames[0].N));
+  }
+  const verts = [];
+  const ringAt = (i) => {
+    const p = pts[i];
+    const segIn = closed ? (i - 1 + segs) % segs : i - 1;
+    const segOut = closed ? i % segs : i;
+    const useIn = segIn >= 0 && (closed || i > 0);
+    const useOut = segOut < segs && (closed || i < m - 1);
+    const s = useIn ? segIn : segOut;
+    const along = t[s];
+    const { N: Ni, B: Bi } = frames[s];
+    const plane = useIn && useOut ? unit(add(t[segIn], t[segOut])) : along;
+    const spin = twist + (closed ? closeTurn * s / segs : 0);
+    const first = verts.length / 3;
+    for (let j = 0; j < n; j++) {
+      const a = 2 * Math.PI * j / n + spin;
+      const q = add(p, add(mul(Ni, r * Math.cos(a)), mul(Bi, r * Math.sin(a))));
+      const d = dot2(sub2(q, p), plane) / dot2(along, plane);
+      const w = sub2(q, mul(along, d));
+      verts.push(w[0], w[1], w[2]);
+    }
+    return first;
+  };
+  const tri = [];
+  const band = (a, b) => {
+    for (let j = 0; j < n; j++) {
+      const j1 = (j + 1) % n;
+      tri.push(a + j, b + j, b + j1, a + j, b + j1, a + j1);
+    }
+  };
+  const rings = [];
+  for (let i = 0; i < m; i++) rings.push(ringAt(i));
+  for (let i = 0; i < segs; i++) band(rings[i], rings[(i + 1) % m]);
+  if (!closed) {
+    const cap2 = (ring, centre, out, Nc, Bc, spin, back) => {
+      const h = Math.max(2, Math.ceil(n / 4));
+      let prev = ring;
+      for (let l = 1; l < h; l++) {
+        const beta = l * Math.PI / 2 / h;
+        const first = verts.length / 3;
+        for (let j = 0; j < n; j++) {
+          const a = 2 * Math.PI * j / n + spin;
+          const q2 = add(add(centre, mul(out, r * Math.sin(beta))), add(mul(Nc, r * Math.cos(beta) * Math.cos(a)), mul(Bc, r * Math.cos(beta) * Math.sin(a))));
+          verts.push(q2[0], q2[1], q2[2]);
+        }
+        if (back) band(first, prev);
+        else band(prev, first);
+        prev = first;
+      }
+      const pole = verts.length / 3;
+      const q = add(centre, mul(out, r));
+      verts.push(q[0], q[1], q[2]);
+      for (let j = 0; j < n; j++) {
+        if (back) tri.push(pole, prev + j, prev + (j + 1) % n);
+        else tri.push(prev + j, pole, prev + (j + 1) % n);
+      }
+    };
+    cap2(rings[m - 1], pts[m - 1], t[segs - 1], frames[segs - 1].N, frames[segs - 1].B, twist, false);
+    cap2(rings[0], pts[0], mul(t[0], -1), frames[0].N, frames[0].B, twist, true);
+  }
+  const P = verts;
+  let vol = 0;
+  for (let i = 0; i < tri.length; i += 3) {
+    const a = tri[i] * 3, b = tri[i + 1] * 3, c = tri[i + 2] * 3;
+    vol += P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c]);
+  }
+  if (vol < 0) for (let i = 0; i < tri.length; i += 3) {
+    const x = tri[i + 1];
+    tri[i + 1] = tri[i + 2];
+    tri[i + 2] = x;
+  }
+  return new k.Manifold(new k.Mesh({ numProp: 3, vertProperties: Float32Array.from(verts), triVerts: Uint32Array.from(tri) }));
+}
+function buildSweep(k, r, path, closed, tol) {
+  const p = [];
+  for (const q of path) if (!p.length || len2(sub2(q, p[p.length - 1])) > 1e-9) p.push(q);
+  if (closed && p.length > 1 && len2(sub2(p[0], p[p.length - 1])) <= 1e-9) p.pop();
+  const n = sphereSegments(r, tol);
+  if (p.length === 1) return k.Manifold.sphere(r, n).translate(p[0]);
+  const isClosed = closed && p.length > 2;
+  const runs = runsOf(p, isClosed, r, mitreBreaks(p, isClosed, r, EXPORT_TOL));
+  const tubes = runs.map((run, i) => runTube(k, run.pts.map((j) => p[j]), run.closed, r, n, (7.31 * i + 3.7) * Math.PI / 180));
+  if (tubes.length === 1) return tubes[0];
+  const out = k.Manifold.union(tubes);
+  for (const x of tubes) x.delete();
+  return out;
+}
+
 // src/library/ops.ts
 var L2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : lengthMm(p[k], k);
 var D2 = (p, k, dflt = 0) => p[k] === void 0 ? dflt : angleDeg(p[k], k);
@@ -25836,14 +26038,7 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
       return A.t(Manifold.revolve(A.t(new CrossSection([prof])), segmentsFor(rMax, tol, 32), D2(p, "degrees", 360)));
     }
     case "sweep": {
-      const r = L2(p, "radius");
-      const path = pts32(p["path"]);
-      const seg = sphereSegments(r, tol);
-      const ball = (q, i) => A.t(A.t(A.t(Manifold.sphere(r, seg)).rotate([0, 0, 7.31 * i + 3.7])).translate(q));
-      const pieces = [];
-      const m = p["closed"] === true ? path.length : path.length - 1;
-      for (let i = 0; i < m; i++) pieces.push(A.t(Manifold.hull([ball(path[i], i), ball(path[(i + 1) % path.length], i)])));
-      return pieces.length === 1 ? pieces[0] : A.t(Manifold.union(pieces));
+      return A.t(buildSweep(k, L2(p, "radius"), pts32(p["path"]), p["closed"] === true, tol));
     }
     case "union":
       return all();
@@ -26115,8 +26310,8 @@ function prongPlaces(stone, outline, count) {
   const n = outline.length;
   const mids = outline.map((p, i) => {
     const q = outline[(i + 1) % n];
-    const len2 = Math.hypot(q[0] - p[0], q[1] - p[1]);
-    return { at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], out: edgeNormal(p, q), len: len2 };
+    const len3 = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    return { at: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], out: edgeNormal(p, q), len: len3 };
   });
   const corners = mids.filter((m) => Math.abs(m.out[0]) > 0.2 && Math.abs(m.out[1]) > 0.2);
   let places = corners;
@@ -26443,7 +26638,7 @@ function blendSurface(mesh, blends, scale2) {
     let n = 0;
     const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
-    const add = (x, y, z, nrm) => {
+    const add2 = (x, y, z, nrm) => {
       projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
       const q0 = on[0], q1 = on[1], q2 = on[2];
       pts[n * 3] = (m[0] * q0 + m[1] * q1 + m[2] * q2 + m[3]) * scale2;
@@ -26464,7 +26659,7 @@ function blendSurface(mesh, blends, scale2) {
         if (seenVert[i]) continue;
         seenVert[i] = 1;
         const p = at2(i);
-        add(p[0], p[1], p[2], nrm);
+        add2(p[0], p[1], p[2], nrm);
       }
       for (const [i, j] of [
         [ia, ib],
@@ -26476,9 +26671,9 @@ function blendSurface(mesh, blends, scale2) {
         if (seenEdge.has(key)) continue;
         seenEdge.add(key);
         const p = at2(lo), q = at2(hi);
-        add((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
+        add2((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, nrm);
       }
-      add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
+      add2((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
     }
     out.push({ label: b.label, points: pts.slice(0, n * 3) });
   }
@@ -26592,6 +26787,60 @@ import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/program/library.ts
 var MAX_REACH_MM = 1e3;
+var PROGRAM_CALLS = [
+  // kernel: solids
+  "sphere",
+  "cylinder",
+  "box",
+  "torus",
+  "sweep",
+  "extrude",
+  "revolve",
+  "hull",
+  "hullPoints",
+  "union",
+  "difference",
+  "intersection",
+  "smoothUnion",
+  "op",
+  "segments",
+  // kernel: 2D profiles
+  "circle",
+  "rect",
+  "polygon",
+  // library
+  "ringShank",
+  "roundStone",
+  "emeraldStone",
+  "cabochon",
+  "stone",
+  "prongHead",
+  "bezel",
+  "thicken",
+  // methods of a solid
+  "translate",
+  "rotate",
+  "mirror",
+  "scale",
+  "named",
+  "bounds",
+  "volume",
+  "slice",
+  "project",
+  "trim",
+  // methods of a profile
+  "p_offset",
+  "p_add",
+  "p_subtract",
+  "p_intersect",
+  "p_translate",
+  "p_rotate",
+  "p_scale",
+  "p_mirror",
+  "p_hull",
+  "p_bounds",
+  "p_area"
+];
 
 // src/program/verify.ts
 var MAX_TRIANGLES = 6e6;
@@ -26903,6 +27152,15 @@ function childEntry() {
   }
   return { entry: entry2, read };
 }
+function stoppedInText(v) {
+  return typeof v === "string" && PROGRAM_CALLS.includes(v) ? `; it ran out in a ${v} call` : "";
+}
+function heaviestText(v) {
+  if (!Array.isArray(v)) return "";
+  const known = new Set(PROGRAM_CALLS);
+  const said = v.slice(0, 3).filter((x) => !!x && typeof x === "object" && known.has(x.call) && Number.isSafeInteger(x.calls) && Number.isSafeInteger(x.triangles)).map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? "" : "s"}, ${x.triangles.toLocaleString("en-US")} triangles)`);
+  return said.length ? `; its heaviest calls before it stopped: ${said.join(", ")}` : "";
+}
 function rssOf(pid) {
   try {
     const m = /VmRSS:\s+(\d+)\s+kB/.exec(readFileSync(`/proc/${pid}/status`, "utf8"));
@@ -26988,21 +27246,21 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
         return reject(new ProgramFailed("engine", null, `the program's evaluation ended with no answer (exit ${code ?? signal}): ${err.trim().split("\n").slice(-3).join(" ").slice(0, 400) || "no message"}`));
       }
       try {
-        const len2 = buf.readUInt32LE(0);
-        if (len2 > buf.length - 4 || len2 > 64 * 2 ** 20) throw new Error("its answer is malformed");
-        const header = JSON.parse(buf.subarray(4, 4 + len2).toString("utf8"));
+        const len3 = buf.readUInt32LE(0);
+        if (len3 > buf.length - 4 || len3 > 64 * 2 ** 20) throw new Error("its answer is malformed");
+        const header = JSON.parse(buf.subarray(4, 4 + len3).toString("utf8"));
         const logs = Array.isArray(header["logs"]) ? header["logs"].filter((x) => typeof x === "string").map((x) => x.slice(0, 300)).slice(0, 50) : [];
         if (header["ok"] !== true) {
           const kind = ["program", "time", "memory", "engine"].find((k) => k === header["kind"]) ?? "engine";
           const line = typeof header["line"] === "number" && Number.isInteger(header["line"]) ? header["line"] : null;
           const msg = String(header["message"] ?? "the program failed").slice(0, 1e3);
-          const said = kind === "time" ? `${msg} (${limits.seconds} s)` : kind === "memory" ? `${msg} (${limits.memoryMiB} MiB)` : msg;
+          const said = kind === "time" ? `${msg} (${limits.seconds} s)` : kind === "memory" ? `${msg} (${limits.memoryMiB} MiB)${stoppedInText(header["stopped_in"])}${heaviestText(header["heaviest"])}` : msg;
           return reject(new ProgramFailed(kind, line, said, logs));
         }
         const sizes = header["blobs"];
         if (!Array.isArray(sizes) || sizes.length > 1e4) throw new Error("its answer lists no files");
         const blobs = [];
-        let off = 4 + len2;
+        let off = 4 + len3;
         for (const n of sizes) {
           if (!Number.isInteger(n) || n < 0 || off + n > buf.length) throw new Error("its answer is cut short");
           blobs.push(Buffer.from(buf.subarray(off, off + n)));
@@ -27155,14 +27413,14 @@ function norm(v) {
   const l = Math.hypot(v[0], v[1], v[2]) || 1;
   return [v[0] / l, v[1] / l, v[2] / l];
 }
-function cross2(a, b) {
+function cross3(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 function camera(name) {
   const v = VIEWS[name];
   const eye = norm(v.eye);
-  const right = norm(cross2([-eye[0], -eye[1], -eye[2]], v.up));
-  const up = norm(cross2(right, [-eye[0], -eye[1], -eye[2]]));
+  const right = norm(cross3([-eye[0], -eye[1], -eye[2]], v.up));
+  const up = norm(cross3(right, [-eye[0], -eye[1], -eye[2]]));
   return { eye, right, up };
 }
 function niceBar(mmPerPanel) {
@@ -27211,7 +27469,7 @@ function renderPanel(items, view, focusAboveZ) {
     for (let t = 0; t < tri.length; t += 3) {
       const a = tri[t], b = tri[t + 1], c = tri[t + 2];
       const ax = p[a * 3], ay = p[a * 3 + 1], az = p[a * 3 + 2];
-      const n = norm(cross2([p[b * 3] - ax, p[b * 3 + 1] - ay, p[b * 3 + 2] - az], [p[c * 3] - ax, p[c * 3 + 1] - ay, p[c * 3 + 2] - az]));
+      const n = norm(cross3([p[b * 3] - ax, p[b * 3 + 1] - ay, p[b * 3 + 2] - az], [p[c * 3] - ax, p[c * 3 + 1] - ay, p[c * 3 + 2] - az]));
       const facing = n[0] * cam.eye[0] + n[1] * cam.eye[1] + n[2] * cam.eye[2];
       if (facing <= 0) continue;
       const d1 = Math.max(0, n[0] * L1[0] + n[1] * L1[1] + n[2] * L1[2]);
@@ -27295,7 +27553,7 @@ function renderPreview(items, views, opts) {
 
 // src/version.ts
 var ENGINE_NAME = "flo2-cad";
-var ENGINE_VERSION = "0.4.3";
+var ENGINE_VERSION = "0.4.4";
 var KERNEL_NAME = "manifold-3d";
 var KERNEL_VERSION = "3.5.4";
 
@@ -27630,7 +27888,7 @@ async function checkPiece(piece, mode, limits = programLimits()) {
   }
   const problems = withFix.filter((e) => e.result !== "pass" && e.problem && !same.has(e)).map((e) => e.problem);
   const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
-  const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
+  const fixes = [...new Set(withFix.filter((e) => e.fix).map((e) => e.fix))];
   const shrinkApplied = v.shrinkagePct > 0;
   const s = v.head?.stone;
   const volumeMm3 = L3 ? meshInfo.volumeMm3 : built?.volumeMm3 ?? 0;
@@ -27769,7 +28027,11 @@ async function describeProgram(p, view) {
 }
 function programFixFor(e, L3, material, parts, decl) {
   if (e.result === "pass") return null;
-  if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
+  if (e.result === "could_not_run") {
+    if (/memory limit|for memory/.test(e.measured ?? ""))
+      return `The check could not build the piece: ${e.measured}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), so make the piece lighter: a sweep costs memory with every point of its path, so give it fewer points where the wire runs straight; draw a round ring with torus() or revolve() rather than a sweep; make a pattern of many small shapes from fewer, larger ones. A check that cannot run counts as a fail, so nothing is exported until it can.`;
+    return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
+  }
   const head = parts.find((x) => x.call !== "ringShank");
   if (isSettingCheck(e)) return programSettingFix(e, head?.head, L3);
   const shank = parts.find((x) => x.call === "ringShank");
@@ -27852,7 +28114,7 @@ async function checkProgram(p, mode, limits) {
   }
   const problems = withFix.filter((e) => e.result !== "pass" && e.problem && !same.has(e)).map((e) => e.problem);
   const verdict = !L3 ? "no_verdict" : withFix.every((e) => e.result === "pass") ? "pass" : "fail";
-  const fixes = withFix.filter((e) => e.fix).map((e) => e.fix);
+  const fixes = [...new Set(withFix.filter((e) => e.fix).map((e) => e.fix))];
   const headPart = parts.find((x) => x.call !== "ringShank");
   const hs = headPart?.head.stone;
   const volumeMm3 = L3 ? meshInfo.volumeMm3 : mesh ? meshVolume(mesh) : 0;
@@ -27915,7 +28177,7 @@ var PROGRAM_CALLS_GUIDE = [
   '- thicken({ id, outline: [[x, y], ...], thickness, surface: "flat" | "sphere" | "cylinder", radius, axis, round_corners }) -> a curved sheet (a petal, a leaf), checked square to its surface.',
   "- op(node) -> any operation node of a tree, as JSON with units (describe_piece of a tree lists them): what a tree can hold, a program can hold.",
   "KERNEL (general shapes, numbers in mm and degrees):",
-  "- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire).",
+  "- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire along the points: a tube, rounded where it turns sharply or meets itself; each point costs memory in a check, so give a curve the points it needs and no more, and draw a round ring as a torus or a revolve rather than a sweep).",
   '- circle(r), rect(x, y, { center }), polygon([[x, y], ...]) -> 2D profiles, with .offset(d, { join: "round" | "square" | "miter" }), .add, .subtract, .intersect, .translate([x, y]), .rotate(deg), .scale(f), .mirror([x, y]), .hull(), .bounds(), .area().',
   "- extrude(profile, h, { twist, scale_top, center }), revolve(profile, { degrees }) (x is the distance from the Z axis, y the height).",
   "- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions).",
@@ -28249,6 +28511,10 @@ var TOOLS = [
 ];
 
 // src/session.ts
+function fixHeading(r) {
+  const failing = r.entries.filter((e) => e.result !== "pass");
+  return failing.length && failing.every((e) => e.result === "could_not_run") ? "What to do:" : "What to thicken and where:";
+}
 var PROGRAM_PIECE_SETTINGS = ["name", "metal", "material", "process", "shrinkage", "limits"];
 var BOTH = 'give metal or material, not both: "metal" names one of the four metals by its id, "material" anything else.';
 function castingLimitsTexts(cast, box) {
@@ -28534,7 +28800,7 @@ var Session = class {
     }
     const head = r.verdict === "pass" ? "Every casting check passes on the file as an export would write it; export_for_casting will release it." : `It would NOT cast as it is:
 ${r.problems.map((f) => `- ${f}`).join("\n")}
-What to thicken and where:
+${fixHeading(r)}
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
     const texts = [head, this.#verdictText(tree, r), `Shrinkage allowance: ${r.report["shrinkage"].allowance}. The stone is not part of the casting file. Full report: ${tree.name}.check.json.`, limitsLine(r, tree)];
     const ph = isProgramPiece(tree) ? null : placeholderNote(readPiece(tree));
@@ -28557,7 +28823,7 @@ ${r.fixes.map((f) => `- ${f}`).join("\n")}`;
       const texts2 = [
         `NOT EXPORTED: "${tree.name}" revision ${tree.revision} fails a casting check, so no casting file was released:
 ${r.problems.map((f) => `- ${f}`).join("\n")}
-What to thicken and where:
+${fixHeading(r)}
 ${r.fixes.map((f) => `- ${f}`).join("\n")}`,
         this.#verdictText(tree, r),
         `${shrink} The report is ${tree.name}.check.json. A preview is still available with preview_piece.`,

@@ -37,6 +37,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kernelDir } from '../kernel/manifold.js';
 import type { ChildRequest, ChildRun, FailKind } from './child.js';
+import { PROGRAM_CALLS } from './library.js';
 import { readRun, type RunOut } from './verify.js';
 
 export const DEFAULT_SECONDS = 20;
@@ -115,6 +116,26 @@ export function childEntry(): { entry: string; read: string[] } {
     dir = dirname(dir);
   }
   return { entry, read };
+}
+
+/** The kind of call a child ran out of memory in, when it says a known one: "; it ran out in a sweep call". */
+function stoppedInText(v: unknown): string {
+  return typeof v === 'string' && (PROGRAM_CALLS as readonly string[]).includes(v) ? `; it ran out in a ${v} call` : '';
+}
+
+/**
+ * What a child that ran out of memory says its heaviest shape calls made, read field by field
+ * (a known call's name, whole counts), or nothing: "; its heaviest calls before it stopped:
+ * sweep (2 calls, 431,220 triangles), torus (2 calls, 12,960 triangles)".
+ */
+function heaviestText(v: unknown): string {
+  if (!Array.isArray(v)) return '';
+  const known = new Set<string>(PROGRAM_CALLS);
+  const said = v
+    .slice(0, 3)
+    .filter((x): x is { call: string; calls: number; triangles: number } => !!x && typeof x === 'object' && known.has((x as { call?: unknown }).call as string) && Number.isSafeInteger((x as { calls?: unknown }).calls) && Number.isSafeInteger((x as { triangles?: unknown }).triangles))
+    .map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? '' : 's'}, ${x.triangles.toLocaleString('en-US')} triangles)`);
+  return said.length ? `; its heaviest calls before it stopped: ${said.join(', ')}` : '';
 }
 
 /** Resident memory of a process in bytes, from /proc (Linux); null where there is none. */
@@ -223,7 +244,7 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
           const kind = (['program', 'time', 'memory', 'engine'] as const).find((k) => k === header['kind']) ?? 'engine';
           const line = typeof header['line'] === 'number' && Number.isInteger(header['line']) ? (header['line'] as number) : null;
           const msg = String(header['message'] ?? 'the program failed').slice(0, 1000);
-          const said = kind === 'time' ? `${msg} (${limits.seconds} s)` : kind === 'memory' ? `${msg} (${limits.memoryMiB} MiB)` : msg;
+          const said = kind === 'time' ? `${msg} (${limits.seconds} s)` : kind === 'memory' ? `${msg} (${limits.memoryMiB} MiB)${stoppedInText(header['stopped_in'])}${heaviestText(header['heaviest'])}` : msg;
           return reject(new ProgramFailed(kind, line, said, logs));
         }
         // The blobs, in order, each copied out so it is aligned for its typed array.
