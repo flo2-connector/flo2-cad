@@ -494,7 +494,7 @@ export async function checkPiece(piece: Piece, mode: 'check' | 'export', limits:
   }
   const problems = withFix.filter((e) => e.result !== 'pass' && e.problem && !same.has(e)).map((e) => e.problem!);
   const verdict = !L ? 'no_verdict' : withFix.every((e) => e.result === 'pass') ? 'pass' : 'fail';
-  const fixes = withFix.filter((e) => e.fix).map((e) => e.fix!);
+  const fixes = [...new Set(withFix.filter((e) => e.fix).map((e) => e.fix!))];
   const shrinkApplied = v.shrinkagePct > 0;
   const s = v.head?.stone;
   const volumeMm3 = L ? meshInfo.volumeMm3 : (built?.volumeMm3 ?? 0);
@@ -687,7 +687,12 @@ type HeadPart = Extract<PartReport, { call: 'prongHead' | 'bezel' }>;
 /** What to thicken and where, for a program's piece: in the terms of the call in the program that makes that place, against the piece's limits `L`. */
 function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readonly PartReport[], decl?: FeatureDecl): string | null {
   if (e.result === 'pass') return null;
-  if (e.result === 'could_not_run') return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
+  if (e.result === 'could_not_run') {
+    // Out of memory: every check reads the same cause, so the advice is about the piece, and it is said once (the fixes are deduplicated).
+    if (/memory limit|for memory/.test(e.measured ?? ''))
+      return `The check could not build the piece: ${e.measured}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), so make the piece lighter: a sweep costs memory with every point of its path, so give it fewer points where the wire runs straight; draw a round ring with torus() or revolve() rather than a sweep; make a pattern of many small shapes from fewer, larger ones. A check that cannot run counts as a fail, so nothing is exported until it can.`;
+    return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
+  }
   const head = parts.find((x): x is HeadPart => x.call !== 'ringShank');
   // A stone's setting: the jewelry layer's own advice.
   if (isSettingCheck(e)) return programSettingFix(e, head?.head, L);
@@ -774,7 +779,7 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
   }
   const problems = withFix.filter((e) => e.result !== 'pass' && e.problem && !same.has(e)).map((e) => e.problem!);
   const verdict = !L ? 'no_verdict' : withFix.every((e) => e.result === 'pass') ? 'pass' : 'fail';
-  const fixes = withFix.filter((e) => e.fix).map((e) => e.fix!);
+  const fixes = [...new Set(withFix.filter((e) => e.fix).map((e) => e.fix!))];
   const headPart = parts.find((x): x is HeadPart => x.call !== 'ringShank');
   const hs = headPart?.head.stone;
   const volumeMm3 = L ? meshInfo.volumeMm3 : mesh ? meshVolume(mesh) : 0;

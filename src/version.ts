@@ -3,6 +3,6 @@
 // vendored kernel's own package.json and provenance file.
 
 export const ENGINE_NAME = 'flo2-cad';
-export const ENGINE_VERSION = '0.4.3';
+export const ENGINE_VERSION = '0.4.4';
 export const KERNEL_NAME = 'manifold-3d';
 export const KERNEL_VERSION = '3.5.4';
