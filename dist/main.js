@@ -23886,8 +23886,8 @@ function materialName(s) {
 }
 function processOf(s) {
   const id = s.process ?? DEFAULT_PROCESS;
-  const known = isProcessId(id) ? id : null;
-  return { id, stated: s.process !== void 0, words: known ? PROCESSES[known].words : id, known };
+  const known2 = isProcessId(id) ? id : null;
+  return { id, stated: s.process !== void 0, words: known2 ? PROCESSES[known2].words : id, known: known2 };
 }
 function processWords(s) {
   const p = processOf(s);
@@ -26841,6 +26841,7 @@ var PROGRAM_CALLS = [
   "p_bounds",
   "p_area"
 ];
+var PROGRESS_MARK = "flo2-cad-progress ";
 
 // src/program/verify.ts
 var MAX_TRIANGLES = 6e6;
@@ -27123,12 +27124,15 @@ var ProgramFailed = class extends Error {
   kind;
   line;
   logs;
-  constructor(kind, line, message, logs = []) {
+  /** For a refusal at the time or the memory limit: where it stopped. */
+  stopped;
+  constructor(kind, line, message, logs = [], stopped = null) {
     super(message);
     this.name = "ProgramFailed";
     this.kind = kind;
     this.line = line;
     this.logs = logs;
+    this.stopped = stopped;
   }
   /** "line 7: ...", or the limit that was hit. */
   get plain() {
@@ -27152,14 +27156,56 @@ function childEntry() {
   }
   return { entry: entry2, read };
 }
-function stoppedInText(v) {
-  return typeof v === "string" && PROGRAM_CALLS.includes(v) ? `; it ran out in a ${v} call` : "";
+var KNOWN = new Set(PROGRAM_CALLS);
+var known = (v) => typeof v === "string" && KNOWN.has(v);
+var whole = (v) => Number.isSafeInteger(v) && v >= 0;
+function readSaid(line, before, now) {
+  let o;
+  try {
+    o = JSON.parse(line);
+  } catch {
+    return before;
+  }
+  if (!o || typeof o !== "object" || !whole(o["run"]) || !whole(o["started"])) return before;
+  const inCall = known(o["in"]) ? o["in"] : null;
+  const list = (v) => Array.isArray(v) ? v.slice(0, 3).filter((x) => !!x && typeof x === "object" && known(x["call"]) && whole(x["calls"])) : [];
+  return {
+    run: o["run"],
+    started: o["started"],
+    in: inCall,
+    finishing: o["finishing"] === true,
+    // The call still running (a failed call stays it until the next starts) keeps the time it started.
+    since: before && before.in === inCall && before.run === o["run"] && before.started === o["started"] ? before.since : now,
+    // A line that leaves the tallies out has not changed them in substance.
+    heaviest: "heaviest" in o ? list(o["heaviest"]).filter((x) => whole(x["triangles"])).map((x) => ({ call: x["call"], calls: x["calls"], triangles: x["triangles"] })) : before && before.run === o["run"] ? before.heaviest : [],
+    slowest: "slowest" in o ? list(o["slowest"]).filter((x) => whole(x["ms"])).map((x) => ({ call: x["call"], calls: x["calls"], ms: x["ms"] })) : before && before.run === o["run"] ? before.slowest : []
+  };
 }
-function heaviestText(v) {
-  if (!Array.isArray(v)) return "";
-  const known = new Set(PROGRAM_CALLS);
-  const said = v.slice(0, 3).filter((x) => !!x && typeof x === "object" && known.has(x.call) && Number.isSafeInteger(x.calls) && Number.isSafeInteger(x.triangles)).map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? "" : "s"}, ${x.triangles.toLocaleString("en-US")} triangles)`);
-  return said.length ? `; its heaviest calls before it stopped: ${said.join(", ")}` : "";
+var seconds = (ms) => `${(ms / 1e3).toFixed(1)} s`;
+function stoppedText(kind, said, runs, now) {
+  const call = said?.in ?? null;
+  const where = said?.finishing ? kind === "time" ? "; the program had returned, and it was making the mesh of the piece it returned" : "; the program had returned, and it ran out making the mesh of the piece it returned" : kind === "time" ? call ? `; it was in a ${call} call (for ${seconds(now - said.since)})` : "; it was in the program's own code, between library calls" : call ? `; it ran out in a ${call} call` : "; it ran out in the program's own code, between library calls";
+  const build2 = said && runs > 1 ? `, in build ${said.run + 1} of ${runs}` : "";
+  let costly = [];
+  let list = "";
+  if (kind === "time") {
+    const rows = (said?.slowest ?? []).map((x) => ({ ...x, now: false }));
+    if (call && !said?.finishing) {
+      const row = rows.find((x) => x.call === call);
+      const ms = now - said.since;
+      if (row) Object.assign(row, { calls: row.calls + 1, ms: row.ms + ms, now: true });
+      else rows.push({ call, calls: 1, ms, now: true });
+    }
+    rows.sort((a, b) => b.ms - a.ms);
+    const top = rows.slice(0, 3);
+    costly = top.map((x) => x.call);
+    if (top.length) list = `; its slowest calls: ${top.map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? "" : "s"}, ${seconds(x.ms)}${x.now ? " so far" : ""})`).join(", ")}`;
+  } else {
+    const top = said?.heaviest ?? [];
+    costly = top.map((x) => x.call);
+    if (top.length) list = `; its heaviest calls before it stopped: ${top.map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? "" : "s"}, ${x.triangles.toLocaleString("en-US")} triangles)`).join(", ")}`;
+  }
+  return { text: `${where}${build2}${list}`, stopped: { call, costliest: costly } };
 }
 function rssOf(pid) {
   try {
@@ -27192,6 +27238,13 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
     let err = "";
     let stopped = null;
     let peak = null;
+    let said = null;
+    let errLine = "";
+    const atLimit = (kind, message, line = null, logs = []) => {
+      const now = performance.now();
+      const { text: text2, stopped: at2 } = stoppedText(kind, said, runs.length, now);
+      return new ProgramFailed(kind, line, `${message}${text2}`, logs, at2);
+    };
     const stop = (f) => {
       if (stopped) return;
       stopped = f;
@@ -27206,14 +27259,14 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
     let head = Buffer.alloc(0);
     const ready = () => {
       clearTimeout(startup);
-      hard = setTimeout(() => stop(new ProgramFailed("time", null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1e3 + 1500);
+      hard = setTimeout(() => stop(atLimit("time", `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1e3 + 1500);
     };
     const watch = setInterval(() => {
       if (pid === void 0) return;
       const rss = rssOf(pid);
       if (rss === null) return;
       peak = Math.max(peak ?? 0, rss);
-      if (rss > limitBytes) stop(new ProgramFailed("memory", null, `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
+      if (rss > limitBytes) stop(atLimit("memory", `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
     }, 20);
     child.stdout.on("data", (c) => {
       if (head.length < 4) {
@@ -27225,7 +27278,14 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
       else out.push(c);
     });
     child.stderr.on("data", (c) => {
-      if (err.length < 65536) err += c.toString("utf8");
+      const lines = (errLine + c.toString("utf8")).split("\n");
+      errLine = lines.pop() ?? "";
+      if (errLine.length > 65536) errLine = "";
+      for (const l of lines) {
+        if (l.startsWith(PROGRESS_MARK)) said = readSaid(l.slice(PROGRESS_MARK.length), said, performance.now());
+        else if (err.length < 65536) err += `${l}
+`;
+      }
     });
     child.stdin.on("error", () => {
     });
@@ -27241,8 +27301,8 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
       const all = Buffer.concat(out);
       const buf = all.length >= 4 && all.readUInt32LE(0) === 0 ? all.subarray(4) : all;
       if (buf.length < 4) {
-        if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(new ProgramFailed("memory", null, `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
-        if (signal === "SIGKILL") return reject(new ProgramFailed("memory", null, `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));
+        if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(atLimit("memory", `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
+        if (signal === "SIGKILL") return reject(atLimit("memory", `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));
         return reject(new ProgramFailed("engine", null, `the program's evaluation ended with no answer (exit ${code ?? signal}): ${err.trim().split("\n").slice(-3).join(" ").slice(0, 400) || "no message"}`));
       }
       try {
@@ -27254,8 +27314,9 @@ async function runProgram(source, runs, limits = programLimits(), hooks = {}) {
           const kind = ["program", "time", "memory", "engine"].find((k) => k === header["kind"]) ?? "engine";
           const line = typeof header["line"] === "number" && Number.isInteger(header["line"]) ? header["line"] : null;
           const msg = String(header["message"] ?? "the program failed").slice(0, 1e3);
-          const said = kind === "time" ? `${msg} (${limits.seconds} s)` : kind === "memory" ? `${msg} (${limits.memoryMiB} MiB)${stoppedInText(header["stopped_in"])}${heaviestText(header["heaviest"])}` : msg;
-          return reject(new ProgramFailed(kind, line, said, logs));
+          if (kind === "time") return reject(atLimit("time", `${msg} (${limits.seconds} s)`, line, logs));
+          if (kind === "memory") return reject(atLimit("memory", `${msg} (${limits.memoryMiB} MiB)`, line, logs));
+          return reject(new ProgramFailed(kind, line, msg, logs));
         }
         const sizes = header["blobs"];
         if (!Array.isArray(sizes) || sizes.length > 1e4) throw new Error("its answer lists no files");
@@ -28025,11 +28086,20 @@ async function describeProgram(p, view) {
   const volumeMm3 = meshVolume(view.run.metal);
   return { volumeMm3: r22(volumeMm3), size: meshSize(view.run.metal), weights: Object.values(METALS).map((m) => ({ metal: m.name, grams: r22(volumeMm3 / 1e3 * m.density) })) };
 }
-function programFixFor(e, L3, material, parts, decl) {
+var LIMIT_TIPS = {
+  smoothUnion: "a smooth blend (smoothUnion) meshes the whole surface of what it blends at its fillet's fineness, on a grid that fills the box round it all, so one round a whole ring costs many times what union() does (an openwork ring's rails, wires and posts made 289,518 triangles blended and 30,900 joined with union()): blend only where a fillet is wanted, over as few and as small shapes as you can, leave a large smooth shape (a rail or a band all round the ring) out of the blend, and join the rest with union()",
+  sweep: "a sweep costs time and memory with every point of its path, so give it fewer points where the wire runs straight, and draw a round ring with torus() or revolve() rather than a sweep"
+};
+function limitTips(f) {
+  if (f.kind !== "time" && f.kind !== "memory") return null;
+  const calls = [f.stopped?.call, ...f.stopped?.costliest ?? []].filter((c, i, all) => !!c && all.indexOf(c) === i);
+  const tips = [...calls.map((c) => LIMIT_TIPS[c]).filter((t) => !!t), "make a pattern of many small shapes from fewer, larger ones"];
+  return `make the piece ${f.kind === "time" ? "quicker to build" : "lighter"}: ${tips.join("; ")}`;
+}
+function programFixFor(e, L3, material, parts, decl, stoppedFix) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") {
-    if (/memory limit|for memory/.test(e.measured ?? ""))
-      return `The check could not build the piece: ${e.measured}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), so make the piece lighter: a sweep costs memory with every point of its path, so give it fewer points where the wire runs straight; draw a round ring with torus() or revolve() rather than a sweep; make a pattern of many small shapes from fewer, larger ones. A check that cannot run counts as a fail, so nothing is exported until it can.`;
+    if (stoppedFix) return stoppedFix;
     return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   }
   const head = parts.find((x) => x.call !== "ringShank");
@@ -28069,6 +28139,7 @@ async function checkProgram(p, mode, limits) {
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
   let evaluated = null;
+  let stoppedFix = null;
   let size = null;
   let choice = chooseLimits(p, null);
   try {
@@ -28096,10 +28167,13 @@ async function checkProgram(p, mode, limits) {
     }
   } catch (err) {
     entries = couldNotRun(err instanceof ProgramFailed ? `the program could not run: ${err.plain}` : `the piece could not be built: ${err instanceof Error ? err.message : String(err)}`);
+    const tips = err instanceof ProgramFailed ? limitTips(err) : null;
+    if (tips && err instanceof ProgramFailed)
+      stoppedFix = `The check could not build the piece: the program could not run: ${err.plain}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), within one limit of ${limits.seconds} s and ${limits.memoryMiB} MiB, so ${tips}. A check that cannot run counts as a fail, so nothing is exported until it can.`;
   }
   const L3 = choice.kind === "none" ? null : choice.limits;
   const name = materialName(p);
-  const withFix = L3 ? entries.map((e) => ({ ...e, fix: programFixFor(e, L3, name, parts, decl) })) : [];
+  const withFix = L3 ? entries.map((e) => ({ ...e, fix: programFixFor(e, L3, name, parts, decl, stoppedFix) })) : [];
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === "sheet" && e.result === "fail")?.failing ?? []).map((f) => f.label));
   const same = /* @__PURE__ */ new Set();
@@ -28180,7 +28254,7 @@ var PROGRAM_CALLS_GUIDE = [
   "- sphere(r), cylinder(r, h, { top, center }), box(x, y, z) (centred), torus(R, r), sweep(r, [[x, y, z], ...], { closed }) (a round wire along the points: a tube, rounded where it turns sharply or meets itself; each point costs memory in a check, so give a curve the points it needs and no more, and draw a round ring as a torus or a revolve rather than a sweep).",
   '- circle(r), rect(x, y, { center }), polygon([[x, y], ...]) -> 2D profiles, with .offset(d, { join: "round" | "square" | "miter" }), .add, .subtract, .intersect, .translate([x, y]), .rotate(deg), .scale(f), .mirror([x, y]), .hull(), .bounds(), .area().',
   "- extrude(profile, h, { twist, scale_top, center }), revolve(profile, { degrees }) (x is the distance from the Z axis, y the height).",
-  "- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions).",
+  "- union(a, b, ...), difference(a, b, ...), intersection(a, b, ...), hull(a, b, ...), hullPoints([[x, y, z], ...]), smoothUnion(radius, a, b, ..., { name }) (a fillet; it blends spheres, cylinders, boxes, tori, sweeps, their moves and unions; it meshes the whole surface of what it blends at the fillet's fineness, on a grid filling the box round it all, so a blend round a whole ring costs a check many times what union() does: blend only where a fillet is wanted, over as few and as small shapes as you can, and union() the rest).",
   '- on a solid: .translate([x, y, z]), .rotate([x, y, z]), .mirror("xy" | "yz" | "xz" | [x, y, z]), .scale(f | [x, y, z]), .add(b), .subtract(b), .intersect(b), .named("flange") (the check names a thin place by it, and describe_piece lists it among the parts), .bounds(), .volume(), .slice(z) and .project() (2D profiles), .trim([x, y, z], offset).',
   "- segments(r): how many straight pieces a circle of radius r gets at this build's fineness. Draw curves you compute yourself with it, so the casting file is as smooth as the check asks."
 ];
@@ -28635,7 +28709,8 @@ var Session = class {
     } catch (e) {
       if (e instanceof ProgramFailed) {
         const logs = e.logs.length ? ` It logged: ${e.logs.join(" | ")}` : "";
-        throw new CallError(path, `${e.plain.replace(/\.$/, "")}. Nothing was changed.${logs}`);
+        const tips = limitTips(e);
+        throw new CallError(path, `${e.plain.replace(/\.$/, "")}.${tips ? ` To fit the limit, ${tips}.` : ""} Nothing was changed.${logs}`);
       }
       throw e;
     }

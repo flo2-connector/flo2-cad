@@ -204,8 +204,14 @@ each joint, a half ball on each open end, split into runs that are unioned only 
 wire (a joint sharper than the casting file's tolerance allows, a bend tighter than the wire, or the wire coming back
 within its own width). Before, it was the hull of a ball at each end of every segment, all unioned, every ball kept until
 the build ended: about 8 times a tube's triangles, so one 200-point wire of radius 0.6 mm needed 556 MiB at the
-reference, and four step-7 pieces could not be checked. A check that still runs out of memory says the kind of call it
-ran out in and the heaviest calls before it, and advises how to make the piece lighter. The clock starts when the evaluation's
+reference, and four step-7 pieces could not be checked. A `smoothUnion` meshes the whole surface of what it blends at
+its fillet's fineness (a 0.12 mm grid for a 0.4 mm fillet), on a grid that fills the box round it all: an openwork
+ring's two rails, two wavy wires and four posts made 289,518 triangles blended and 30,900 joined with `union()`, and its
+check took 15.5 s at one CPU of an i5-10300H and passed 512 MiB, where the same shapes joined with `union()` took 6.5 s
+and 235 MiB. So blend only where a fillet is wanted, and leave a rail all round the ring out of the blend. A refusal at
+either limit says the call it stopped in, or the program's own code, and the build it was in, with the
+slowest calls (time) or the heaviest (memory) before it, however it was stopped, and a check gives one piece of advice
+that fits that call: how to make the piece quicker to build, or lighter. The clock starts when the evaluation's
 process is ready (Node and the kernel loaded, about 0.15 s), not when it is started, and a program that does not parse
 is refused before then, so a busy machine's slow start is never counted as the program's; the start has its own
 bound (10 s), past which the engine says it could not start. Hitting a limit is a plain refusal: "the

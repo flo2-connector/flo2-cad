@@ -25,6 +25,12 @@
 //     (vertices and triangles), the declarations the LIBRARY made, the dimensions its parts
 //     report, and for a preview the stones. Nothing else. verify.ts rebuilds each of them
 //     field by field, and checks that every declaration has metal where it says.
+//   · WHERE IT STOPPED: as each library call starts and ends, the child says on stderr where it
+//     stands (the call running, the heaviest and the slowest calls so far; child.ts, library.ts
+//     Progress), and a refusal at either limit says it, however the evaluation was stopped: by
+//     the child itself, or killed from here, when it can say nothing more. On 2026-11-12 a check
+//     on flo2.io ran past 20 s in a blend and said only the limit, six times over, and the chat
+//     had to guess (fact:root-cause-a-blend-over-a-whole-ring-outgrows-a-programs-limits-2026-11-15).
 //   · The CHECKER and the EXPORTER run here, in the engine's process, on what came back:
 //     the program cannot touch the check, and "the check runs on the exact file released"
 //     holds (engine.ts writes the STL from this mesh, and checks those bytes).
@@ -37,7 +43,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kernelDir } from '../kernel/manifold.js';
 import type { ChildRequest, ChildRun, FailKind } from './child.js';
-import { PROGRAM_CALLS } from './library.js';
+import { PROGRAM_CALLS, PROGRESS_MARK } from './library.js';
 import { readRun, type RunOut } from './verify.js';
 
 export const DEFAULT_SECONDS = 20;
@@ -70,17 +76,27 @@ export function programLimits(env: NodeJS.ProcessEnv = process.env): ProgramLimi
   };
 }
 
+/** Where an evaluation stopped at a limit: the library call it was in (null: the program's own code), and the calls that cost the most before it. */
+export interface StoppedAt {
+  call: string | null;
+  /** The calls named as the heaviest (memory) or the slowest (time), the most first. */
+  costliest: string[];
+}
+
 /** A program that could not be evaluated: what stopped it, in plain words, and the line when there is one. */
 export class ProgramFailed extends Error {
   readonly kind: FailKind | 'output';
   readonly line: number | null;
   readonly logs: string[];
-  constructor(kind: FailKind | 'output', line: number | null, message: string, logs: string[] = []) {
+  /** For a refusal at the time or the memory limit: where it stopped. */
+  readonly stopped: StoppedAt | null;
+  constructor(kind: FailKind | 'output', line: number | null, message: string, logs: string[] = [], stopped: StoppedAt | null = null) {
     super(message);
     this.name = 'ProgramFailed';
     this.kind = kind;
     this.line = line;
     this.logs = logs;
+    this.stopped = stopped;
   }
   /** "line 7: ...", or the limit that was hit. */
   get plain(): string {
@@ -118,24 +134,96 @@ export function childEntry(): { entry: string; read: string[] } {
   return { entry, read };
 }
 
-/** The kind of call a child ran out of memory in, when it says a known one: "; it ran out in a sweep call". */
-function stoppedInText(v: unknown): string {
-  return typeof v === 'string' && (PROGRAM_CALLS as readonly string[]).includes(v) ? `; it ran out in a ${v} call` : '';
+/**
+ * What the child last said of where it stood (child.ts, its progress lines), read field by field:
+ * only a known call's name and whole counts are kept, so nothing else the child might write is
+ * ever said as one.
+ */
+interface Said {
+  run: number;
+  /** How many calls had started: a new call, even of the same kind, starts its own clock. */
+  started: number;
+  in: string | null;
+  /** When the engine read that the call running now had started (performance.now()). */
+  since: number;
+  /** The program had returned, and its piece's mesh was being made. */
+  finishing: boolean;
+  heaviest: { call: string; calls: number; triangles: number }[];
+  slowest: { call: string; calls: number; ms: number }[];
 }
 
+const KNOWN = new Set<string>(PROGRAM_CALLS);
+const known = (v: unknown): v is string => typeof v === 'string' && KNOWN.has(v);
+const whole = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
+
+function readSaid(line: string, before: Said | null, now: number): Said | null {
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return before;
+  }
+  if (!o || typeof o !== 'object' || !whole(o['run']) || !whole(o['started'])) return before;
+  const inCall = known(o['in']) ? o['in'] : null;
+  const list = (v: unknown) => (Array.isArray(v) ? v.slice(0, 3).filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && known((x as Record<string, unknown>)['call']) && whole((x as Record<string, unknown>)['calls'])) : []);
+  return {
+    run: o['run'] as number,
+    started: o['started'] as number,
+    in: inCall,
+    finishing: o['finishing'] === true,
+    // The call still running (a failed call stays it until the next starts) keeps the time it started.
+    since: before && before.in === inCall && before.run === o['run'] && before.started === o['started'] ? before.since : now,
+    // A line that leaves the tallies out has not changed them in substance.
+    heaviest: 'heaviest' in o ? list(o['heaviest']).filter((x) => whole(x['triangles'])).map((x) => ({ call: x['call'] as string, calls: x['calls'] as number, triangles: x['triangles'] as number })) : before && before.run === o['run'] ? before.heaviest : [],
+    slowest: 'slowest' in o ? list(o['slowest']).filter((x) => whole(x['ms'])).map((x) => ({ call: x['call'] as string, calls: x['calls'] as number, ms: x['ms'] as number })) : before && before.run === o['run'] ? before.slowest : [],
+  };
+}
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
 /**
- * What a child that ran out of memory says its heaviest shape calls made, read field by field
- * (a known call's name, whole counts), or nothing: "; its heaviest calls before it stopped:
- * sweep (2 calls, 431,220 triangles), torus (2 calls, 12,960 triangles)".
+ * Where an evaluation stopped at a limit, in words, after the limit it met: "; it was in a
+ * smoothUnion call (for 14.2 s), in build 1 of 2; its slowest calls: smoothUnion (1 call,
+ * 14.2 s so far), sweep (2 calls, 2.4 s)" for time, "; it ran out in a sweep call; its heaviest
+ * calls before it stopped: sweep (2 calls, 181,568 triangles)" for memory. Said whichever way
+ * the evaluation was stopped: by the child itself, or killed from here, when it could say
+ * nothing more.
  */
-function heaviestText(v: unknown): string {
-  if (!Array.isArray(v)) return '';
-  const known = new Set<string>(PROGRAM_CALLS);
-  const said = v
-    .slice(0, 3)
-    .filter((x): x is { call: string; calls: number; triangles: number } => !!x && typeof x === 'object' && known.has((x as { call?: unknown }).call as string) && Number.isSafeInteger((x as { calls?: unknown }).calls) && Number.isSafeInteger((x as { triangles?: unknown }).triangles))
-    .map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? '' : 's'}, ${x.triangles.toLocaleString('en-US')} triangles)`);
-  return said.length ? `; its heaviest calls before it stopped: ${said.join(', ')}` : '';
+function stoppedText(kind: 'time' | 'memory', said: Said | null, runs: number, now: number): { text: string; stopped: StoppedAt } {
+  const call = said?.in ?? null;
+  const where = said?.finishing
+    ? kind === 'time'
+      ? '; the program had returned, and it was making the mesh of the piece it returned'
+      : '; the program had returned, and it ran out making the mesh of the piece it returned'
+    : kind === 'time'
+      ? call
+        ? `; it was in a ${call} call (for ${seconds(now - said!.since)})`
+        : "; it was in the program's own code, between library calls"
+      : call
+        ? `; it ran out in a ${call} call`
+        : "; it ran out in the program's own code, between library calls";
+  const build = said && runs > 1 ? `, in build ${said.run + 1} of ${runs}` : '';
+  let costly: string[] = [];
+  let list = '';
+  if (kind === 'time') {
+    // The call running now counts too, for the time it has taken so far.
+    const rows = (said?.slowest ?? []).map((x) => ({ ...x, now: false }));
+    if (call && !said?.finishing) {
+      const row = rows.find((x) => x.call === call);
+      const ms = now - said!.since;
+      if (row) Object.assign(row, { calls: row.calls + 1, ms: row.ms + ms, now: true });
+      else rows.push({ call, calls: 1, ms, now: true });
+    }
+    rows.sort((a, b) => b.ms - a.ms);
+    const top = rows.slice(0, 3);
+    costly = top.map((x) => x.call);
+    if (top.length) list = `; its slowest calls: ${top.map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? '' : 's'}, ${seconds(x.ms)}${x.now ? ' so far' : ''})`).join(', ')}`;
+  } else {
+    const top = said?.heaviest ?? [];
+    costly = top.map((x) => x.call);
+    if (top.length) list = `; its heaviest calls before it stopped: ${top.map((x) => `${x.call} (${x.calls} call${x.calls === 1 ? '' : 's'}, ${x.triangles.toLocaleString('en-US')} triangles)`).join(', ')}`;
+  }
+  return { text: `${where}${build}${list}`, stopped: { call, costliest: costly } };
 }
 
 /** Resident memory of a process in bytes, from /proc (Linux); null where there is none. */
@@ -179,6 +267,15 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
     let err = '';
     let stopped: ProgramFailed | null = null;
     let peak: number | null = null;
+    // What the child last said of where it stood (its progress lines on stderr).
+    let said: Said | null = null;
+    let errLine = '';
+    /** A refusal at the time or the memory limit, saying where the evaluation stopped. */
+    const atLimit = (kind: 'time' | 'memory', message: string, line: number | null = null, logs: string[] = []) => {
+      const now = performance.now();
+      const { text, stopped: at } = stoppedText(kind, said, runs.length, now);
+      return new ProgramFailed(kind, line, `${message}${text}`, logs, at);
+    };
     const stop = (f: ProgramFailed) => {
       if (stopped) return;
       stopped = f;
@@ -194,14 +291,14 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
     let head = Buffer.alloc(0);
     const ready = () => {
       clearTimeout(startup);
-      hard = setTimeout(() => stop(new ProgramFailed('time', null, `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1000 + 1500);
+      hard = setTimeout(() => stop(atLimit('time', `the program ran past its time limit (${limits.seconds} s) and was stopped`)), limits.seconds * 1000 + 1500);
     };
     const watch = setInterval(() => {
       if (pid === undefined) return;
       const rss = rssOf(pid);
       if (rss === null) return;
       peak = Math.max(peak ?? 0, rss);
-      if (rss > limitBytes) stop(new ProgramFailed('memory', null, `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
+      if (rss > limitBytes) stop(atLimit('memory', `the program used more than its memory limit (${limits.memoryMiB} MiB) and was stopped`));
     }, 20);
     child.stdout.on('data', (c: Buffer) => {
       // The first frame's length: 0 is READY.
@@ -214,7 +311,15 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
       else out.push(c);
     });
     child.stderr.on('data', (c: Buffer) => {
-      if (err.length < 65536) err += c.toString('utf8');
+      // Whole lines: a progress line is read for where the evaluation stands (only the last one
+      // matters); anything else is a diagnostic, kept up to 64 KiB.
+      const lines = (errLine + c.toString('utf8')).split('\n');
+      errLine = lines.pop() ?? '';
+      if (errLine.length > 65536) errLine = '';
+      for (const l of lines) {
+        if (l.startsWith(PROGRESS_MARK)) said = readSaid(l.slice(PROGRESS_MARK.length), said, performance.now());
+        else if (err.length < 65536) err += `${l}\n`;
+      }
     });
     child.stdin.on('error', () => {
       /* the child may die before reading it all; its exit says why */
@@ -231,8 +336,8 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
       const all = Buffer.concat(out);
       const buf = all.length >= 4 && all.readUInt32LE(0) === 0 ? all.subarray(4) : all;
       if (buf.length < 4) {
-        if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(new ProgramFailed('memory', null, `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
-        if (signal === 'SIGKILL') return reject(new ProgramFailed('memory', null, `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));
+        if (/heap out of memory|Reached heap limit|Allocation failed/i.test(err)) return reject(atLimit('memory', `the program used more than its memory limit (${heapMiB} MiB of JavaScript heap) and was stopped`));
+        if (signal === 'SIGKILL') return reject(atLimit('memory', `the program was stopped by the system, most likely for memory (its limit is ${limits.memoryMiB} MiB)`));
         return reject(new ProgramFailed('engine', null, `the program's evaluation ended with no answer (exit ${code ?? signal}): ${err.trim().split('\n').slice(-3).join(' ').slice(0, 400) || 'no message'}`));
       }
       try {
@@ -244,8 +349,9 @@ export async function runProgram(source: string, runs: ChildRun[], limits: Progr
           const kind = (['program', 'time', 'memory', 'engine'] as const).find((k) => k === header['kind']) ?? 'engine';
           const line = typeof header['line'] === 'number' && Number.isInteger(header['line']) ? (header['line'] as number) : null;
           const msg = String(header['message'] ?? 'the program failed').slice(0, 1000);
-          const said = kind === 'time' ? `${msg} (${limits.seconds} s)` : kind === 'memory' ? `${msg} (${limits.memoryMiB} MiB)${stoppedInText(header['stopped_in'])}${heaviestText(header['heaviest'])}` : msg;
-          return reject(new ProgramFailed(kind, line, said, logs));
+          if (kind === 'time') return reject(atLimit('time', `${msg} (${limits.seconds} s)`, line, logs));
+          if (kind === 'memory') return reject(atLimit('memory', `${msg} (${limits.memoryMiB} MiB)`, line, logs));
+          return reject(new ProgramFailed(kind, line, msg, logs));
         }
         // The blobs, in order, each copied out so it is aligned for its typed array.
         const sizes = header['blobs'];

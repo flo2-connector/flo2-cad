@@ -684,13 +684,31 @@ export async function describeProgram(p: ProgramPiece, view: ProgramView): Promi
 
 type HeadPart = Extract<PartReport, { call: 'prongHead' | 'bezel' }>;
 
-/** What to thicken and where, for a program's piece: in the terms of the call in the program that makes that place, against the piece's limits `L`. */
-function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readonly PartReport[], decl?: FeatureDecl): string | null {
+/** What makes each kind of call cost a check's time and memory, and what to do about it: the advice a refusal at a limit gives. */
+const LIMIT_TIPS: Readonly<Record<string, string>> = {
+  smoothUnion:
+    "a smooth blend (smoothUnion) meshes the whole surface of what it blends at its fillet's fineness, on a grid that fills the box round it all, so one round a whole ring costs many times what union() does (an openwork ring's rails, wires and posts made 289,518 triangles blended and 30,900 joined with union()): blend only where a fillet is wanted, over as few and as small shapes as you can, leave a large smooth shape (a rail or a band all round the ring) out of the blend, and join the rest with union()",
+  sweep: 'a sweep costs time and memory with every point of its path, so give it fewer points where the wire runs straight, and draw a round ring with torus() or revolve() rather than a sweep',
+};
+
+/**
+ * What to change when a program met its time or memory limit (null for any other failure): the
+ * tip for the call it stopped in first, then for the calls that cost the most before it, then
+ * the general one. "make the piece quicker to build: a smooth blend (smoothUnion) ..."
+ */
+export function limitTips(f: ProgramFailed): string | null {
+  if (f.kind !== 'time' && f.kind !== 'memory') return null;
+  const calls = [f.stopped?.call, ...(f.stopped?.costliest ?? [])].filter((c, i, all): c is string => !!c && all.indexOf(c) === i);
+  const tips = [...calls.map((c) => LIMIT_TIPS[c]).filter((t): t is string => !!t), 'make a pattern of many small shapes from fewer, larger ones'];
+  return `make the piece ${f.kind === 'time' ? 'quicker to build' : 'lighter'}: ${tips.join('; ')}`;
+}
+
+/** What to thicken and where, for a program's piece: in the terms of the call in the program that makes that place, against the piece's limits `L`. `stoppedFix` is the advice for a check that could not build the piece at a limit. */
+function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readonly PartReport[], decl?: FeatureDecl, stoppedFix?: string | null): string | null {
   if (e.result === 'pass') return null;
   if (e.result === 'could_not_run') {
-    // Out of memory: every check reads the same cause, so the advice is about the piece, and it is said once (the fixes are deduplicated).
-    if (/memory limit|for memory/.test(e.measured ?? ''))
-      return `The check could not build the piece: ${e.measured}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), so make the piece lighter: a sweep costs memory with every point of its path, so give it fewer points where the wire runs straight; draw a round ring with torus() or revolve() rather than a sweep; make a pattern of many small shapes from fewer, larger ones. A check that cannot run counts as a fail, so nothing is exported until it can.`;
+    // At a limit: every check reads the same cause, so the advice is about the piece, and it is said once (the fixes are deduplicated).
+    if (stoppedFix) return stoppedFix;
     return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   }
   const head = parts.find((x): x is HeadPart => x.call !== 'ringShank');
@@ -732,6 +750,8 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
   let meshInfo = { triangles: 0, vertices: 0, shells: 0, volumeMm3: 0 };
   let tBuild = 0, tCheck = 0;
   let evaluated: { ms: number; peak_memory_mib: number | null } | null = null;
+  /** The advice when the program met its time or memory limit (limitTips). */
+  let stoppedFix: string | null = null;
   // Chosen once the piece is evaluated and measured; if it cannot be, by its material and process alone.
   let size: PieceSize | null = null;
   let choice = chooseLimits(p, null);
@@ -761,10 +781,13 @@ async function checkProgram(p: ProgramPiece, mode: 'check' | 'export', limits: P
     }
   } catch (err) {
     entries = couldNotRun(err instanceof ProgramFailed ? `the program could not run: ${err.plain}` : `the piece could not be built: ${err instanceof Error ? err.message : String(err)}`);
+    const tips = err instanceof ProgramFailed ? limitTips(err) : null;
+    if (tips && err instanceof ProgramFailed)
+      stoppedFix = `The check could not build the piece: the program could not run: ${err.plain}. A check builds it twice, both finer than a picture (the casting file, then the surface check's reference), within one limit of ${limits.seconds} s and ${limits.memoryMiB} MiB, so ${tips}. A check that cannot run counts as a fail, so nothing is exported until it can.`;
   }
   const L = choice.kind === 'none' ? null : choice.limits;
   const name = materialName(p);
-  const withFix = L ? entries.map((e) => ({ ...e, fix: programFixFor(e, L, name, parts, decl) })) : [];
+  const withFix = L ? entries.map((e) => ({ ...e, fix: programFixFor(e, L, name, parts, decl, stoppedFix) })) : [];
   const settingFails = failingSettingFeatures(withFix);
   const failingSheets = new Set((withFix.find((e) => e.id === 'sheet' && e.result === 'fail')?.failing ?? []).map((f) => f.label));
   const same = new Set<CheckEntry>();

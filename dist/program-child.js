@@ -2939,12 +2939,20 @@ function ccw2(pts) {
   return a < 0 ? [...pts].reverse() : pts;
 }
 var SHAPE_CALLS = /* @__PURE__ */ new Set(["sphere", "cylinder", "box", "torus", "sweep", "extrude", "revolve", "hull", "hullPoints", "smoothUnion", "op", "ringShank", "prongHead", "bezel", "thicken"]);
+var PROGRESS_MARK = "flo2-cad-progress ";
+var PROGRESS_EVERY_MS = 50;
 var ProgramLibrary = class {
   #k;
   /** What each kind of shape call has made so far, for a refusal that ran out of memory to name (fact:root-cause-a-swept-wire-costs-memory-by-how-it-is-built-not-what-it-is-2026-11-10). */
   #tally = /* @__PURE__ */ new Map();
-  /** The call running now, so a refusal that runs out of memory inside it can name it. */
+  /** What each kind of call has taken so far, for a refusal at the time limit to name. */
+  #times = /* @__PURE__ */ new Map();
+  /** The call running now, so a refusal at a limit inside it can name it. */
   #running = null;
+  #started = 0;
+  /** Told where the evaluation stands as each call starts and ends. */
+  #onProgress;
+  #saidAt = -Infinity;
   #A;
   #tol;
   #blendMeshes;
@@ -2952,12 +2960,13 @@ var ProgramLibrary = class {
   #names;
   #recs = [];
   #nextId = 0;
-  constructor(k, A, tol, blendMeshes, nameFaces = false) {
+  constructor(k, A, tol, blendMeshes, nameFaces = false, onProgress) {
     this.#k = k;
     this.#A = A;
     this.#tol = tol;
     this.#blendMeshes = blendMeshes;
     this.#names = nameFaces ? new FaceNames() : void 0;
+    this.#onProgress = onProgress;
   }
   /**
    * THE BRIDGE: a call by name, its arguments as JSON text; the answer as JSON text,
@@ -2965,32 +2974,52 @@ var ProgramLibrary = class {
    * this realm can reach the program.
    */
   call(name, argsJson) {
+    let started = null;
     try {
       if (typeof name !== "string" || !PROGRAM_CALLS.includes(name)) throw new CallError(String(name), "is not something a program can call.");
       if (typeof argsJson !== "string" || argsJson.length > 2e7) throw new CallError(name, "its arguments are too large.");
       const args = JSON.parse(argsJson);
       if (!Array.isArray(args)) throw new CallError(name, "takes a list of arguments.");
       this.#running = name;
+      this.#started++;
+      started = performance.now();
+      this.#onProgress?.({ started: this.#started, in: name });
       const out = this.#dispatch(name, args);
-      this.#running = null;
       if (SHAPE_CALLS.has(name) && out && typeof out === "object" && out.kind === "solid") {
         const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
         t.calls++;
         t.triangles += out.m.numTri();
         this.#tally.set(name, t);
       }
+      this.#running = null;
+      this.#ended(name, started);
       return JSON.stringify({ ok: this.#encode(out) });
     } catch (e) {
+      if (started !== null) this.#ended(name, started);
       return JSON.stringify({ error: messageOf(e) });
     }
   }
-  /** The kinds of shape call that made the most triangles so far, the heaviest first. */
-  /** The call that was running when the program stopped, if one was. */
-  stoppedIn() {
-    return this.#running;
+  /** A call ended: its time counted, and where the evaluation stands said (the tallies only after a slow call, or now and then). */
+  #ended(name, started) {
+    const now = performance.now();
+    const t = this.#times.get(name) ?? { calls: 0, ms: 0 };
+    t.calls++;
+    t.ms += now - started;
+    this.#times.set(name, t);
+    if (!this.#onProgress) return;
+    if (now - started >= PROGRESS_EVERY_MS || now - this.#saidAt >= PROGRESS_EVERY_MS) {
+      this.#saidAt = now;
+      this.#onProgress(this.progress());
+    } else this.#onProgress({ started: this.#started, in: this.#running });
   }
-  heaviest(most = 3) {
-    return [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most);
+  /** Where the evaluation stands: the call running now, the heaviest shape calls and the slowest calls so far. */
+  progress(most = 3) {
+    return {
+      started: this.#started,
+      in: this.#running,
+      heaviest: [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most),
+      slowest: [...this.#times].map(([call, t]) => ({ call, calls: t.calls, ms: Math.round(t.ms) })).sort((a, b) => b.ms - a.ms).slice(0, most)
+    };
   }
   /** The solid a program returned, finished as a casting file would hold it. */
   finish(id, scale, withBlendSurface) {
@@ -3901,6 +3930,10 @@ var PRELUDE = String.raw`(function (bridge) {
 })`;
 
 // src/program/child.ts
+function sayProgress(run, p) {
+  process.stderr.write(`${PROGRESS_MARK}${JSON.stringify({ run, ...p })}
+`);
+}
 var wasmCapHit = false;
 function capWasm(capBytes) {
   const proto = globalThis.WebAssembly.Memory.prototype;
@@ -3924,9 +3957,8 @@ function writeFrame(header, blobs) {
   len2.writeUInt32LE(head.length, 0);
   return new Promise((resolve) => process.stdout.write(Buffer.concat([len2, head, ...blobs]), () => resolve()));
 }
-function fail(kind, message, line, logs, lib) {
-  const memory = kind === "memory" && lib ? { heaviest: lib.heaviest(), stopped_in: lib.stoppedIn() } : {};
-  return writeFrame({ ok: false, kind, message, line, logs, ...memory }, []);
+function fail(kind, message, line, logs) {
+  return writeFrame({ ok: false, kind, message, line, logs }, []);
 }
 function ready() {
   return new Promise((resolve) => process.stdout.write(Buffer.alloc(4), () => resolve()));
@@ -3966,17 +3998,22 @@ async function main() {
   const blob = blobber(blobs);
   const runs = [];
   let logs = [];
-  for (const run of req.runs) {
+  for (const [runIndex, run] of req.runs.entries()) {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail("time", "the program ran past its time limit", null, logs);
     const blendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
     const A = new Arena();
-    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
+    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly, (p) => sayProgress(runIndex, p));
+    sayProgress(runIndex, lib.progress());
+    const failed = (kind, message, line, l) => {
+      sayProgress(runIndex, lib.progress());
+      return fail(kind, message, line, l);
+    };
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx);
     const runner = setup((name, args) => lib.call(name, args));
     const compiled = compileProgram(req.source, ctx);
-    if (!("program" in compiled)) return fail("program", compiled.message, compiled.line, logs);
+    if (!("program" in compiled)) return failed("program", compiled.message, compiled.line, logs);
     ctx["__flo2_run"] = runner;
     ctx["__flo2_program"] = compiled.program;
     let out;
@@ -3984,18 +4021,19 @@ async function main() {
     try {
       out = vm.runInContext("__flo2_run(__flo2_program)", ctx, { timeout: remaining, filename: "flo2-cad-run.js" });
     } catch (e) {
-      if (performance.now() - started >= remaining - 25) return fail("time", "the program ran past its time limit", null, logs);
-      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs, lib);
-      return fail("engine", e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
+      if (performance.now() - started >= remaining - 25) return failed("time", "the program ran past its time limit", null, logs);
+      if (wasmCapHit) return failed("memory", "the geometry kernel reached its memory limit", null, logs);
+      return failed("engine", e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
     }
-    if (typeof out !== "string") return fail("engine", "the program gave no answer", null, logs);
+    if (typeof out !== "string") return failed("engine", "the program gave no answer", null, logs);
     const r = JSON.parse(out);
     logs = Array.isArray(r.logs) ? r.logs.filter((x) => typeof x === "string").slice(0, 50) : [];
     if (r.error !== void 0) {
       const msg = String(r.error.message ?? "the program failed");
-      return fail(wasmCapHit ? "memory" : "program", wasmCapHit ? "the geometry kernel reached its memory limit" : msg, typeof r.error.line === "number" ? r.error.line : null, logs, lib);
+      return failed(wasmCapHit ? "memory" : "program", wasmCapHit ? "the geometry kernel reached its memory limit" : msg, typeof r.error.line === "number" ? r.error.line : null, logs);
     }
     try {
+      sayProgress(runIndex, { ...lib.progress(), finishing: true });
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
       const decl = res.decl;
       const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
@@ -4006,11 +4044,12 @@ async function main() {
         ...run.positionsOnly ? {} : { decl: { ...decl, blends, ...faces ? { faces } : {} }, parts: res.parts, named: res.named }
       });
     } catch (e) {
-      if (wasmCapHit) return fail("memory", "the geometry kernel reached its memory limit", null, logs, lib);
-      if (e instanceof CallError) return fail("program", `${e.path}: ${e.problem}`, null, logs);
-      return fail("engine", `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
+      if (wasmCapHit) return failed("memory", "the geometry kernel reached its memory limit", null, logs);
+      if (e instanceof CallError) return failed("program", `${e.path}: ${e.problem}`, null, logs);
+      return failed("engine", `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }
     A.free();
+    if (runIndex + 1 < req.runs.length) sayProgress(runIndex + 1, { started: 0, in: null, heaviest: [], slowest: [] });
   }
   await writeFrame({ ok: true, runs, blobs: blobs.map((b) => b.length), logs, ms: Math.round(performance.now() - t0) }, blobs);
 }
