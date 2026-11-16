@@ -341,17 +341,22 @@ export const SURFACE_REACH_MM = 0.2;
 /**
  * The point of the blend's surface (value 0) on the line through p along unit d,
  * near p: a bracket from the first sign change found stepping out both ways, then
- * the Illinois method until the value is within 1e-9 mm of zero. Where the line
- * meets no surface within SURFACE_REACH_MM, the point that far along d towards the
- * surface is written instead, so a facet that far off its surface is measured as at
- * least that far off and fails. Writes x, y, z at out[at..at + 2].
+ * the Illinois method until the value is within 1e-9 mm of zero. Writes x, y, z at
+ * out[at..at + 2] and returns true. Where the line meets no surface within
+ * SURFACE_REACH_MM, it returns FALSE, and what it writes is only the point that far
+ * along d towards the surface, which is NOT on it: a caller that wants a point of
+ * the surface must not use it (placeOnSurface does not). (Along d nearly tangent to
+ * a concave hollow, such a point stood 0.04 mm inside the solid and was measured as
+ * the surface; fact:root-cause-the-surface-check-measured-points-its-own-projection-
+ * left-off-the-blends-surface-2026-11-16.)
  */
-export function projectOntoSurface(f: (x: number, y: number, z: number) => number, p: Vec3, d: Vec3, out: Float64Array, at: number): void {
+export function projectOntoSurface(f: (x: number, y: number, z: number) => number, p: Vec3, d: Vec3, out: Float64Array, at: number): boolean {
   const g = (s: number) => f(p[0] + s * d[0], p[1] + s * d[1], p[2] + s * d[2]);
   const put = (s: number) => {
     out[at] = p[0] + s * d[0];
     out[at + 1] = p[1] + s * d[1];
     out[at + 2] = p[2] + s * d[2];
+    return true;
   };
   const g0 = g(0);
   if (Math.abs(g0) <= 1e-9) return put(0);
@@ -371,7 +376,10 @@ export function projectOntoSurface(f: (x: number, y: number, z: number) => numbe
     }
     if (s0 >= SURFACE_REACH_MM) break;
   }
-  if (Number.isNaN(b)) return put(toward * SURFACE_REACH_MM);
+  if (Number.isNaN(b)) {
+    put(toward * SURFACE_REACH_MM);
+    return false;
+  }
   if (gb === 0) return put(b);
   // Illinois: regula falsi that halves the weight of an end kept twice running.
   let kept = 0;
@@ -391,7 +399,25 @@ export function projectOntoSurface(f: (x: number, y: number, z: number) => numbe
       kept = -1;
     }
   }
-  put(Math.abs(ga) < Math.abs(gb) ? a : b);
+  // Still bracketed after 100 steps: the end nearer zero, within the bracket round the crossing.
+  return put(Math.abs(ga) < Math.abs(gb) ? a : b);
+}
+
+/**
+ * A point of the blend's surface near p: looked for along d (a facet's normal), and,
+ * where that line meets no surface within SURFACE_REACH_MM, along the field's own
+ * gradient at p, which points across the surface wherever the field has one. A facet's
+ * normal can lie almost along the surface (a needle-thin facet's, 86-88 degrees off it,
+ * measured), and in a concave hollow that line never leaves the solid. Returns whether
+ * a point of the surface was written at out[at..at + 2]; false only where neither line
+ * meets the surface within the reach (the point is then that far or more off it, or the
+ * field has no slope there), and what is written then is not to be used.
+ */
+export function placeOnSurface(f: (x: number, y: number, z: number) => number, p: Vec3, d: Vec3, out: Float64Array, at: number): boolean {
+  if (projectOntoSurface(f, p, d, out, at)) return true;
+  const g = gradient(f, p[0], p[1], p[2]);
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0) return false;
+  return projectOntoSurface(f, p, g, out, at);
 }
 
 // ------------------------------------------------- the blend's facets held to its surface

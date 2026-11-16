@@ -162,7 +162,11 @@ function readDecl(v: unknown, blobs: Buffer[], scale: number): FeatureDecl {
       const points = blobOf(blobs, x['points'], 'a blend', 'f32') as Float32Array;
       if (points.length % 3) throw new Error('a blend\'s points are not in threes');
       for (const q of points) if (!Number.isFinite(q)) throw new Error('a blend has a point that is not a number');
-      return { label, points };
+      if (x['unplaced'] === undefined) return { label, points };
+      const unplaced = blobOf(blobs, x['unplaced'], 'a blend', 'f32') as Float32Array;
+      if (unplaced.length % 3) throw new Error('a blend\'s unplaced points are not in threes');
+      for (const q of unplaced) if (!Number.isFinite(q)) throw new Error('a blend has an unplaced point that is not a number');
+      return { label, points, unplaced };
     });
   }
   if (v['added'] !== undefined) {

@@ -1236,7 +1236,16 @@ function gapEntry(bvh: Bvh, S: Float64Array, L: CheckLimits, decl: FeatureDecl, 
  * Each distance is looked for first within twice the limit, where nearly every point
  * lies, and only past that out to the cap: the same distance as one search to the
  * cap, found without visiting everything within 0.2 mm of every point.
+ *
+ * Where the library found no point of a blend's surface near a point of its facets
+ * (BlendDecl.unplaced), there is nothing to measure those facets against: the check
+ * says it could not run there, which counts as a fail, and names the place. It never
+ * measures a stand-in (fact:root-cause-the-surface-check-measured-points-its-own-
+ * projection-left-off-the-blends-surface-2026-11-16).
  */
+/** How far the library looks for a blend's surface from a point of its facets (field.ts SURFACE_REACH_MM; the checker reads files, so it does not import the library, and a test holds the two equal). */
+export const SURFACE_REACH = 0.2;
+
 function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: FeatureDecl, layers: readonly CheckLayer[]): CheckEntry {
   let worst: { dev: number; p: V3; blend?: string } = { dev: 0, p: [0, 0, 0] };
   const cap = Math.max(0.2, L.surfaceDeviation * 20);
@@ -1256,9 +1265,32 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
   measure(ref.positions);
   const blends = decl.blends ?? [];
   let onBlends = 0;
+  let unplaced = 0, firstUnplaced: { p: V3; label: string } | null = null;
   for (const b of blends) {
     measure(b.points, b.label);
     onBlends += b.points.length / 3;
+    const u = b.unplaced;
+    if (!u?.length) continue;
+    unplaced += u.length / 3;
+    firstUnplaced ??= { p: [u[0]!, u[1]!, u[2]!], label: b.label };
+  }
+  const checked = `checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''}`;
+  const method = `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends || unplaced ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`;
+  if (firstUnplaced) {
+    const what = `no point of the blend's own surface was found within ${r3(SURFACE_REACH)} mm of its facets`;
+    const where = onBlend(firstUnplaced.p, firstUnplaced.label, what, decl.faces ? faceOf(decl, bvh.nearestTriangle(firstUnplaced.p, cap)) : undefined);
+    const { of, at } = placeWords(where, layers, decl);
+    const n = `${unplaced} point${unplaced === 1 ? '' : 's'}`;
+    return entry({
+      id: 'surface_deviation',
+      name: 'Surface smoothness',
+      limit: mm(L.surfaceDeviation),
+      result: 'could_not_run',
+      measured: `at ${n} of a smooth blend's facets no point of its own surface was found within ${r3(SURFACE_REACH)} mm, so the facets there could not be measured; elsewhere ${mm(worst.dev)} (${checked})`,
+      where,
+      method,
+      problem: `At ${n} of the casting file's facets${of ? ` of ${of}` : ''}, ${at}, the check found no point of the smooth blend's own surface to measure them against, so it could not tell how far they stand off it. A check that cannot run counts as a fail, so nothing is exported until it can. This is an engine fault, not the design: report it.`,
+    });
   }
   // The place is named by the part of the written face nearest the point that stands furthest off it.
   const face = decl.faces ? faceOf(decl, bvh.nearestTriangle(worst.p, cap)) : undefined;
@@ -1270,10 +1302,10 @@ function surfaceEntry(bvh: Bvh, L: CheckLimits, ref: ReferencePoints, decl: Feat
     name: 'Surface smoothness',
     limit: mm(L.surfaceDeviation),
     result: worst.dev <= L.surfaceDeviation ? 'pass' : 'fail',
-    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ''})`,
+    measured: `${mm(worst.dev)} (${checked})`,
     value: r3(worst.dev),
     where,
-    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ''}`,
+    method,
     problem: `The casting file's facets stand ${r3(worst.dev)} mm off the curved surface${of ? ` of ${of}` : ', in no named part'}, ${at}; they may stand at most ${r3(L.surfaceDeviation)} mm off it.`,
   });
 }

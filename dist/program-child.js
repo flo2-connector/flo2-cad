@@ -1604,6 +1604,7 @@ function projectOntoSurface(f, p, d, out, at2) {
     out[at2] = p[0] + s * d[0];
     out[at2 + 1] = p[1] + s * d[1];
     out[at2 + 2] = p[2] + s * d[2];
+    return true;
   };
   const g0 = g(0);
   if (Math.abs(g0) <= 1e-9) return put(0);
@@ -1621,7 +1622,10 @@ function projectOntoSurface(f, p, d, out, at2) {
     }
     if (s0 >= SURFACE_REACH_MM) break;
   }
-  if (Number.isNaN(b)) return put(toward * SURFACE_REACH_MM);
+  if (Number.isNaN(b)) {
+    put(toward * SURFACE_REACH_MM);
+    return false;
+  }
   if (gb === 0) return put(b);
   let kept = 0;
   for (let it = 0; it < 100; it++) {
@@ -1640,7 +1644,13 @@ function projectOntoSurface(f, p, d, out, at2) {
       kept = -1;
     }
   }
-  put(Math.abs(ga) < Math.abs(gb) ? a : b);
+  return put(Math.abs(ga) < Math.abs(gb) ? a : b);
+}
+function placeOnSurface(f, p, d, out, at2) {
+  if (projectOntoSurface(f, p, d, out, at2)) return true;
+  const g = gradient(f, p[0], p[1], p[2]);
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0) return false;
+  return projectOntoSurface(f, p, g, out, at2);
 }
 var HOLD_PASSES = 40;
 var HOLD_GENERATIONS = 6;
@@ -2820,10 +2830,14 @@ function blendSurface(mesh, blends, scale) {
     const seenEdge = /* @__PURE__ */ new Set();
     const pts = new Float32Array(3 * 7 * tris.length);
     let n = 0;
+    const unplaced = [];
     const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
     const add2 = (x, y, z, nrm) => {
-      projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
+      if (!placeOnSurface(f, toLocal(x, y, z), nrm, on, 0)) {
+        unplaced.push(x, y, z);
+        return;
+      }
       const q0 = on[0], q1 = on[1], q2 = on[2];
       pts[n * 3] = (m[0] * q0 + m[1] * q1 + m[2] * q2 + m[3]) * scale;
       pts[n * 3 + 1] = (m[4] * q0 + m[5] * q1 + m[6] * q2 + m[7]) * scale;
@@ -2859,7 +2873,7 @@ function blendSurface(mesh, blends, scale) {
       }
       add2((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
     }
-    out.push({ label: b.label, points: pts.slice(0, n * 3) });
+    out.push({ label: b.label, points: pts.slice(0, n * 3), ...unplaced.length ? { unplaced: Float32Array.from(unplaced) } : {} });
   }
   return out;
 }
@@ -4140,7 +4154,7 @@ async function main() {
       sayProgress(runIndex, { ...lib.progress(), finishing: true });
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
       const decl = res.decl;
-      const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
+      const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points), ...b.unplaced ? { unplaced: blob(b.unplaced) } : {} }));
       const faces = res.decl.faces ? { parts: res.decl.faces.parts, of: blob(Uint32Array.from(res.decl.faces.of)) } : void 0;
       runs.push({
         metal: meshOut2(res.metal, blob, run.positionsOnly),

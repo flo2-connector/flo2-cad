@@ -78,13 +78,20 @@ export interface SheetDecl {
  * distance field's zero level, over every facet the file has from it: each facet's
  * corners, edge midpoints and centroid, moved onto the surface along the facet's
  * normal. The surface check measures how far the written facets stand off them, as
- * it does the finer reference's vertices.
+ * it does the finer reference's vertices. A point not found on the surface is
+ * declared apart (`unplaced`), never in `points`.
  */
 export interface BlendDecl {
   /** The smooth_union node's id. */
   label: string;
   /** x, y, z of each point in turn, in the written file's coordinates (float32, as the file and the reference hold them). */
   points: Float32Array;
+  /**
+   * The points of the blend's facets near which no point of its surface was found (within
+   * 0.2 mm along the facet's normal or the field's gradient), where they stand on the
+   * facet, as `points`. The check fails each by name: what was not found is not measured.
+   */
+  unplaced?: Float32Array;
 }
 
 export interface AddedDecl {
