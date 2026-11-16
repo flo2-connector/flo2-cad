@@ -18,6 +18,7 @@ import type { TreeNode } from '../piece/tree.js';
 import { angleDeg, lengthMm } from '../units.js';
 import type { Arena } from './build.js';
 import { BlendField, holdToSurface, levelSetStep } from './field.js';
+import { pinchedPositions } from './pinch.js';
 import { EXPORT_TOL } from './tolerances.js';
 import { buildSweep } from './sweep.js';
 import { buildThicken, compose, IDENTITY, reflection, rotation, translation, type OpContext } from './thicken.js';
@@ -134,6 +135,9 @@ export function buildOp(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpCo
  * grid for one openwork ring: more than flo2's whole slot
  * (fact:check-time-is-the-blend-field-and-the-wall-ball).
  */
+/** How far a pinched blend's grid is moved, in cells, one placement after another; each but the half cell measured clean on the blend that pinched. */
+const GRID_SHIFTS = [0, 0.33, 0.71, 0.17];
+
 function smoothUnion(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpContext): Manifold {
   const { Manifold } = k;
   const p = (n.params ?? {}) as Params;
@@ -148,11 +152,29 @@ function smoothUnion(k: Kernel, A: Arena, n: TreeNode, tol: number, ctx: OpConte
   const bb = plain.boundingBox();
   const g = blend + 0.3;
   const edge = Math.min(0.25, Math.max(0.03, Math.sqrt(8 * Math.max(blend, 0.2) * gtol)));
-  const min: Vec3 = [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g];
   const max: Vec3 = [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g];
-  const field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
-  const raw = Manifold.levelSet((q: Vec3) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
-  const out = A.t(heldToSurface(k, raw, field, gtol));
+  // A level set can leave a point two vertices share with no edge between them (pinch.ts),
+  // on some placements of its grid: sound for the kernel, two sheets meeting in the file.
+  // Measured 2026-11-16 on four blended wires: 2 of 5 placements of the 0.12 mm grid did,
+  // the others did not. So a pinched blend is meshed again, its grid moved by part of a
+  // cell (the box grown at its low corner, so it still holds the solid); one at a time,
+  // so memory holds one blend. Unpinched at the first placement, as nearly every blend
+  // is, it is exactly the mesh it always was. If every placement pinched, the last stands
+  // and the checker refuses the file, as before.
+  let field!: BlendField;
+  let out!: Manifold;
+  for (let i = 0; i < GRID_SHIFTS.length; i++) {
+    const s = g + GRID_SHIFTS[i]! * edge;
+    const min: Vec3 = [bb.min[0] - s, bb.min[1] - s, bb.min[2] - s];
+    field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
+    const raw = Manifold.levelSet((q: Vec3) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
+    const made = heldToSurface(k, raw, field, gtol);
+    if (i === GRID_SHIFTS.length - 1 || pinchedPositions(made.getMesh()) === 0) {
+      out = A.t(made);
+      break;
+    }
+    made.delete();
+  }
   if (ctx.blendMeshes && !ctx.blendMeshes.reuse) ctx.blendMeshes.meshes.set(key, out.getMesh());
   ctx.blends?.push({ label: n.id, originalID: out.originalID(), m: ctx.m, field });
   return out;

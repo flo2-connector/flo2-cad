@@ -19,6 +19,7 @@ import { writeBinaryStl } from '../src/files/stl.js';
 import { kernel } from '../src/kernel/manifold.js';
 import { Arena, atFilePrecision, EXPORT_TOL, polygonsToMesh } from '../src/library/build.js';
 import { buildOp } from '../src/library/ops.js';
+import { pinchedPositions } from '../src/library/pinch.js';
 import { IDENTITY } from '../src/library/thicken.js';
 import { METALS } from '../src/metals.js';
 import type { TreeNode } from '../src/piece/tree.js';
@@ -86,4 +87,40 @@ describe("a blend's casting file is never pinched", () => {
       }
     });
   }
+});
+
+describe('pinchedPositions counts the points a casting file would weld that no edge joins', () => {
+  /** A unit cube's mesh at `o`, with its own eight vertices numbered from `first`. */
+  const cube = (o: [number, number, number], first: number) => {
+    const v: number[] = [];
+    for (let i = 0; i < 8; i++) v.push(o[0] + (i & 1), o[1] + ((i >> 1) & 1), o[2] + ((i >> 2) & 1));
+    const quads = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]];
+    const t: number[] = [];
+    for (const [a, b, c, d] of quads) t.push(a! + first, b! + first, c! + first, a! + first, c! + first, d! + first);
+    return { v, t };
+  };
+  const mesh = (parts: { v: number[]; t: number[] }[]) => ({
+    numProp: 3,
+    vertProperties: new Float32Array(parts.flatMap((p) => p.v)),
+    triVerts: new Uint32Array(parts.flatMap((p) => p.t)),
+  });
+
+  it('one cube: none', () => {
+    assert.equal(pinchedPositions(mesh([cube([0, 0, 0], 0)])), 0);
+  });
+  it('two cubes touching at one corner, each with its own vertex there: one', () => {
+    assert.equal(pinchedPositions(mesh([cube([0, 0, 0], 0), cube([1, 1, 1], 8)])), 1);
+  });
+  it('two cubes touching along an edge, each with its own vertices there: two', () => {
+    assert.equal(pinchedPositions(mesh([cube([0, 0, 0], 0), cube([1, 1, 0], 8)])), 2);
+  });
+  it('two cubes apart: none', () => {
+    assert.equal(pinchedPositions(mesh([cube([0, 0, 0], 0), cube([3, 0, 0], 8)])), 0);
+  });
+  it('two vertices at one point joined by an edge, which the float32 step collapses: none', () => {
+    // A tetrahedron (0, 1, 2, 3) whose corner 0 is split into 0 and 4 at the same point, with the edge (0, 4) between them.
+    const v = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+    const t = [0, 2, 1, 4, 1, 3, 4, 3, 2, 1, 2, 3, 0, 4, 2, 0, 1, 4];
+    assert.equal(pinchedPositions({ numProp: 3, vertProperties: new Float32Array(v), triVerts: new Uint32Array(t) }), 0);
+  });
 });
