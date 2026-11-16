@@ -17,7 +17,7 @@ import { BEZEL_CLEARANCE, SEAT_CLEARANCE } from '../jewelry/index.js';
 import type { PieceTree, PieceView, StoneView, TreeNode } from '../piece/tree.js';
 import { readPiece } from '../piece/tree.js';
 import { FaceNames } from './faces.js';
-import { projectOntoSurface } from './field.js';
+import { placeOnSurface } from './field.js';
 import { buildOp } from './ops.js';
 import { IDENTITY, type BlendMeshes, type BlendRecord } from './thicken.js';
 import { stoneShape, type StoneShapeInfo, type StoneSpec } from './stones.js';
@@ -674,6 +674,13 @@ export function atFilePrecision(A: Arena, m: Manifold): Manifold {
  * 93.9 % of its largest (computed over every curvature, convex or saddle). These are
  * what the surface check measures the written facets against, in place of a second,
  * finer level set (ops.ts, smoothUnion). In the written file's coordinates.
+ *
+ * A point is declared only where it was found ON the surface (field.ts, placeOnSurface:
+ * along the facet's normal, then along the field's gradient). A facet point whose
+ * surface neither line meets within the reach is declared as `unplaced`, where it stands
+ * on the facet, and the check fails it by name: it is never measured as if it were the
+ * surface (a needle facet's normal along a concave hollow once put 19 points 0.04 mm
+ * inside the solid, and the check read 0.053 mm where the facets stood 0.003 mm off).
  */
 function blendSurface(mesh: Mesh, blends: BlendRecord[], scale: number): BlendDecl[] {
   const np = mesh.numProp, V = mesh.vertProperties, T = mesh.triVerts;
@@ -698,10 +705,14 @@ function blendSurface(mesh: Mesh, blends: BlendRecord[], scale: number): BlendDe
     const seenEdge = new Set<number>();
     const pts = new Float32Array(3 * 7 * tris.length);
     let n = 0;
+    const unplaced: number[] = [];
     const at = (i: number): Vec3 => [V[i * np]!, V[i * np + 1]!, V[i * np + 2]!];
     const on = new Float64Array(3);
     const add = (x: number, y: number, z: number, nrm: Vec3) => {
-      projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
+      if (!placeOnSurface(f, toLocal(x, y, z), nrm, on, 0)) {
+        unplaced.push(x, y, z);
+        return;
+      }
       const q0 = on[0]!, q1 = on[1]!, q2 = on[2]!;
       pts[n * 3] = (m[0]! * q0 + m[1]! * q1 + m[2]! * q2 + m[3]!) * scale;
       pts[n * 3 + 1] = (m[4]! * q0 + m[5]! * q1 + m[6]! * q2 + m[7]!) * scale;
@@ -737,7 +748,7 @@ function blendSurface(mesh: Mesh, blends: BlendRecord[], scale: number): BlendDe
       }
       add((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
     }
-    out.push({ label: b.label, points: pts.slice(0, n * 3) });
+    out.push({ label: b.label, points: pts.slice(0, n * 3), ...(unplaced.length ? { unplaced: Float32Array.from(unplaced) } : {}) });
   }
   return out;
 }

@@ -22922,6 +22922,7 @@ function gapEntry(bvh, S, L3, decl, layers) {
     problem
   });
 }
+var SURFACE_REACH = 0.2;
 function surfaceEntry(bvh, L3, ref, decl, layers) {
   let worst = { dev: 0, p: [0, 0, 0] };
   const cap2 = Math.max(0.2, L3.surfaceDeviation * 20);
@@ -22941,9 +22942,32 @@ function surfaceEntry(bvh, L3, ref, decl, layers) {
   measure(ref.positions);
   const blends = decl.blends ?? [];
   let onBlends = 0;
+  let unplaced = 0, firstUnplaced = null;
   for (const b of blends) {
     measure(b.points, b.label);
     onBlends += b.points.length / 3;
+    const u = b.unplaced;
+    if (!u?.length) continue;
+    unplaced += u.length / 3;
+    firstUnplaced ??= { p: [u[0], u[1], u[2]], label: b.label };
+  }
+  const checked = `checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""}`;
+  const method = `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends || unplaced ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`;
+  if (firstUnplaced) {
+    const what2 = `no point of the blend's own surface was found within ${r3(SURFACE_REACH)} mm of its facets`;
+    const where2 = onBlend(firstUnplaced.p, firstUnplaced.label, what2, decl.faces ? faceOf(decl, bvh.nearestTriangle(firstUnplaced.p, cap2)) : void 0);
+    const { of: of2, at: at3 } = placeWords(where2, layers, decl);
+    const n = `${unplaced} point${unplaced === 1 ? "" : "s"}`;
+    return entry({
+      id: "surface_deviation",
+      name: "Surface smoothness",
+      limit: mm(L3.surfaceDeviation),
+      result: "could_not_run",
+      measured: `at ${n} of a smooth blend's facets no point of its own surface was found within ${r3(SURFACE_REACH)} mm, so the facets there could not be measured; elsewhere ${mm(worst.dev)} (${checked})`,
+      where: where2,
+      method,
+      problem: `At ${n} of the casting file's facets${of2 ? ` of ${of2}` : ""}, ${at3}, the check found no point of the smooth blend's own surface to measure them against, so it could not tell how far they stand off it. A check that cannot run counts as a fail, so nothing is exported until it can. This is an engine fault, not the design: report it.`
+    });
   }
   const face = decl.faces ? faceOf(decl, bvh.nearestTriangle(worst.p, cap2)) : void 0;
   const what = "the facets stand furthest from the curved surface";
@@ -22954,10 +22978,10 @@ function surfaceEntry(bvh, L3, ref, decl, layers) {
     name: "Surface smoothness",
     limit: mm(L3.surfaceDeviation),
     result: worst.dev <= L3.surfaceDeviation ? "pass" : "fail",
-    measured: `${mm(worst.dev)} (checked at ${ref.positions.length / 3} points of a 0.0015 mm reference${onBlends ? ` and ${onBlends} points on the smooth blends' own surfaces` : ""})`,
+    measured: `${mm(worst.dev)} (${checked})`,
     value: r3(worst.dev),
     where,
-    method: `the largest distance from the vertices of a much finer tessellation of the same piece to the written mesh${onBlends ? "; and, for each smooth blend, from points on its own surface (its distance field's zero level) at the corners, edge midpoints and centroid of every facet the file has from it" : ""}`,
+    method,
     problem: `The casting file's facets stand ${r3(worst.dev)} mm off the curved surface${of ? ` of ${of}` : ", in no named part"}, ${at2}; they may stand at most ${r3(L3.surfaceDeviation)} mm off it.`
   });
 }
@@ -25447,6 +25471,7 @@ function projectOntoSurface(f, p, d, out, at2) {
     out[at2] = p[0] + s * d[0];
     out[at2 + 1] = p[1] + s * d[1];
     out[at2 + 2] = p[2] + s * d[2];
+    return true;
   };
   const g0 = g(0);
   if (Math.abs(g0) <= 1e-9) return put(0);
@@ -25464,7 +25489,10 @@ function projectOntoSurface(f, p, d, out, at2) {
     }
     if (s0 >= SURFACE_REACH_MM) break;
   }
-  if (Number.isNaN(b)) return put(toward * SURFACE_REACH_MM);
+  if (Number.isNaN(b)) {
+    put(toward * SURFACE_REACH_MM);
+    return false;
+  }
   if (gb === 0) return put(b);
   let kept = 0;
   for (let it = 0; it < 100; it++) {
@@ -25483,7 +25511,13 @@ function projectOntoSurface(f, p, d, out, at2) {
       kept = -1;
     }
   }
-  put(Math.abs(ga) < Math.abs(gb) ? a : b);
+  return put(Math.abs(ga) < Math.abs(gb) ? a : b);
+}
+function placeOnSurface(f, p, d, out, at2) {
+  if (projectOntoSurface(f, p, d, out, at2)) return true;
+  const g = gradient(f, p[0], p[1], p[2]);
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0) return false;
+  return projectOntoSurface(f, p, g, out, at2);
 }
 var HOLD_PASSES = 40;
 var HOLD_GENERATIONS = 6;
@@ -26716,10 +26750,14 @@ function blendSurface(mesh, blends, scale2) {
     const seenEdge = /* @__PURE__ */ new Set();
     const pts = new Float32Array(3 * 7 * tris.length);
     let n = 0;
+    const unplaced = [];
     const at2 = (i) => [V[i * np], V[i * np + 1], V[i * np + 2]];
     const on = new Float64Array(3);
     const add2 = (x, y, z, nrm) => {
-      projectOntoSurface(f, toLocal(x, y, z), nrm, on, 0);
+      if (!placeOnSurface(f, toLocal(x, y, z), nrm, on, 0)) {
+        unplaced.push(x, y, z);
+        return;
+      }
       const q0 = on[0], q1 = on[1], q2 = on[2];
       pts[n * 3] = (m[0] * q0 + m[1] * q1 + m[2] * q2 + m[3]) * scale2;
       pts[n * 3 + 1] = (m[4] * q0 + m[5] * q1 + m[6] * q2 + m[7]) * scale2;
@@ -26755,7 +26793,7 @@ function blendSurface(mesh, blends, scale2) {
       }
       add2((a[0] + bb[0] + c[0]) / 3, (a[1] + bb[1] + c[1]) / 3, (a[2] + bb[2] + c[2]) / 3, nrm);
     }
-    out.push({ label: b.label, points: pts.slice(0, n * 3) });
+    out.push({ label: b.label, points: pts.slice(0, n * 3), ...unplaced.length ? { unplaced: Float32Array.from(unplaced) } : {} });
   }
   return out;
 }
@@ -27038,7 +27076,11 @@ function readDecl(v, blobs, scale2) {
       const points = blobOf(blobs, x["points"], "a blend", "f32");
       if (points.length % 3) throw new Error("a blend's points are not in threes");
       for (const q of points) if (!Number.isFinite(q)) throw new Error("a blend has a point that is not a number");
-      return { label, points };
+      if (x["unplaced"] === void 0) return { label, points };
+      const unplaced = blobOf(blobs, x["unplaced"], "a blend", "f32");
+      if (unplaced.length % 3) throw new Error("a blend's unplaced points are not in threes");
+      for (const q of unplaced) if (!Number.isFinite(q)) throw new Error("a blend has an unplaced point that is not a number");
+      return { label, points, unplaced };
     });
   }
   if (v["added"] !== void 0) {

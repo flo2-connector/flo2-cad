@@ -215,7 +215,7 @@ async function main(): Promise<void> {
       sayProgress(runIndex, { ...lib.progress(), finishing: true });
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
       const decl: FeatureDecl & { blends?: unknown; faces?: unknown } = res.decl;
-      const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
+      const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points), ...(b.unplaced ? { unplaced: blob(b.unplaced) } : {}) }));
       // Each face's part travels as whole 32-bit numbers, as the triangles do.
       const faces = res.decl.faces ? { parts: res.decl.faces.parts, of: blob(Uint32Array.from(res.decl.faces.of)) } : undefined;
       runs.push({
