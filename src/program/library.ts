@@ -100,7 +100,17 @@ export interface NamedShape {
 
 interface SolidRec {
   kind: 'solid';
-  m: Manifold;
+  /**
+   * The solid's mesh. A sweep (and a move or union of one) is built only when something reads
+   * this: a smooth blend reads only its `node`, so a wire made only to be blended builds no tube
+   * of its own, in either build of a check (in the reference build the blend is the export's)
+   * (dec:a-blend-is-meshed-finely-only-near-its-fillets-and-a-sweep-read-only-by-a-blend-builds-no-tube-2026-11-15).
+   */
+  readonly m: Manifold;
+  /** Set on a solid not built yet: told the mesh when it is built (the call tally counts its triangles then). */
+  built?: (m: Manifold) => void;
+  /** True while a solid put off is not built yet. */
+  readonly pending?: boolean;
   d: Decls;
   /** The stones the solid's settings hold: drawn in a preview, never in a casting file. */
   stones: Manifold[];
@@ -136,6 +146,11 @@ export interface ProgramResult {
 }
 
 const emptyDecls = (): Decls => ({ prongs: [], sheets: [], blends: [], added: [], names: [] });
+/** Whether a solid declares anything (a part, a sheet, a blend, a name, a stone it holds): such a solid is built as it is made. */
+const hasDecls = (r: SolidRec): boolean => {
+  const d = r.d;
+  return !!(d.band || d.stone || d.bezel || d.prongs.length || d.sheets.length || d.blends.length || d.added.length || d.names.length || r.stones.length || r.parts.length);
+};
 const NAME_ID = /^[a-z][a-z0-9_]{0,39}$/;
 
 /** A number for a tree's unit text: fixed-point (the unit parser takes no exponent), trailing zeros trimmed. */
@@ -259,12 +274,19 @@ export class ProgramLibrary {
       this.#onProgress?.({ started: this.#started, in: name });
       const out = this.#dispatch(name as ProgramCall, args);
       if (SHAPE_CALLS.has(name) && out && typeof out === 'object' && (out as { kind?: unknown }).kind === 'solid') {
-        const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
-        t.calls++;
+        const solid = out as SolidRec;
+        const count = (m: Manifold) => {
+          const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
+          t.calls++;
+          t.triangles += m.numTri();
+          this.#tally.set(name, t);
+        };
+        // A shape put off until something reads it (a wire only a blend reads is never built)
+        // is counted when, and if, it is built.
+        if (solid.pending) solid.built = count;
         // Counting the triangles makes the kernel evaluate what it had put off (a sweep's runs are
         // unioned here), often most of the call's work: so the call is still the one running.
-        t.triangles += (out as SolidRec).m.numTri();
-        this.#tally.set(name, t);
+        else count(solid.m);
       }
       this.#running = null;
       this.#ended(name, started);
@@ -445,9 +467,53 @@ export class ProgramLibrary {
     return { kind: 'solid', m: this.#A.t(m), d, stones: extra.stones ?? [], parts: extra.parts ?? [], ...(extra.dims !== undefined ? { dims: extra.dims } : {}), ...(extra.node ? { node: extra.node } : {}) };
   }
 
+  /**
+   * A solid with no declarations, built by `make` only when its mesh is first read. While a
+   * shape put off is built, the call that made it (`madeBy`) is the call running, so a refusal
+   * at a limit met there names what costs, as it did when the call built it at once.
+   */
+  #laterSolid(make: () => Manifold, node: TreeNode, extra: Partial<Pick<SolidRec, 'stones' | 'parts' | 'dims'>> = {}, madeBy?: string): SolidRec {
+    const A = this.#A;
+    let m: Manifold | undefined;
+    const running = () => this.#running;
+    const building = (on: string | null) => {
+      this.#running = on;
+      this.#onProgress?.({ started: this.#started, in: on });
+    };
+    const rec: SolidRec = {
+      kind: 'solid',
+      get m(): Manifold {
+        if (!m) {
+          const was = running();
+          if (madeBy) building(madeBy);
+          const made = A.t(make());
+          // The kernel evaluates what it put off (a sweep's runs are unioned) when asked; asked
+          // here, so it is still the call that made the shape that runs. If it fails, that call
+          // stays the one running, so a refusal for the kernel's memory names it.
+          made.numTri();
+          m = made;
+          rec.built?.(made);
+          if (madeBy) building(was);
+        }
+        return m;
+      },
+      get pending(): boolean {
+        return !m;
+      },
+      d: emptyDecls(),
+      stones: extra.stones ?? [],
+      parts: extra.parts ?? [],
+      ...(extra.dims !== undefined ? { dims: extra.dims } : {}),
+      node,
+    };
+    return rec;
+  }
+
   /** A tree operation node, built by the tree's own buildOp, with the sheets and blends it declares. */
   #fromNode(node: TreeNode, path: string, addedAs?: string): SolidRec {
     validateOpNode(node, path);
+    // A wire declares nothing, so it can wait until something reads its mesh: a smooth blend reads only its node.
+    if (!addedAs && node.op === 'sweep') return this.#laterSolid(() => buildOp(this.#k, this.#A, node, this.#tol, { m: IDENTITY, moveReachMm: MAX_REACH_MM }), node, {}, path);
     const sheets: SheetDecl[] = [];
     const blends: BlendRecord[] = [];
     const ctx: OpContext = { m: IDENTITY, sheets, blends, moveReachMm: MAX_REACH_MM, ...(this.#blendMeshes ? { blendMeshes: this.#blendMeshes } : {}) };
@@ -539,9 +605,11 @@ export class ProgramLibrary {
         if (!a.length) throw new CallError(name, 'give at least one solid.');
         const rs = a.map((s, i) => this.#solid(s, at(name, i)));
         if (rs.length === 1) return rs[0]!;
-        const m = name === 'union' ? Manifold.union(rs.map((r) => r.m)) : Manifold.intersection(rs.map((r) => r.m));
         const d = mergeDecls(rs.map((r) => r.d), name);
         const node = name === 'union' && rs.every((r) => r.node) ? { id: this.#id('union'), op: 'union', children: rs.map((r) => r.node!) } : undefined;
+        // A union of shapes still put off is put off too: a blend may read only its node.
+        if (node && rs.some((r) => r.pending) && rs.every((r) => r.pending || !hasDecls(r))) return this.#laterSolid(() => Manifold.union(rs.map((r) => r.m)), node);
+        const m = name === 'union' ? Manifold.union(rs.map((r) => r.m)) : Manifold.intersection(rs.map((r) => r.m));
         return this.#newSolid(m, d, { stones: rs.flatMap((r) => r.stones), parts: rs.flatMap((r) => r.parts), ...(node ? { node } : {}) });
       }
       case 'difference': {
@@ -770,6 +838,8 @@ export class ProgramLibrary {
       names: [...d.names],
     };
     const A = this.#A;
+    // A shape still put off stays put off, moved: a blend may read only its node.
+    if (r.pending && r.node && wrap && !hasDecls(r)) return this.#laterSolid(() => kernelMove(r.m), wrap(r.node), { parts: r.parts, ...(r.dims !== undefined ? { dims: r.dims } : {}) });
     return {
       kind: 'solid',
       m: A.t(kernelMove(r.m)),

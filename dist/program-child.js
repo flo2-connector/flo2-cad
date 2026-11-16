@@ -2914,6 +2914,10 @@ var PROGRAM_CALLS = [
   "p_area"
 ];
 var emptyDecls = () => ({ prongs: [], sheets: [], blends: [], added: [], names: [] });
+var hasDecls = (r) => {
+  const d = r.d;
+  return !!(d.band || d.stone || d.bezel || d.prongs.length || d.sheets.length || d.blends.length || d.added.length || d.names.length || r.stones.length || r.parts.length);
+};
 var NAME_ID = /^[a-z][a-z0-9_]{0,39}$/;
 function fixed(x) {
   const s = x.toFixed(9).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
@@ -2986,10 +2990,15 @@ var ProgramLibrary = class {
       this.#onProgress?.({ started: this.#started, in: name });
       const out = this.#dispatch(name, args);
       if (SHAPE_CALLS.has(name) && out && typeof out === "object" && out.kind === "solid") {
-        const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
-        t.calls++;
-        t.triangles += out.m.numTri();
-        this.#tally.set(name, t);
+        const solid = out;
+        const count = (m) => {
+          const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
+          t.calls++;
+          t.triangles += m.numTri();
+          this.#tally.set(name, t);
+        };
+        if (solid.pending) solid.built = count;
+        else count(solid.m);
       }
       this.#running = null;
       this.#ended(name, started);
@@ -3147,9 +3156,48 @@ var ProgramLibrary = class {
   #newSolid(m, d = emptyDecls(), extra = {}) {
     return { kind: "solid", m: this.#A.t(m), d, stones: extra.stones ?? [], parts: extra.parts ?? [], ...extra.dims !== void 0 ? { dims: extra.dims } : {}, ...extra.node ? { node: extra.node } : {} };
   }
+  /**
+   * A solid with no declarations, built by `make` only when its mesh is first read. While a
+   * shape put off is built, the call that made it (`madeBy`) is the call running, so a refusal
+   * at a limit met there names what costs, as it did when the call built it at once.
+   */
+  #laterSolid(make, node, extra = {}, madeBy) {
+    const A = this.#A;
+    let m;
+    const running = () => this.#running;
+    const building = (on) => {
+      this.#running = on;
+      this.#onProgress?.({ started: this.#started, in: on });
+    };
+    const rec = {
+      kind: "solid",
+      get m() {
+        if (!m) {
+          const was = running();
+          if (madeBy) building(madeBy);
+          const made = A.t(make());
+          made.numTri();
+          m = made;
+          rec.built?.(made);
+          if (madeBy) building(was);
+        }
+        return m;
+      },
+      get pending() {
+        return !m;
+      },
+      d: emptyDecls(),
+      stones: extra.stones ?? [],
+      parts: extra.parts ?? [],
+      ...extra.dims !== void 0 ? { dims: extra.dims } : {},
+      node
+    };
+    return rec;
+  }
   /** A tree operation node, built by the tree's own buildOp, with the sheets and blends it declares. */
   #fromNode(node, path, addedAs) {
     validateOpNode(node, path);
+    if (!addedAs && node.op === "sweep") return this.#laterSolid(() => buildOp(this.#k, this.#A, node, this.#tol, { m: IDENTITY, moveReachMm: MAX_REACH_MM }), node, {}, path);
     const sheets = [];
     const blends = [];
     const ctx = { m: IDENTITY, sheets, blends, moveReachMm: MAX_REACH_MM, ...this.#blendMeshes ? { blendMeshes: this.#blendMeshes } : {} };
@@ -3241,9 +3289,10 @@ var ProgramLibrary = class {
         if (!a.length) throw new CallError(name, "give at least one solid.");
         const rs = a.map((s, i) => this.#solid(s, at(name, i)));
         if (rs.length === 1) return rs[0];
-        const m = name === "union" ? Manifold.union(rs.map((r) => r.m)) : Manifold.intersection(rs.map((r) => r.m));
         const d = mergeDecls(rs.map((r) => r.d), name);
         const node = name === "union" && rs.every((r) => r.node) ? { id: this.#id("union"), op: "union", children: rs.map((r) => r.node) } : void 0;
+        if (node && rs.some((r) => r.pending) && rs.every((r) => r.pending || !hasDecls(r))) return this.#laterSolid(() => Manifold.union(rs.map((r) => r.m)), node);
+        const m = name === "union" ? Manifold.union(rs.map((r) => r.m)) : Manifold.intersection(rs.map((r) => r.m));
         return this.#newSolid(m, d, { stones: rs.flatMap((r) => r.stones), parts: rs.flatMap((r) => r.parts), ...node ? { node } : {} });
       }
       case "difference": {
@@ -3465,6 +3514,7 @@ var ProgramLibrary = class {
       names: [...d.names]
     };
     const A = this.#A;
+    if (r.pending && r.node && wrap && !hasDecls(r)) return this.#laterSolid(() => kernelMove(r.m), wrap(r.node), { parts: r.parts, ...r.dims !== void 0 ? { dims: r.dims } : {} });
     return {
       kind: "solid",
       m: A.t(kernelMove(r.m)),
