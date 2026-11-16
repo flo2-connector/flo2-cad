@@ -345,7 +345,7 @@ jewelry layer's setting rules (`src/jewelry/rules.ts`); the sources are there, i
 | Ring band | ≥ 1.0 mm | largest circle in the band's own section, every 5° all the way round: the whole piece is cut, then clipped to the band's inner and outer radius and width, so a head or an added shape is never counted as band |
 | Each prong | ≥ 1.0 mm at its narrowest (an unsupported wire) | largest circle in its cross-section (the whole piece cut, clipped to a disc round the prong's axis), every 0.1 mm (0.02 mm near the narrowest) |
 | Prong grip | each prong reaches ≥ 0.15 mm over the girdle (Stuller) | metal above the girdle, inside the girdle's outline |
-| Bezel wall | ≥ 0.8 mm | largest inscribed sphere on the rim |
+| Bezel wall | ≥ 0.8 mm | largest inscribed sphere on the rim around and above the girdle, with its seat's faces: under the stone's edge that is the bezel's floor, where the stone rests, which the culet clearance sets, and the advice then names `culet_clearance`, not the wall |
 | Bezel lip | covers 50-75 % of a faceted stone's crown (Revere, JCK); on a declared cabochon, at least a third of its dome (Cogswell, *Creative Stonesetting*) | top of the bezel less the girdle |
 | Sheets (`thicken`) | ≥ 0.8 mm, the wall minimum | square to the surface: from each point the sheet declares on its middle surface, a ray each way along the normal to the first face, where both faces face along the rays (the sheet's own) |
 | Details | ≥ 0.35 mm | thinnest feature anywhere, measured as the walls are |

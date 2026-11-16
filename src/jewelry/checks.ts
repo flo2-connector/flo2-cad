@@ -13,8 +13,8 @@
 // its problem in those words and carries its part.
 //
 // Like the general checker (con:checker-independent-of-the-kernel), this file imports only the
-// checker and Node, never the kernel, the library or the exporter; test/jewelry-boundary.test.ts
-// holds that.
+// checker, this layer's own rules and Node, never the kernel, the library or the exporter;
+// test/jewelry-boundary.test.ts holds that.
 
 import type { Bvh } from '../checker/bvh.js';
 import {
@@ -37,8 +37,9 @@ import {
   type Sample,
   type Where,
 } from '../checker/check.js';
-import type { FeatureDecl, P2, PartDecl, ProngDecl } from '../checker/features.js';
+import type { FeatureDecl, P2, PartDecl, ProngDecl, StoneDecl } from '../checker/features.js';
 import type { V3 } from '../checker/geom.js';
+import { BEZEL_CLEARANCE } from './rules.js';
 
 /** The setting rules these checks hold a stone's setting to (rules.ts SETTING). */
 export interface SettingRules {
@@ -253,6 +254,21 @@ function inPolygon(poly: P2[], x: number, y: number, grow = 0): boolean {
   return signedInset(poly, x, y) >= 0;
 }
 
+/**
+ * Whether a place on a bezel is its FLOOR, the seat the stone rests on: below the girdle and
+ * inside the bezel's inner wall (the girdle's outline grown by the bezel's clearance, rules.ts),
+ * under the stone. The bezel wall check measures the rim around
+ * and above the girdle with its seat's faces, so under the stone's edge it reads the floor's
+ * thickness, which the culet clearance sets (the floor runs from the bezel's foot up to the
+ * seat, and the seat stands that clearance above the stone's point), not the wall: measured
+ * 2026-11-15 on main 13b8419, a free-standing oval cabochon's bezel read 0.584 mm at wall 1.0,
+ * 1.4 and 1.8 mm, and 0.584, 0.784 and 0.984 mm at culet clearance 0.3, 0.5 and 0.7 mm. Its
+ * words and its advice both ask this of the same place, the reading's `where.point_mm`.
+ */
+export function onTheBezelFloor(p: readonly number[], stone: StoneDecl): boolean {
+  return p[2]! < stone.girdleBottomZ && signedInset(stone.outline, p[0]!, p[1]!) > -BEZEL_CLEARANCE;
+}
+
 function bezelWallEntry(_bvh: Bvh, samples: readonly Sample[], decl: FeatureDecl, L: CheckLimits, faceOf: LayerContext['faceOf']): CheckEntry {
   const bz = decl.bezel!, st = decl.stone!;
   // The rim around and above the girdle; and, where the faces are tagged, only the bezel's own
@@ -264,7 +280,12 @@ function bezelWallEntry(_bvh: Bvh, samples: readonly Sample[], decl: FeatureDecl
   const inBezel = (s: Sample) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3 && ownFace(s.t);
   const m = minSample(samples, inBezel);
   if (!m) throw new Error('no point on the bezel could be measured');
-  const where = placeAt({ part: 'head', feature: 'bezel', clock: clockAt(m.p[0], m.p[1]), name: 'bezel' }, m.p, `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  const clock = clockAt(m.p[0], m.p[1]);
+  const at = (description: string) => placeAt({ part: 'head', feature: 'bezel', clock, name: 'bezel' }, m.p, description);
+  let where = at(`the bezel rim at ${clock} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  // Under the stone, the reading is the floor's, and the words say so (onTheBezelFloor).
+  const floor = onTheBezelFloor(where.point_mm, st);
+  if (floor) where = at(`the bezel's floor under the stone's edge, where the stone rests, at ${clock} seen from above, ${r3(st.girdleBottomZ - m.p[2])} mm below the girdle`);
   return entry({
     id: 'bezel_wall',
     name: 'Bezel wall thickness',
@@ -274,7 +295,9 @@ function bezelWallEntry(_bvh: Bvh, samples: readonly Sample[], decl: FeatureDecl
     value: r3(m.thickness),
     where,
     method: MAXSPHERE + ', on the bezel rim around and above the girdle (its own faces and its seat\'s)',
-    problem: `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, 'the bezel')}; it must be at least ${r3(L.wall)} mm.`,
+    problem: floor
+      ? `The bezel's floor under the stone, where the stone rests, is ${r3(m.thickness)} mm thick at its thinnest, ${sideWords(where, 'the bezel')}; it must be at least ${r3(L.wall)} mm.`
+      : `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, 'the bezel')}; it must be at least ${r3(L.wall)} mm.`,
   });
 }
 
