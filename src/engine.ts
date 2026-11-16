@@ -300,7 +300,7 @@ function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string, decl?:
   if (e.result === 'pass') return null;
   if (e.result === 'could_not_run') return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   // A stone's setting: the jewelry layer's own advice.
-  if (isSettingCheck(e)) return treeSettingFix(e, v.head, L);
+  if (isSettingCheck(e)) return treeSettingFix(e, v.head, L, decl?.stone);
   switch (e.id) {
     case 'band':
       return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${L.band.toFixed(1)} mm. Change: set {"band_thickness": "${Math.max(1.6, suggestThicker(v.bandThicknessMm, e.value ?? 0, L.band))} mm"}.`;
@@ -316,7 +316,7 @@ function fixFor(e: CheckEntry, v: PieceView, L: Limits, material: string, decl?:
     case 'wall': {
       const part = e.where?.feature ?? e.where?.part ?? 'the piece';
       // A thin wall on a stone's setting: the jewelry layer's advice.
-      const setting = treeSettingWallFix(e, v.head, L);
+      const setting = treeSettingWallFix(e, v.head, L, decl?.stone);
       if (setting) return setting;
       if (e.where?.part === 'band') return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${L.wall.toFixed(1)} mm. Raise band_thickness.`;
       if (e.where?.part === 'sheet' && e.where.meets?.length) {
@@ -695,7 +695,7 @@ function programFixFor(e: CheckEntry, L: Limits, material: string, parts: readon
   }
   const head = parts.find((x): x is HeadPart => x.call !== 'ringShank');
   // A stone's setting: the jewelry layer's own advice.
-  if (isSettingCheck(e)) return programSettingFix(e, head?.head, L);
+  if (isSettingCheck(e)) return programSettingFix(e, head?.head, L, decl?.stone);
   const shank = parts.find((x): x is Extract<PartReport, { call: 'ringShank' }> => x.call === 'ringShank');
   const at = (p?: [number, number, number]) => (p ? ` at ${JSON.stringify(p)} mm` : '');
   switch (e.id) {
