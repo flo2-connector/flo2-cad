@@ -23158,6 +23158,40 @@ function sphereSegments(radius, tol) {
   return Math.ceil(segmentsFor(radius, tol * 0.6, 16) / 4) * 4;
 }
 
+// src/jewelry/rules.ts
+var SETTING = {
+  /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
+  gripMin: 0.15,
+  /** Bezel lip on a FACETED stone: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
+  lipMinOfCrown: 0.5,
+  lipMaxOfCrown: 0.75,
+  /**
+   * Bezel lip on a CABOCHON (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference):
+   * at least a third of the stone's height, its dome above the girdle. Cogswell gives "a
+   * third to a quarter ... depending on the wall thickness", and never less than a quarter;
+   * he names no wall thickness that earns the quarter, so the stricter third is used
+   * (owner, round 1, Q4). He gives no upper limit, so none is applied.
+   */
+  lipMinOfCabochon: 1 / 3,
+  sources: [
+    "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
+    'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/',
+    `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
+  ]
+};
+var SEAT_CLEARANCE = 0.03;
+var BEZEL_CLEARANCE = 0.05;
+var STONE_DEFAULTS = {
+  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
+  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
+};
+var HEAD_DEFAULTS = {
+  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
+  prong_grip: "0.2 mm",
+  /** Gap between the stone's culet (its point) and the top of the band. */
+  culet_clearance: "0.3 mm"
+};
+
 // src/jewelry/checks.ts
 function declaresSetting(decl) {
   return decl.prongs.length > 0 || decl.bezel !== void 0 || decl.stone !== void 0;
@@ -23330,6 +23364,9 @@ function inPolygon(poly, x, y, grow = 0) {
   if (grow > 0) return signedInset(poly, x, y) > -grow;
   return signedInset(poly, x, y) >= 0;
 }
+function onTheBezelFloor(p, stone) {
+  return p[2] < stone.girdleBottomZ && signedInset(stone.outline, p[0], p[1]) > -BEZEL_CLEARANCE;
+}
 function bezelWallEntry(_bvh, samples, decl, L3, faceOf2) {
   const bz = decl.bezel, st = decl.stone;
   const ownFace = (t) => {
@@ -23339,7 +23376,11 @@ function bezelWallEntry(_bvh, samples, decl, L3, faceOf2) {
   const inBezel = (s) => s.p[2] > st.girdleBottomZ - 0.5 && inPolygon(bz.outer, s.p[0], s.p[1], 0.1) && signedInset(st.outline, s.p[0], s.p[1]) < 0.3 && ownFace(s.t);
   const m = minSample(samples, inBezel);
   if (!m) throw new Error("no point on the bezel could be measured");
-  const where = placeAt({ part: "head", feature: "bezel", clock: clockAt(m.p[0], m.p[1]), name: "bezel" }, m.p, `the bezel rim at ${clockAt(m.p[0], m.p[1])} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  const clock = clockAt(m.p[0], m.p[1]);
+  const at2 = (description) => placeAt({ part: "head", feature: "bezel", clock, name: "bezel" }, m.p, description);
+  let where = at2(`the bezel rim at ${clock} seen from above, ${r3(m.p[2] - st.girdleTopZ)} mm above the girdle`);
+  const floor = onTheBezelFloor(where.point_mm, st);
+  if (floor) where = at2(`the bezel's floor under the stone's edge, where the stone rests, at ${clock} seen from above, ${r3(st.girdleBottomZ - m.p[2])} mm below the girdle`);
   return entry({
     id: "bezel_wall",
     name: "Bezel wall thickness",
@@ -23349,7 +23390,7 @@ function bezelWallEntry(_bvh, samples, decl, L3, faceOf2) {
     value: r3(m.thickness),
     where,
     method: MAXSPHERE + ", on the bezel rim around and above the girdle (its own faces and its seat's)",
-    problem: `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, "the bezel")}; it must be at least ${r3(L3.wall)} mm.`
+    problem: floor ? `The bezel's floor under the stone, where the stone rests, is ${r3(m.thickness)} mm thick at its thinnest, ${sideWords(where, "the bezel")}; it must be at least ${r3(L3.wall)} mm.` : `The bezel wall is ${r3(m.thickness)} mm at its thinnest, ${sideWords(where, "the bezel")}; it must be at least ${r3(L3.wall)} mm.`
   });
 }
 function bezelLipEntry(bvh, decl, R) {
@@ -23396,40 +23437,6 @@ function bezelLipEntry(bvh, decl, R) {
   });
 }
 
-// src/jewelry/rules.ts
-var SETTING = {
-  /** Prong overlap over the girdle: Stuller production standards, "0.15 into the stone or 15%". */
-  gripMin: 0.15,
-  /** Bezel lip on a FACETED stone: "Between 25 percent and 50 percent of the crown should protrude above the bezel" (Revere, JCK 2010). */
-  lipMinOfCrown: 0.5,
-  lipMaxOfCrown: 0.75,
-  /**
-   * Bezel lip on a CABOCHON (dec:a-cabochon-bezel-has-its-own-lip-rule-from-a-cited-reference):
-   * at least a third of the stone's height, its dome above the girdle. Cogswell gives "a
-   * third to a quarter ... depending on the wall thickness", and never less than a quarter;
-   * he names no wall thickness that earns the quarter, so the stricter third is used
-   * (owner, round 1, Q4). He gives no upper limit, so none is applied.
-   */
-  lipMinOfCabochon: 1 / 3,
-  sources: [
-    "Stuller production standards (prong overlap 0.15 mm, prong dome base flush with the table): http://stuller.scene7.com/is/content/Stuller/DAS/09b4e2e2-e12e-45f8-a2ed-a4f80104aa9f.pdf",
-    'A. Revere, "Square Bezel Setting", JCK 2010: https://www.jckonline.com/magazine-article/square-bezel-setting/',
-    `Cabochon bezel lip: J. Cogswell, Creative Stonesetting (Brynmorgen Press, 2008, ISBN 978-1-929565-22-1), ch. 3 Bezel Settings: "The height of the finished bezel should be approximately a third to a quarter of the height of the stone, depending on the wall thickness. ... Thicker bezels can be slightly shorter than thinner bezels, with greater mass making up for lesser height, [but] even they should never be less than one-fourth the height of the stone." Quoted in full at https://orchid.ganoksin.com/t/selecting-bezel-wire-size/37651 (post 11, 2009-07-25); a cabochon's crown, or dome, meets its flat base at the girdle (the book, p. 10). The stricter third is used.`
-  ]
-};
-var SEAT_CLEARANCE = 0.03;
-var BEZEL_CLEARANCE = 0.05;
-var STONE_DEFAULTS = {
-  round: { diameter: "6.5 mm", depth: "4.0 mm", carat: "1.00 ct" },
-  emerald: { length: "8.5 mm", width: "6.0 mm", depth: "4.1 mm", carat: "2.00 ct" }
-};
-var HEAD_DEFAULTS = {
-  /** How far each prong reaches in over the stone's girdle (Stuller: 0.15 mm; the default sits above it). */
-  prong_grip: "0.2 mm",
-  /** Gap between the stone's culet (its point) and the top of the band. */
-  culet_clearance: "0.3 mm"
-};
-
 // src/jewelry/fixes.ts
 var r2 = (x) => Math.round(x * 100) / 100;
 function suggestThicker(current, measured, limit) {
@@ -23439,6 +23446,16 @@ var SETTING_CHECKS = /* @__PURE__ */ new Set(["prong", "prong_grip", "bezel_wall
 function isSettingCheck(e) {
   return SETTING_CHECKS.has(e.id);
 }
+function onTheFloor(e, stone) {
+  return !!stone && !!e.where && onTheBezelFloor(e.where.point_mm, stone);
+}
+function floorFix(e, cc, L3) {
+  const current = cc ?? parseFloat(HEAD_DEFAULTS.culet_clearance);
+  return {
+    words: `Thicken the bezel's floor under the stone: it is ${e.value} mm thick under the stone's edge at ${e.where?.clock} seen from above, where the stone rests, and a wall needs ${L3.wall.toFixed(1)} mm. Its thickness is set by the culet clearance, not by the bezel's wall: raising the clearance raises the seat by as much, and the stone and the top of the bezel with it.`,
+    to: suggestThicker(current, e.value ?? 0, L3.wall)
+  };
+}
 function cabochonLipFix(e) {
   const m = /cabochon's ([\d.]+) mm dome \(at least ([\d.]+) mm for this stone/.exec(e.limit);
   if (!m) return null;
@@ -23446,7 +23463,7 @@ function cabochonLipFix(e) {
   return { dome: Number(m[1]), need, to: Math.ceil((need + 0.01) * 10) / 10 };
 }
 var cabochonLipWords = (e, c) => `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
-function treeSettingFix(e, h, L3) {
+function treeSettingFix(e, h, L3, stone) {
   switch (e.id) {
     case "prong": {
       if (!h || h.kind !== "prong_head") return null;
@@ -23462,6 +23479,10 @@ function treeSettingFix(e, h, L3) {
     }
     case "bezel_wall":
       if (!h || h.kind !== "bezel") return null;
+      if (onTheFloor(e, stone)) {
+        const f = floorFix(e, h.culetClearanceMm, L3);
+        return `${f.words} Change: set {"head.culet_clearance": "${f.to} mm"}.`;
+      }
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L3.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1, suggestThicker(h.wallMm, e.value ?? 0, L3.wall))} mm"}.`;
     case "bezel_lip": {
       if (!h || h.kind !== "bezel") return null;
@@ -23476,13 +23497,14 @@ function treeSettingFix(e, h, L3) {
   }
   return null;
 }
-function treeSettingWallFix(e, h, L3) {
+function treeSettingWallFix(e, h, L3, stone) {
   const part = e.where?.feature ?? e.where?.part ?? "the piece";
   if (/prong/.test(part) && h?.kind === "prong_head") return `Thicken ${part}: a wall there is ${e.value} mm and needs ${L3.wall.toFixed(1)} mm. Raise prong_thickness.`;
+  if (part === "bezel" && h?.kind === "bezel" && onTheFloor(e, stone)) return `Thicken the bezel's floor under the stone, where the stone rests: a wall there is ${e.value} mm and needs ${L3.wall.toFixed(1)} mm. Raise head.culet_clearance, which sets it (not bezel_wall).`;
   if (part === "bezel" && h?.kind === "bezel") return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${L3.wall.toFixed(1)} mm. Raise bezel_wall.`;
   return void 0;
 }
-function programSettingFix(e, head, L3) {
+function programSettingFix(e, head, L3, stone) {
   switch (e.id) {
     case "prong": {
       const lines = (e.failing ?? []).map((f) => {
@@ -23493,6 +23515,10 @@ function programSettingFix(e, head, L3) {
       return `${lines.join(" ")} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
     }
     case "bezel_wall":
+      if (onTheFloor(e, stone)) {
+        const f = floorFix(e, head?.culetClearanceMm, L3);
+        return `${f.words} In the program, set culet_clearance in its bezel call to at least ${f.to} mm.`;
+      }
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L3.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1, suggestThicker(head?.bezel?.wallMm ?? L3.wall, e.value ?? 0, L3.wall))} mm.`;
     case "bezel_lip": {
       const cab = cabochonLipFix(e);
@@ -27782,7 +27808,7 @@ function gapParts(e, decl) {
 function fixFor(e, v, L3, material, decl) {
   if (e.result === "pass") return null;
   if (e.result === "could_not_run") return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
-  if (isSettingCheck(e)) return treeSettingFix(e, v.head, L3);
+  if (isSettingCheck(e)) return treeSettingFix(e, v.head, L3, decl?.stone);
   switch (e.id) {
     case "band":
       return `Thicken the band: its thinnest section is ${e.value} mm (${e.where?.feature}), and a band needs ${L3.band.toFixed(1)} mm. Change: set {"band_thickness": "${Math.max(1.6, suggestThicker2(v.bandThicknessMm, e.value ?? 0, L3.band))} mm"}.`;
@@ -27797,7 +27823,7 @@ function fixFor(e, v, L3, material, decl) {
     }
     case "wall": {
       const part = e.where?.feature ?? e.where?.part ?? "the piece";
-      const setting = treeSettingWallFix(e, v.head, L3);
+      const setting = treeSettingWallFix(e, v.head, L3, decl?.stone);
       if (setting) return setting;
       if (e.where?.part === "band") return `Thicken the band: a wall there is ${e.value} mm (${part}) and needs ${L3.wall.toFixed(1)} mm. Raise band_thickness.`;
       if (e.where?.part === "sheet" && e.where.meets?.length) {
@@ -28103,7 +28129,7 @@ function programFixFor(e, L3, material, parts, decl, stoppedFix) {
     return `A check could not run (${e.name}: ${e.measured}). A check that cannot run counts as a fail, so nothing is exported until it can.`;
   }
   const head = parts.find((x) => x.call !== "ringShank");
-  if (isSettingCheck(e)) return programSettingFix(e, head?.head, L3);
+  if (isSettingCheck(e)) return programSettingFix(e, head?.head, L3, decl?.stone);
   const shank = parts.find((x) => x.call === "ringShank");
   const at2 = (p) => p ? ` at ${JSON.stringify(p)} mm` : "";
   switch (e.id) {

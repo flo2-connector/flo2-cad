@@ -5,9 +5,16 @@
 // For a tree, the advice names its settings ("prong_thickness", "bezel_wall"); for a program,
 // the call that makes the part. The casting limits are the piece's (its profile's or its
 // supplied ones), `L`; the setting rules are this layer's (rules.ts).
+//
+// The advice names the setting that moves the reading it answers, and where the place is. A
+// bezel's thin place under the stone is its floor, which the culet clearance sets, not the wall
+// (onTheBezelFloor): until 2026-11-15 the advice said "wall" wherever the bezel was thin, and a
+// chat that followed it saw the reading stay where it was (test/the-bezel-advice-moves-the-reading).
 
 import type { CheckEntry, CheckLimits } from '../checker/check.js';
-import { SETTING } from './rules.js';
+import type { StoneDecl } from '../checker/features.js';
+import { onTheBezelFloor } from './checks.js';
+import { HEAD_DEFAULTS, SETTING } from './rules.js';
 
 const r2 = (x: number) => Math.round(x * 100) / 100;
 
@@ -26,12 +33,30 @@ export function isSettingCheck(e: CheckEntry): boolean {
 /** A tree's head as its settings set it (the piece tree's HeadView). */
 export type TreeHead =
   | { kind: 'prong_head'; prongCount: number; prongThicknessMm: number[]; nominalProngMm: number }
-  | { kind: 'bezel'; wallMm: number };
+  | { kind: 'bezel'; wallMm: number; culetClearanceMm?: number };
 
 /** A program's setting as its library call built it (the library's HeadDims). */
 export interface ProgramHead {
   prongs?: { thicknessMm: number }[];
   bezel?: { wallMm: number };
+  culetClearanceMm?: number;
+}
+
+/** Whether a failing reading of a bezel is on its floor, under the stone (onTheBezelFloor), from the stone the piece declares. */
+function onTheFloor(e: CheckEntry, stone: StoneDecl | undefined): boolean {
+  return !!stone && !!e.where && onTheBezelFloor(e.where.point_mm, stone);
+}
+
+/**
+ * The floor's advice: what it is, where, and the culet clearance that makes it that much
+ * thicker (the seat rises by as much as the clearance does, and the floor's underside stays).
+ */
+function floorFix(e: CheckEntry, cc: number | undefined, L: CheckLimits): { words: string; to: number } {
+  const current = cc ?? parseFloat(HEAD_DEFAULTS.culet_clearance);
+  return {
+    words: `Thicken the bezel's floor under the stone: it is ${e.value} mm thick under the stone's edge at ${e.where?.clock} seen from above, where the stone rests, and a wall needs ${L.wall.toFixed(1)} mm. Its thickness is set by the culet clearance, not by the bezel's wall: raising the clearance raises the seat by as much, and the stone and the top of the bezel with it.`,
+    to: suggestThicker(current, e.value ?? 0, L.wall),
+  };
 }
 
 /**
@@ -50,7 +75,7 @@ const cabochonLipWords = (e: CheckEntry, c: { dome: number; need: number }) =>
   `Raise the bezel lip: it rises ${e.value} mm above the girdle, and a cabochon's bezel must rise at least a third of its ${c.dome} mm dome, ${c.need} mm, to be pushed over the stone and hold it (J. Cogswell, Creative Stonesetting).`;
 
 /** What to change for a failing check of a tree's setting, in its settings' names. Null when the head is not the kind the check is about. */
-export function treeSettingFix(e: CheckEntry, h: TreeHead | undefined, L: CheckLimits): string | null {
+export function treeSettingFix(e: CheckEntry, h: TreeHead | undefined, L: CheckLimits, stone?: StoneDecl): string | null {
   switch (e.id) {
     case 'prong': {
       if (!h || h.kind !== 'prong_head') return null;
@@ -66,6 +91,10 @@ export function treeSettingFix(e: CheckEntry, h: TreeHead | undefined, L: CheckL
     }
     case 'bezel_wall':
       if (!h || h.kind !== 'bezel') return null;
+      if (onTheFloor(e, stone)) {
+        const f = floorFix(e, h.culetClearanceMm, L);
+        return `${f.words} Change: set {"head.culet_clearance": "${f.to} mm"}.`;
+      }
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L.wall.toFixed(1)} mm. Change: set {"bezel_wall": "${Math.max(1.0, suggestThicker(h.wallMm, e.value ?? 0, L.wall))} mm"}.`;
     case 'bezel_lip': {
       if (!h || h.kind !== 'bezel') return null;
@@ -84,15 +113,16 @@ export function treeSettingFix(e: CheckEntry, h: TreeHead | undefined, L: CheckL
 }
 
 /** The wall check's advice when its thin place is on a tree's setting; undefined when the place is not on one. */
-export function treeSettingWallFix(e: CheckEntry, h: TreeHead | undefined, L: CheckLimits): string | undefined {
+export function treeSettingWallFix(e: CheckEntry, h: TreeHead | undefined, L: CheckLimits, stone?: StoneDecl): string | undefined {
   const part = e.where?.feature ?? e.where?.part ?? 'the piece';
   if (/prong/.test(part) && h?.kind === 'prong_head') return `Thicken ${part}: a wall there is ${e.value} mm and needs ${L.wall.toFixed(1)} mm. Raise prong_thickness.`;
+  if (part === 'bezel' && h?.kind === 'bezel' && onTheFloor(e, stone)) return `Thicken the bezel's floor under the stone, where the stone rests: a wall there is ${e.value} mm and needs ${L.wall.toFixed(1)} mm. Raise head.culet_clearance, which sets it (not bezel_wall).`;
   if (part === 'bezel' && h?.kind === 'bezel') return `Thicken the bezel rim: a wall there is ${e.value} mm and needs ${L.wall.toFixed(1)} mm. Raise bezel_wall.`;
   return undefined;
 }
 
 /** What to change for a failing check of a program's setting, in the terms of the call that makes it. */
-export function programSettingFix(e: CheckEntry, head: ProgramHead | undefined, L: CheckLimits): string | null {
+export function programSettingFix(e: CheckEntry, head: ProgramHead | undefined, L: CheckLimits, stone?: StoneDecl): string | null {
   switch (e.id) {
     case 'prong': {
       const lines = (e.failing ?? []).map((f) => {
@@ -103,6 +133,10 @@ export function programSettingFix(e: CheckEntry, head: ProgramHead | undefined, 
       return `${lines.join(' ')} In the program, raise prong_thickness in its prongHead call (or that prong's own thickness in prong_overrides).`;
     }
     case 'bezel_wall':
+      if (onTheFloor(e, stone)) {
+        const f = floorFix(e, head?.culetClearanceMm, L);
+        return `${f.words} In the program, set culet_clearance in its bezel call to at least ${f.to} mm.`;
+      }
       return `Thicken the bezel rim: it is ${e.value} mm at ${e.where?.clock} seen from above, and a wall needs ${L.wall.toFixed(1)} mm. In the program, set wall in its bezel call to at least ${Math.max(1.0, suggestThicker(head?.bezel?.wallMm ?? L.wall, e.value ?? 0, L.wall))} mm.`;
     case 'bezel_lip': {
       const cab = cabochonLipFix(e);
