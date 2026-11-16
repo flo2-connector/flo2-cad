@@ -269,7 +269,9 @@ engine runs it confined, keeps it as the piece's file, and previews, checks and 
   anything more from the kernel. A stone is never metal.
 - **When it fails**, the reply names the line and what to fix ("program: line 3: rotate([20, 0, 0]): would tip the
   stone setting off upright"), and nothing changes. A program that runs too long or uses too much memory is stopped
-  and refused, with the limit it hit. `console.log` lines come back with the reply.
+  and refused, with the limit it hit, the call it stopped in and what to change. A `smoothUnion` costs a check by the
+  whole surface it blends: blend only where a fillet is wanted, over as few and as small shapes as you can, and join
+  the rest (a rail all round a ring, a band) with `union()`. `console.log` lines come back with the reply.
 - **Name the shapes you add** (`.named("crest")`), so a refusal can say "the shape named "crest"". A shape with no
   name is reported "in no named part".
 - **A cabochon**: `cabochon({ diameter, height })`, or `{ length, width, height }` for an oval, with the base size and

@@ -5,6 +5,11 @@
 // positionsOnly, wantStone }], deadline_ms, wasm_cap_bytes }.
 // stdout: frames of [4-byte length][JSON header][binary blobs], and nothing else: at most one
 // EMPTY frame (length 0), which says READY, then the one answer.
+// stderr: as each library call starts and ends, one PROGRESS line (PROGRESS_MARK, then JSON:
+// the run, the call running now, the heaviest and the slowest calls so far; library.ts,
+// Progress), so that a refusal at a limit can say where the evaluation stopped even when the
+// engine had to kill this process and it could say nothing more (run.ts reads them). Anything
+// else on stderr is a diagnostic.
 //
 // THE ORDER, and why. First V8 alone is asked whether the program parses (a few
 // milliseconds, none of the program runs), so a program that does not parse is refused
@@ -27,7 +32,7 @@ import { CallError } from '../errors.js';
 import { kernel } from '../kernel/manifold.js';
 import { Arena, type MeshOut } from '../library/build.js';
 import type { BlendMeshes } from '../library/thicken.js';
-import { ProgramLibrary, type CallTally, type PartReport } from './library.js';
+import { PROGRESS_MARK, ProgramLibrary, type PartReport, type Progress } from './library.js';
 import { PRELUDE, PRELUDE_FILENAME, PROGRAM_FILENAME } from './prelude.js';
 
 export interface ChildRun {
@@ -52,6 +57,11 @@ export interface ChildRequest {
 
 /** How a program's evaluation can fail, as the child reports it. */
 export type FailKind = 'program' | 'time' | 'memory' | 'engine';
+
+/** Says where the evaluation stands, on stderr (synchronous to a pipe on Linux, so it is out before a kill can land). */
+function sayProgress(run: number, p: Progress & { finishing?: true }): void {
+  process.stderr.write(`${PROGRESS_MARK}${JSON.stringify({ run, ...p })}\n`);
+}
 
 let wasmCapHit = false;
 
@@ -91,9 +101,9 @@ function writeFrame(header: unknown, blobs: Buffer[]): Promise<void> {
   return new Promise((resolve) => process.stdout.write(Buffer.concat([len, head, ...blobs]), () => resolve()));
 }
 
-function fail(kind: FailKind, message: string, line: number | null, logs: string[], lib?: ProgramLibrary): Promise<void> {
-  const memory = kind === 'memory' && lib ? { heaviest: lib.heaviest() satisfies CallTally[], stopped_in: lib.stoppedIn() } : {};
-  return writeFrame({ ok: false, kind, message, line, logs, ...memory }, []);
+/** A refusal. Where the evaluation stopped is not in it: the progress lines have said it (run.ts). */
+function fail(kind: FailKind, message: string, line: number | null, logs: string[]): Promise<void> {
+  return writeFrame({ ok: false, kind, message, line, logs }, []);
 }
 
 /** READY: an empty frame. The engine (run.ts) starts the program's backstop when it reads it. */
@@ -152,7 +162,7 @@ async function main(): Promise<void> {
   const blob = blobber(blobs);
   const runs: unknown[] = [];
   let logs: string[] = [];
-  for (const run of req.runs) {
+  for (const [runIndex, run] of req.runs.entries()) {
     const remaining = Math.floor(req.deadline_ms - (performance.now() - t0));
     if (remaining <= 0) return fail('time', 'the program ran past its time limit', null, logs);
     const blendMeshes: BlendMeshes = { meshes: kept, reuse: !!run.reuseBlends };
@@ -166,13 +176,19 @@ async function main(): Promise<void> {
     // test/a-check-needs-its-larger-build.test.ts). What a run hands back is copied out of the
     // kernel first: its meshes, its declarations, and a blend's mesh in `kept`.
     const A = new Arena();
-    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly);
+    const lib = new ProgramLibrary(k, A, run.tol, blendMeshes, !!run.nameFaces && !run.positionsOnly, (p) => sayProgress(runIndex, p));
+    sayProgress(runIndex, lib.progress());
+    /** A refusal from this run, the tallies said in full first, so the engine reads where it stopped as it stood. */
+    const failed = (kind: FailKind, message: string, line: number | null, l: string[]) => {
+      sayProgress(runIndex, lib.progress());
+      return fail(kind, message, line, l);
+    };
     const ctx = programContext();
     const setup = new vm.Script(PRELUDE, { filename: PRELUDE_FILENAME }).runInContext(ctx) as (bridge: (n: unknown, a: unknown) => string) => unknown;
     const runner = setup((name: unknown, args: unknown) => lib.call(name as string, args as string));
     // Compiled again in this run's own realm (it parsed above, so this does not fail).
     const compiled = compileProgram(req.source, ctx);
-    if (!('program' in compiled)) return fail('program', compiled.message, compiled.line, logs);
+    if (!('program' in compiled)) return failed('program', compiled.message, compiled.line, logs);
     ctx['__flo2_run'] = runner;
     ctx['__flo2_program'] = compiled.program;
     let out: unknown;
@@ -183,18 +199,20 @@ async function main(): Promise<void> {
       // What escaped the runner is not read: V8's time-limit error is made in the
       // program's realm, and anything else here is the program's own (reading it could
       // run its code outside its limit). The clock says which it was.
-      if (performance.now() - started >= remaining - 25) return fail('time', 'the program ran past its time limit', null, logs);
-      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs, lib);
-      return fail('engine', e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
+      if (performance.now() - started >= remaining - 25) return failed('time', 'the program ran past its time limit', null, logs);
+      if (wasmCapHit) return failed('memory', 'the geometry kernel reached its memory limit', null, logs);
+      return failed('engine', e instanceof Error ? `the program's run stopped: ${e.message}` : "the program's run stopped on something the engine does not read", null, logs);
     }
-    if (typeof out !== 'string') return fail('engine', 'the program gave no answer', null, logs);
+    if (typeof out !== 'string') return failed('engine', 'the program gave no answer', null, logs);
     const r = JSON.parse(out) as { ok?: number; error?: { message?: unknown; line?: unknown }; logs?: unknown };
     logs = Array.isArray(r.logs) ? r.logs.filter((x): x is string => typeof x === 'string').slice(0, 50) : [];
     if (r.error !== undefined) {
       const msg = String(r.error.message ?? 'the program failed');
-      return fail(wasmCapHit ? 'memory' : 'program', wasmCapHit ? 'the geometry kernel reached its memory limit' : msg, typeof r.error.line === 'number' ? r.error.line : null, logs, lib);
+      return failed(wasmCapHit ? 'memory' : 'program', wasmCapHit ? 'the geometry kernel reached its memory limit' : msg, typeof r.error.line === 'number' ? r.error.line : null, logs);
     }
     try {
+      // The program has returned: the engine now makes the casting file's mesh of it, outside any call.
+      sayProgress(runIndex, { ...lib.progress(), finishing: true });
       const res = lib.finish(r.ok, run.scale, !!run.blendSurface);
       const decl: FeatureDecl & { blends?: unknown; faces?: unknown } = res.decl;
       const blends = (res.decl.blends ?? []).map((b) => ({ label: b.label, points: blob(b.points) }));
@@ -206,12 +224,14 @@ async function main(): Promise<void> {
         ...(run.positionsOnly ? {} : { decl: { ...decl, blends, ...(faces ? { faces } : {}) }, parts: res.parts satisfies PartReport[], named: res.named }),
       });
     } catch (e) {
-      if (wasmCapHit) return fail('memory', 'the geometry kernel reached its memory limit', null, logs, lib);
-      if (e instanceof CallError) return fail('program', `${e.path}: ${e.problem}`, null, logs);
-      return fail('engine', `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
+      if (wasmCapHit) return failed('memory', 'the geometry kernel reached its memory limit', null, logs);
+      if (e instanceof CallError) return failed('program', `${e.path}: ${e.problem}`, null, logs);
+      return failed('engine', `the piece could not be finished: ${e instanceof Error ? e.message : String(e)}`, null, logs);
     }
     // A run that failed returned above, and the child then exits, which frees everything.
     A.free();
+    // The next build starts (or the answer is written).
+    if (runIndex + 1 < req.runs.length) sayProgress(runIndex + 1, { started: 0, in: null, heaviest: [], slowest: [] });
   }
   await writeFrame({ ok: true, runs, blobs: blobs.map((b) => b.length), logs, ms: Math.round(performance.now() - t0) }, blobs);
 }

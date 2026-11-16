@@ -12,6 +12,7 @@ import {
   evaluateProgram,
   limitsLine,
   limitsTag,
+  limitTips,
   placeholderNote,
   preview,
   previewProgram,
@@ -205,7 +206,8 @@ export class Session {
     } catch (e) {
       if (e instanceof ProgramFailed) {
         const logs = e.logs.length ? ` It logged: ${e.logs.join(' | ')}` : '';
-        throw new CallError(path, `${e.plain.replace(/\.$/, '')}. Nothing was changed.${logs}`);
+        const tips = limitTips(e);
+        throw new CallError(path, `${e.plain.replace(/\.$/, '')}.${tips ? ` To fit the limit, ${tips}.` : ''} Nothing was changed.${logs}`);
       }
       throw e;
     }

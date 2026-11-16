@@ -184,12 +184,46 @@ export interface CallTally {
   triangles: number;
 }
 
+/** One kind of call's share of a program's time: how many calls ended, and the milliseconds they took. */
+export interface CallTime {
+  call: string;
+  calls: number;
+  ms: number;
+}
+
+/**
+ * Where an evaluation stands, said as each call starts and ends (child.ts sends it to the engine
+ * as it happens, so a child stopped from outside, which can say nothing, has still said it):
+ * the call running now (after a call that failed, still that call), the shape calls that made the
+ * most triangles, and the calls that took the most time, each of the calls that ENDED.
+ */
+/** What starts a progress line on the evaluation child's stderr (child.ts writes them, run.ts reads them; here because importing child.ts runs it). */
+export const PROGRESS_MARK = '\u001eflo2-cad-progress ';
+
+export interface Progress {
+  /** How many calls have started so far: a new one, even of the same kind, has a new start. */
+  started: number;
+  in: string | null;
+  /** Left out when unchanged in substance since the last time they were said (a call's start, and a run of quick calls). */
+  heaviest?: CallTally[];
+  slowest?: CallTime[];
+}
+
+/** The tallies are said again at most this often, and after any call that took at least this long (ms): a program of thousands of quick calls pays for few lines. */
+const PROGRESS_EVERY_MS = 50;
+
 export class ProgramLibrary {
   readonly #k: Kernel;
   /** What each kind of shape call has made so far, for a refusal that ran out of memory to name (fact:root-cause-a-swept-wire-costs-memory-by-how-it-is-built-not-what-it-is-2026-11-10). */
   readonly #tally = new Map<string, { calls: number; triangles: number }>();
-  /** The call running now, so a refusal that runs out of memory inside it can name it. */
+  /** What each kind of call has taken so far, for a refusal at the time limit to name. */
+  readonly #times = new Map<string, { calls: number; ms: number }>();
+  /** The call running now, so a refusal at a limit inside it can name it. */
   #running: string | null = null;
+  #started = 0;
+  /** Told where the evaluation stands as each call starts and ends. */
+  readonly #onProgress: ((p: Progress) => void) | undefined;
+  #saidAt = -Infinity;
   readonly #A: Arena;
   readonly #tol: number;
   readonly #blendMeshes: BlendMeshes | undefined;
@@ -198,12 +232,13 @@ export class ProgramLibrary {
   readonly #recs: Rec[] = [];
   #nextId = 0;
 
-  constructor(k: Kernel, A: Arena, tol: number, blendMeshes?: BlendMeshes, nameFaces = false) {
+  constructor(k: Kernel, A: Arena, tol: number, blendMeshes?: BlendMeshes, nameFaces = false, onProgress?: (p: Progress) => void) {
     this.#k = k;
     this.#A = A;
     this.#tol = tol;
     this.#blendMeshes = blendMeshes;
     this.#names = nameFaces ? new FaceNames() : undefined;
+    this.#onProgress = onProgress;
   }
 
   /**
@@ -212,34 +247,58 @@ export class ProgramLibrary {
    * this realm can reach the program.
    */
   call(name: string, argsJson: string): string {
+    let started: number | null = null;
     try {
       if (typeof name !== 'string' || !(PROGRAM_CALLS as readonly string[]).includes(name)) throw new CallError(String(name), 'is not something a program can call.');
       if (typeof argsJson !== 'string' || argsJson.length > 20_000_000) throw new CallError(name, 'its arguments are too large.');
       const args = JSON.parse(argsJson) as unknown;
       if (!Array.isArray(args)) throw new CallError(name, 'takes a list of arguments.');
       this.#running = name;
+      this.#started++;
+      started = performance.now();
+      this.#onProgress?.({ started: this.#started, in: name });
       const out = this.#dispatch(name as ProgramCall, args);
-      this.#running = null;
       if (SHAPE_CALLS.has(name) && out && typeof out === 'object' && (out as { kind?: unknown }).kind === 'solid') {
         const t = this.#tally.get(name) ?? { calls: 0, triangles: 0 };
         t.calls++;
+        // Counting the triangles makes the kernel evaluate what it had put off (a sweep's runs are
+        // unioned here), often most of the call's work: so the call is still the one running.
         t.triangles += (out as SolidRec).m.numTri();
         this.#tally.set(name, t);
       }
+      this.#running = null;
+      this.#ended(name, started);
       return JSON.stringify({ ok: this.#encode(out) });
     } catch (e) {
+      // A call that failed stays the call running, so a refusal for the kernel's memory, met
+      // inside it, names it (the program's own code may still catch the error and go on).
+      if (started !== null) this.#ended(name, started);
       return JSON.stringify({ error: messageOf(e) });
     }
   }
 
-  /** The kinds of shape call that made the most triangles so far, the heaviest first. */
-  /** The call that was running when the program stopped, if one was. */
-  stoppedIn(): string | null {
-    return this.#running;
+  /** A call ended: its time counted, and where the evaluation stands said (the tallies only after a slow call, or now and then). */
+  #ended(name: string, started: number): void {
+    const now = performance.now();
+    const t = this.#times.get(name) ?? { calls: 0, ms: 0 };
+    t.calls++;
+    t.ms += now - started;
+    this.#times.set(name, t);
+    if (!this.#onProgress) return;
+    if (now - started >= PROGRESS_EVERY_MS || now - this.#saidAt >= PROGRESS_EVERY_MS) {
+      this.#saidAt = now;
+      this.#onProgress(this.progress());
+    } else this.#onProgress({ started: this.#started, in: this.#running });
   }
 
-  heaviest(most = 3): CallTally[] {
-    return [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most);
+  /** Where the evaluation stands: the call running now, the heaviest shape calls and the slowest calls so far. */
+  progress(most = 3): Required<Progress> {
+    return {
+      started: this.#started,
+      in: this.#running,
+      heaviest: [...this.#tally].map(([call, t]) => ({ call, ...t })).sort((a, b) => b.triangles - a.triangles).slice(0, most),
+      slowest: [...this.#times].map(([call, t]) => ({ call, calls: t.calls, ms: Math.round(t.ms) })).sort((a, b) => b.ms - a.ms).slice(0, most),
+    };
   }
 
   /** The solid a program returned, finished as a casting file would hold it. */
