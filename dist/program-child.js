@@ -1965,6 +1965,49 @@ function holdToSurface(V, numProp, triVerts, f, tol) {
   return { positions: Float32Array.from(P), triVerts: Uint32Array.from(tv), split: split2, passes, kept: notFound + leaned + crossed + deep, notFound, leaned, crossed, deep };
 }
 
+// src/library/pinch.ts
+function pinchedPositions(mesh) {
+  const np = mesh.numProp, V = mesh.vertProperties, T = mesh.triVerts;
+  const n = V.length / np;
+  const P = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) P[i * 3 + c] = V[i * np + c];
+  const order = new Uint32Array(n);
+  for (let i = 0; i < n; i++) order[i] = i;
+  order.sort((a, b) => P[a * 3] - P[b * 3] || P[a * 3 + 1] - P[b * 3 + 1] || P[a * 3 + 2] - P[b * 3 + 2]);
+  const same = (a, b) => P[a * 3] === P[b * 3] && P[a * 3 + 1] === P[b * 3 + 1] && P[a * 3 + 2] === P[b * 3 + 2];
+  const runOf = /* @__PURE__ */ new Map();
+  const runs = [];
+  for (let s = 0; s < n; ) {
+    let e = s + 1;
+    while (e < n && same(order[s], order[e])) e++;
+    if (e - s > 1) {
+      const members = Array.from(order.subarray(s, e));
+      for (const v of members) runOf.set(v, runs.length);
+      runs.push(members);
+    }
+    s = e;
+  }
+  if (!runs.length) return 0;
+  const parent = /* @__PURE__ */ new Map();
+  const root = (v) => {
+    let r = v;
+    while (parent.has(r)) r = parent.get(r);
+    return r;
+  };
+  for (let t = 0; t < T.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const a = T[t + e], b = T[t + (e + 1) % 3];
+      const ra = runOf.get(a);
+      if (ra === void 0 || ra !== runOf.get(b)) continue;
+      const x = root(a), y = root(b);
+      if (x !== y) parent.set(x, y);
+    }
+  }
+  let pinched = 0;
+  for (const members of runs) if (new Set(members.map(root)).size > 1) pinched++;
+  return pinched;
+}
+
 // src/library/tolerances.ts
 var EXPORT_TOL = 45e-4;
 var PREVIEW_TOL = 0.03;
@@ -2248,6 +2291,7 @@ function buildOp(k, A, n, tol, ctx = { m: IDENTITY }) {
   }
   throw new CallError(`${n.id}.op`, `"${String(n.op ?? n.part)}" cannot be used here.`);
 }
+var GRID_SHIFTS = [0, 0.33, 0.71, 0.17];
 function smoothUnion(k, A, n, tol, ctx) {
   const { Manifold } = k;
   const p = n.params ?? {};
@@ -2260,11 +2304,21 @@ function smoothUnion(k, A, n, tol, ctx) {
   const bb = plain.boundingBox();
   const g = blend + 0.3;
   const edge = Math.min(0.25, Math.max(0.03, Math.sqrt(8 * Math.max(blend, 0.2) * gtol)));
-  const min = [bb.min[0] - g, bb.min[1] - g, bb.min[2] - g];
   const max = [bb.max[0] + g, bb.max[1] + g, bb.max[2] + g];
-  const field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
-  const raw = Manifold.levelSet((q) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
-  const out = A.t(heldToSurface(k, raw, field, gtol));
+  let field;
+  let out;
+  for (let i = 0; i < GRID_SHIFTS.length; i++) {
+    const s = g + GRID_SHIFTS[i] * edge;
+    const min = [bb.min[0] - s, bb.min[1] - s, bb.min[2] - s];
+    field = new BlendField(n, { min, max }, levelSetStep(min, max, edge));
+    const raw = Manifold.levelSet((q) => -field.sample(q[0], q[1], q[2]), { min, max }, edge, 0, gtol / 2);
+    const made = heldToSurface(k, raw, field, gtol);
+    if (i === GRID_SHIFTS.length - 1 || pinchedPositions(made.getMesh()) === 0) {
+      out = A.t(made);
+      break;
+    }
+    made.delete();
+  }
   if (ctx.blendMeshes && !ctx.blendMeshes.reuse) ctx.blendMeshes.meshes.set(key, out.getMesh());
   ctx.blends?.push({ label: n.id, originalID: out.originalID(), m: ctx.m, field });
   return out;
