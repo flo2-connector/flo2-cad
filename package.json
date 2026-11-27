@@ -29,8 +29,8 @@
     "start": "node dist/main.js"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.3.0",
-    "@modelcontextprotocol/server": "2.3.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@types/node": "24.19.1",
     "ajv": "8.20.0",
     "esbuild": "0.28.2",
